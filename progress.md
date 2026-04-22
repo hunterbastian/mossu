@@ -1,0 +1,37 @@
+Original prompt: PLEASE IMPLEMENT THIS PLAN:
+# Full-Map Lookdown Mode On `M` + Slight Gameplay Camera Pullback
+
+- Added `ViewMode` runtime state and one-shot `M` / `Esc` input events.
+- Added a blended overhead map camera on `M` that releases pointer lock and returns cleanly to third-person.
+- Increased gameplay camera distance by roughly 10% and widened wheel zoom range to match.
+- Added lightweight world-space map markers for Mossu, the shrine, and key landmarks.
+- HUD now switches to a lighter map presentation while the map is open.
+- `npm run build` passes.
+- Local dev server for this turn is running at `http://127.0.0.1:4175/` because `4173` and `4174` were already in use.
+- Bug sweep:
+- Fixed the grass instancing shader compile error in `WorldRenderer.ts` by passing `instanceTint` through the vertex shader instead of illegally declaring it as a fragment `attribute`.
+- Wrapped pointer-lock requests in `FollowCamera.ts` so failed browser requests do not throw noisy runtime errors.
+- Hid live grass meshes during `map_lookdown` to make the overhead map read more cleanly.
+- Re-verified with automated screenshots; build still passes.
+- Grass visual pass:
+- Increased meadow/alpine grass density.
+- Rebuilt the grass blade geometry to be wider, softer, and more tuft-like instead of thin needle cards.
+- Added width variation, gentler color clustering, softer alpha shaping, and less harsh posterization in the grass shader.
+- Meadow/alpine tint ranges were lightened to better match the painterly reference direction.
+- HUD visual pass:
+- Added a more field-journal / adventure-panel treatment to the HUD with parchment-mint gradients, olive ink, and warm gold accents.
+- Objective chip now has stronger hierarchy and a small badge detail.
+- Status strip metrics now have cleaner separators and label/value contrast.
+- Hint and ability chips were reshaped and recolored to feel softer and less generic.
+- Camera pass:
+- Raised the default third-person chase angle slightly and opened the pitch clamp upward so the player can view more terrain from above during normal play.
+- Character pass:
+- Updated `MossuAvatar` only to match the snowy/fluffy character direction.
+- Swapped the body toward a faceted fluffy snowball look with softer off-white shading.
+- Added larger glossy oval eyes, softer cheeks, and small top tufts to improve silhouette and roll readability.
+- Added more squash/stretch and subtle tuft motion so idle, roll, and airtime feel softer and more buoyant.
+- Walk / roll mode pass:
+- Added `Shift` as a held roll mode in input and gameplay state.
+- Mossu now stays in stub-leg walk form normally, and shifts into a rolling snowball form while `Shift` is held.
+- Added simple leg animation and updated the HUD hint to teach `Shift` roll controls.
+- Walking speed is now slower than rolling speed so the two forms feel mechanically distinct.

@@ -1,0 +1,259 @@
+:root {
+  color-scheme: light;
+  font-family: "Averia Serif Libre", "Georgia", serif;
+  --ui-ink: #1b3429;
+  --ui-ink-soft: rgba(27, 52, 41, 0.78);
+  --ui-label: rgba(79, 97, 83, 0.78);
+  --ui-olive: rgba(93, 115, 83, 0.28);
+  --ui-olive-strong: rgba(76, 96, 68, 0.42);
+  --ui-parchment: rgba(251, 247, 234, 0.78);
+  --ui-parchment-soft: rgba(244, 250, 238, 0.68);
+  --ui-mint: rgba(223, 241, 209, 0.52);
+  --ui-gold: rgba(233, 202, 129, 0.74);
+  --ui-gold-border: rgba(158, 124, 58, 0.2);
+  --ui-shadow: 0 16px 34px rgba(69, 90, 73, 0.12);
+  --ui-shadow-soft: 0 10px 24px rgba(90, 119, 111, 0.09);
+  --ui-sans: "Avenir Next", "Trebuchet MS", sans-serif;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.55), transparent 40%),
+    linear-gradient(180deg, #dff2ff 0%, #f6f3e8 100%);
+  color: var(--ui-ink);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.55), transparent 36%),
+    linear-gradient(180deg, #cde8ff 0%, #eef4e9 65%, #f3f0e1 100%);
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+canvas.is-pointer-locked {
+  cursor: none;
+}
+
+.hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.9rem;
+  transition: opacity 180ms ease;
+}
+
+.hud-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.objective-chip,
+.status-strip,
+.hint-chip,
+.ability-pill {
+  max-width: min(24rem, calc(100vw - 1.8rem));
+  border: 1px solid var(--ui-olive);
+  backdrop-filter: blur(20px) saturate(1.08);
+  box-shadow: var(--ui-shadow-soft);
+}
+
+.objective-chip {
+  position: relative;
+  padding: 0.8rem 0.96rem 0.88rem;
+  border-radius: 1.45rem 1.2rem 1.35rem 1.05rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.48), transparent 48%),
+    linear-gradient(135deg, var(--ui-parchment) 0%, rgba(238, 247, 222, 0.72) 100%);
+  box-shadow: var(--ui-shadow);
+}
+
+.objective-chip::after {
+  content: "";
+  position: absolute;
+  top: 0.62rem;
+  right: 0.72rem;
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 239, 184, 0.9), rgba(211, 181, 108, 0.86));
+  box-shadow:
+    0 0 0 3px rgba(255, 249, 231, 0.5),
+    0 0 18px rgba(233, 202, 129, 0.34);
+}
+
+.objective-chip__eyebrow {
+  margin: 0 0 0.3rem;
+  font-family: var(--ui-sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #6a816f;
+}
+
+.objective-chip__title {
+  margin: 0;
+  font-size: clamp(1.14rem, 1.65vw, 1.56rem);
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+  color: var(--ui-ink);
+  text-shadow: 0 1px 0 rgba(255, 252, 245, 0.45);
+}
+
+.objective-chip__body {
+  margin: 0.36rem 0 0;
+  max-width: 22rem;
+  font-size: 0.79rem;
+  line-height: 1.42;
+  color: var(--ui-ink-soft);
+}
+
+.status-strip {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  padding: 0.4rem 0.48rem;
+  border-radius: 1.15rem 1.15rem 1.5rem 1.1rem;
+  min-width: min(24rem, calc(100vw - 1.8rem));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent 40%),
+    linear-gradient(135deg, rgba(252, 248, 237, 0.8) 0%, var(--ui-parchment-soft) 100%);
+}
+
+.status-label {
+  margin: 0;
+  font-family: var(--ui-sans);
+  font-size: 0.56rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ui-label);
+}
+
+.status-value {
+  margin: 0.18rem 0 0;
+  font-size: 0.84rem;
+  line-height: 1.06;
+  color: var(--ui-ink);
+}
+
+.status-metric {
+  position: relative;
+  padding: 0.34rem 0.66rem 0.38rem;
+}
+
+.status-metric + .status-metric::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.34rem;
+  bottom: 0.34rem;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(104, 122, 97, 0.26), transparent);
+}
+
+.hud-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.hint-chip {
+  padding: 0.62rem 0.86rem;
+  border-radius: 1.3rem 1.3rem 1.3rem 0.92rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.42), transparent 42%),
+    linear-gradient(135deg, rgba(251, 248, 238, 0.82) 0%, rgba(233, 243, 226, 0.74) 100%);
+  color: var(--ui-ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.28;
+}
+
+.hint-chip strong {
+  color: var(--ui-ink);
+}
+
+.ability-pill {
+  padding: 0.62rem 0.88rem;
+  border-radius: 1.3rem 1rem 1.3rem 1.3rem;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 239, 0.5), transparent 45%),
+    linear-gradient(135deg, rgba(255, 245, 205, 0.78) 0%, var(--ui-gold) 100%);
+  border: 1px solid var(--ui-gold-border);
+  box-shadow: 0 12px 24px rgba(137, 119, 67, 0.1);
+  font-size: 0.74rem;
+  color: #5e4815;
+}
+
+.hud--map .status-strip,
+.hud--map .ability-pill {
+  display: none;
+}
+
+.hud--map .hud-top {
+  justify-content: flex-start;
+}
+
+.hud--map .objective-chip {
+  max-width: 28rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.4), transparent 44%),
+    linear-gradient(135deg, rgba(242, 249, 235, 0.72) 0%, rgba(232, 244, 221, 0.66) 100%);
+  box-shadow: 0 14px 30px rgba(83, 113, 104, 0.08);
+}
+
+.hud--map .objective-chip__title {
+  font-size: clamp(1.25rem, 1.9vw, 1.7rem);
+}
+
+.hud--map .objective-chip__body {
+  max-width: 24rem;
+}
+
+.hud--map .hud-bottom {
+  justify-content: flex-start;
+}
+
+.hud--map .hint-chip {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.45), transparent 44%),
+    linear-gradient(135deg, rgba(251, 248, 238, 0.82) 0%, rgba(239, 244, 229, 0.72) 100%);
+}
+
+@media (max-width: 840px) {
+  .hud-top,
+  .hud-bottom {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hint-chip,
+  .ability-pill {
+    border-radius: 1.2rem;
+  }
+}
