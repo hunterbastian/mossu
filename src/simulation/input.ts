@@ -3,7 +3,9 @@ export interface InputSnapshot {
   moveY: number;
   jumpHeld: boolean;
   jumpPressed: boolean;
-  shiftPressed: boolean;
+  rollHeld: boolean;
+  interactPressed: boolean;
+  inventoryTogglePressed: boolean;
   mapTogglePressed: boolean;
   escapePressed: boolean;
 }
@@ -11,21 +13,25 @@ export interface InputSnapshot {
 export class InputController {
   private pressed = new Set<string>();
   private jumpPressedFrame = false;
-  private shiftPressedFrame = false;
+  private interactPressedFrame = false;
+  private inventoryTogglePressedFrame = false;
   private mapTogglePressedFrame = false;
   private escapePressedFrame = false;
   private disposeCallbacks: Array<() => void> = [];
 
   constructor(private readonly target: Window | HTMLElement = window) {
     const keydown = (event: KeyboardEvent) => {
-      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) {
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab"].includes(event.code)) {
         event.preventDefault();
       }
       if (!this.pressed.has(event.code) && event.code === "Space") {
         this.jumpPressedFrame = true;
       }
-      if (!this.pressed.has(event.code) && (event.code === "ShiftLeft" || event.code === "ShiftRight")) {
-        this.shiftPressedFrame = true;
+      if (!this.pressed.has(event.code) && event.code === "KeyE") {
+        this.interactPressedFrame = true;
+      }
+      if (!this.pressed.has(event.code) && event.code === "Tab") {
+        this.inventoryTogglePressedFrame = true;
       }
       if (!this.pressed.has(event.code) && event.code === "KeyM") {
         this.mapTogglePressedFrame = true;
@@ -51,14 +57,27 @@ export class InputController {
     const moveY = (this.isPressed("KeyW") || this.isPressed("ArrowUp") ? 1 : 0) - (this.isPressed("KeyS") || this.isPressed("ArrowDown") ? 1 : 0);
     const jumpHeld = this.isPressed("Space");
     const jumpPressed = this.jumpPressedFrame;
-    const shiftPressed = this.shiftPressedFrame;
+    const rollHeld = this.isPressed("ShiftLeft") || this.isPressed("ShiftRight");
+    const interactPressed = this.interactPressedFrame;
+    const inventoryTogglePressed = this.inventoryTogglePressedFrame;
     const mapTogglePressed = this.mapTogglePressedFrame;
     const escapePressed = this.escapePressedFrame;
     this.jumpPressedFrame = false;
-    this.shiftPressedFrame = false;
+    this.interactPressedFrame = false;
+    this.inventoryTogglePressedFrame = false;
     this.mapTogglePressedFrame = false;
     this.escapePressedFrame = false;
-    return { moveX, moveY, jumpHeld, jumpPressed, shiftPressed, mapTogglePressed, escapePressed };
+    return {
+      moveX,
+      moveY,
+      jumpHeld,
+      jumpPressed,
+      rollHeld,
+      interactPressed,
+      inventoryTogglePressed,
+      mapTogglePressed,
+      escapePressed,
+    };
   }
 
   dispose() {

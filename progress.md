@@ -1,3 +1,58 @@
+HUD / overlay UX pass:
+
+- Tightened the normal-play HUD in `src/render/app/GameApp.ts` and `src/styles.css` so the large controls panel is now contextual instead of always visible; it appears when camera control is unlocked or when a menu state needs extra guidance.
+- Replaced the old sentence-heavy quick-hint copy with compact keycap action pills so the bottom HUD reads faster during play.
+- Added clearer progress framing across the `Esc`, `E`, and `M` surfaces: pause now shows gathered-goods counts, the Adventure Card sections show live count badges, and the map now reports both route progress and goods/field-note totals.
+- Kept the frosted-glass direction, but shifted this pass toward hierarchy and disclosure instead of adding more decorative chrome.
+- `npm run build` passes after the UX cleanup.
+
+Forageable gathering pass:
+
+- Added authored world forageables in `src/simulation/world.ts` so Mossu can now collect small fruits and plants placed along the route from the meadow start up through the ridge climb.
+- Added `src/simulation/forageableProgress.ts` plus new `gatheredForageableIds` / `latestGatheredForageableId` state in `src/simulation/gameState.ts` so these goods auto-gather when Mossu wanders close enough.
+- Extended the `E` Adventure Card in `src/render/app/GameApp.ts` with a dedicated `Gathered Goods` section on the right and updated the character summary / prompt text to surface recent forage pickups.
+- Added visible in-world pickup props in `src/render/world/WorldRenderer.ts` so fruit and plant collectibles now bob lightly in the scene and disappear once gathered.
+- Added matching frosted-glass card styling for gathered goods in `src/styles.css`.
+- `npm run build` passes after the forageable-gathering implementation.
+
+Character screen layout follow-up:
+
+- Resized the `E`-menu character preview down so Mossu sits in a smaller left-side model card instead of dominating the whole panel.
+- Split the character-screen content into two columns in `src/render/app/GameApp.ts`: stats/upgrades stay in the main column, while `Field Dex` now lives in its own dedicated collections column on the right.
+- Updated `src/styles.css` so the collections rail gets more vertical room and the responsive layout still collapses back to one column on smaller screens.
+- `npm run build` passes after the character-screen layout adjustment.
+
+Frosted-glass material pass:
+
+- Pushed the full HUD, pause menu, Adventure Card, and Region Map surfaces toward a colder frosted-glass look in `src/styles.css`.
+- Reduced the remaining paper/plastic feel by replacing warm opaque fills with more translucent blue-white panes, lighter edge rims, and denser backdrop blur.
+- Retained the Pokemon-like menu framing and current overlay layout, but made the material language read more like layered glass than painted cards.
+- Kept the recent bounce/gloss motion pass, now with highlights and shell fills tuned to feel diffused through glass instead of sitting on top of it.
+- Build follow-up:
+- `npm run build` passes after the frosted-glass pass.
+- While verifying this pass, the build was temporarily blocked by grass-system type/export drift in `WorldRenderer.ts` and `grassSystem.ts`; that compile issue was cleaned up as part of this turn so verification could complete.
+
+Glossy overlay + pause/menu flow pass:
+
+- Added a dedicated `Esc` pause menu in `src/render/app/GameApp.ts`, with direct transitions to resume, the Adventure Card, and the Region Map.
+- Reworked overlay flow so the pause menu, character screen, and map are mutually exclusive instead of visually stacking on top of each other.
+- Tightened map behavior so `M` now owns the screen as a proper zoomed-out state while normal HUD chrome hides behind it.
+- Added a more bouncy/glossy Frutiger Aero-style motion pass in `src/styles.css` across the live HUD, pause shell, map shell, and Adventure Card.
+- `render_game_to_text` now reports pause-menu state in addition to the existing map / character-screen state.
+- Verification:
+- `npm run build` passes after the overlay-flow and glossy-motion changes.
+- Computer Use verified the new pause shell visually on the live local page and confirmed the normal HUD renders separately in gameplay.
+- A direct local Playwright keyboard probe was attempted again for `M` / `E` / `Esc`, but it stalled in this environment before producing screenshots or JSON, so keyboard-driven runtime verification is still partial.
+
+Old Pokemon-inspired UI pass:
+
+- Reframed the HUD, map, and character screen toward a retro handheld RPG menu style with cream panels, navy borders, red-blue accent tabs, and more rectangular menu framing.
+- Updated `src/render/app/GameApp.ts` copy so the interface now reads as a quest log / adventure card / region map / field dex instead of the previous handbook wording.
+- Restyled the major UI surfaces in `src/styles.css` so the HUD, profile screen, and map overlay all share the same older Pokemon-like visual language.
+- Added a light Frutiger Aero layer on top of the retro menus with brighter sky-blue glass gradients, stronger white gloss, and softer aqua highlights while keeping the Pokemon-style framing.
+- Verification follow-up:
+- `npm run build` should be rerun after the retro UI restyle.
+
 Original prompt: PLEASE IMPLEMENT THIS PLAN:
 # Full-Map Lookdown Mode On `M` + Slight Gameplay Camera Pullback
 
@@ -35,3 +90,163 @@ Original prompt: PLEASE IMPLEMENT THIS PLAN:
 - Mossu now stays in stub-leg walk form normally, and shifts into a rolling snowball form while `Shift` is held.
 - Added simple leg animation and updated the HUD hint to teach `Shift` roll controls.
 - Walking speed is now slower than rolling speed so the two forms feel mechanically distinct.
+
+Inventory / interact pass:
+- Added `E` as a context action and `Tab` as an explicit satchel toggle in `src/simulation/input.ts`.
+- Landmarks now carry keepsake metadata in `src/simulation/world.ts`, with per-landmark interaction radii and satchel copy.
+- `src/simulation/gameState.ts` now tracks nearby interactables, cataloged landmark ids, the last cataloged keepsake, and exposes `getInventoryEntries()` for the HUD.
+- `src/render/app/GameApp.ts` now opens a trail-satchel panel, pauses movement while it is open, releases pointer lock on open, shows a nearby-keepsake prompt, and exports `window.advanceTime` / `window.render_game_to_text` hooks for automation.
+- `src/styles.css` now includes satchel/prompt styling that matches the existing field-journal HUD treatment.
+
+Verification:
+- `npm run build` passes after the inventory/interact changes.
+- Attempted to run the required Playwright web-game client from an in-process static server so it could reach the built app in this sandbox. The client repeatedly hung with no artifacts written, even after removing the canvas click path.
+- Follow-up direct Playwright probes also stalled once the built page was live in headless Chromium: navigation completed and WebGL warnings appeared, but the first `page.evaluate(...)` call never returned.
+- Because of that runtime issue, this turn only has build verification plus code-path inspection; the next agent should debug the headless Chromium hang before relying on automated gameplay screenshots for `mossu`.
+
+Character screen pass:
+- Replaced the old satchel UI with a dedicated character screen opened by `E` or `Tab`, with `Esc` to close and gameplay paused while it is visible.
+- Animal Crossing-inspired UI pass:
+- Restyled the persistent HUD and resident handbook in `src/styles.css` toward a softer life-sim presentation with rounded paper panels, wood-and-leaf accents, stitched badges, and warmer cozy copy.
+- Updated `src/render/app/GameApp.ts` HUD labels and handbook phrasing so the interface reads more like an island resident journal than a generic debug overlay.
+- Extended the same guidebook treatment to the full-map overlay with a resident stamp, softer chart copy, a decorative compass rose, and subtle opening / marker pulse motion.
+- This pass is presentation-only: gameplay flow, controls, and character-screen behavior remain the same.
+- Verification follow-up:
+- `npm run build` should be rerun after the UI restyle to catch any layout-adjacent TypeScript/CSS regressions.
+
+- Added a dedicated Three.js preview renderer in `src/render/app/CharacterPreview.ts` so the left side of the menu shows a live Mossu model instead of reusing the world camera.
+- Reworked `src/render/app/GameApp.ts` to render profile-oriented HUD copy plus a two-column character screen with `Stats`, `Upgrades`, and `Collections`.
+- Reworked `src/simulation/gameState.ts` so collections auto-log when Mossu enters an existing landmark interaction radius, and added a `getCharacterScreenData()` view-model payload for the menu.
+- The character screen shows real current traversal stats, `Breeze Float` as the active upgrade, three locked placeholder upgrades, and discovered vs undiscovered keepsakes.
+
+Verification follow-up:
+- `npm run build` still passes after the character-screen refactor.
+- The required bundled Playwright client now reaches the browser but still exits with `Target page, context or browser has been closed` and produces no artifacts in this environment.
+- An escalated direct Playwright pass was attempted to validate `E` / `Tab` / `Esc`, map-to-profile transition, and automatic collection discovery, but it appears to hang before writing screenshots or JSON.
+- Treat browser validation for this character-screen turn as incomplete; the implementation is currently verified by successful build and code-path review only.
+- Water pass:
+- Replaced the tube-based river and creek geometry in `WorldRenderer.ts` with terrain-hugging ribbon surfaces so the waterways read as actual water instead of rounded pipes.
+- Added a lightweight animated water shader pass with moving shimmer, center-depth tinting, and softer bank fade.
+
+Mountain-route worldbuilding slice:
+- Re-authored the current floating-island slice around a clearer climb: Burrow Hollow -> Silver Bend -> Fir Gate / Whisper Pass -> Mistfall Cascade / Basin -> Windstep Shelf -> Cloudback Ridge -> Moss Crown Shrine.
+- Extended `world.ts` with new upper-route scenic pockets and landmarks, rebalanced the 14 orb placements so the first 8 naturally guide the lower climb, and kept the last 6 on the alpine/ridge route after `Breeze Float`.
+- Strengthened terrain staging with small authored shelves/rises along the intended mountain route while keeping the overall island footprint intact.
+- Warmed plains terrain/light, cooled alpine/ridge terrain, opened the start lane a bit, and pushed the upper route harder through rocks, pines, waterways, moss, and atmosphere.
+- Updated ambient plains fauna to berry-blue fuzzy blobs without changing their calm behavior.
+- Tightened the opening chase camera and increased grass fade around the player to reduce foreground swallowing.
+- `npm run build` passes.
+- Fresh dev server for this pass: `http://127.0.0.1:4177/`.
+- Live Dia check: the opening frame is improved and shows the climb/river structure more clearly, but there is still room for another small presentation pass if needed.
+- Water verification:
+- `npm run build` passes after the water refactor.
+- Manual Safari screenshot check on the local Vite preview confirmed the main river now reads as a flat flowing surface instead of a rounded tube.
+- Water flow direction:
+- Added downhill-aware water flow detection so ribbon streams authored in reverse point order still animate downhill instead of scrolling uphill.
+- Tsushima-style water stage 1:
+- Refactored `WorldRenderer.ts` water creation behind controller/profile seams so river and creek ribbons now share `WaterProfile` presets plus `createWaterSurface(...)` instead of ad hoc animated mesh traversal.
+- Extended ribbon geometry with explicit `aChannel`, `aBank`, `aSlope`, and `aFlowT` attributes, then rebuilt the WebGL `MeshStandardMaterial` shader patch to layer broad flow, detail shimmer, slope-scaled motion, bank foam, deeper center-channel tint, and warm grazing-angle highlights.
+- Highland waterways now use dedicated presets for foothill creek, alpine runoff, and waterfall outflow so steep descents read faster/brighter than the calmer main river.
+- `npm run build` passes after the refactor, and a manual Safari check against `http://127.0.0.1:8000/` confirmed the river still reads as a flat surface while the mountain runoff sections look more disturbed and downhill-oriented.
+- Water graphics follow-up:
+- Pushed the shader away from clean procedural stripes by adding profile-level reflection/sediment/clarity controls, denser ribbon cross-sections, domain-warped vertex motion, and fragment-side FBM breakup for currents, eddies, sparkle, and shoreline sediment tint.
+- The current pass now mixes cooler sky reflection with warm glints, uses muddier shallow banks, and breaks foam/highlights into less uniform ribbons so the water should read less flat and synthetic.
+- `npm run build` passes after this graphics-focused pass. A fresh in-session screen capture failed with `could not create image from display`, so this follow-up is build-verified but not archived with a new screenshot artifact.
+- Water depth follow-up:
+- Added shallow-bed and depth-language controls to each water profile so calmer water can reveal a muted riverbed tint while deeper channels darken more decisively.
+- Extended the fragment shader with fake bed visibility, pebble/sediment breakup, moving caustic light in shallows, and stronger depth shadow through the center channel.
+- `npm run build` passes after the depth pass. This turn did not produce a fresh screenshot artifact.
+- Swim pass:
+- Added shared water-volume sampling in `src/simulation/world.ts` for the filled main river plus authored creek/pool checks, with explicit surface heights, current direction, and swimmable-depth gating.
+- Reworked `src/simulation/gameState.ts` so deep water no longer behaves like ground: Mossu now enters a `swimming` state, floats near the water surface, gets carried slightly by current, uses `Space` as a swim stroke, and cannot roll while in swimmable water.
+- Synced player-facing systems to the new state: `render_game_to_text` now reports `swimming` and `waterDepth`, `FollowCamera.ts` eases into a slightly closer/lower swim framing, `MossuAvatar.ts` uses a swim bob and disables leg visibility while swimming, and `WorldRenderer.ts` now pulls water surface offsets from the shared world constants so the visible river sits high enough to match the swim volume.
+- `npm run build` passes after the swim pass.
+- Tried the required `develop-web-game` Playwright client against the local dev server after the swim implementation, but it still fails from the skill path with `ERR_MODULE_NOT_FOUND: Cannot find package 'playwright' imported from .../web_game_playwright_client.js`. No automated swim screenshot artifact was produced from this attempt.
+- Water Ghibli + sparkle pass:
+- Kept the work scoped to the water shader in `WorldRenderer.ts`: softened the main tint/depth blend slightly, reduced some of the harsher depth darkening, and added a restrained `sparkleColor` / `sparkleStrength` profile control across river and creek presets.
+- Added a small animated sparkle mask that scatters shallow sun twinkles across the surface instead of broad synthetic stripes, so the water should feel a little more hand-painted and a little less procedural.
+- `npm run build` passes after this pass. No fresh screenshot artifact was captured this turn.
+- Lighting / meadow paintover pass:
+- Regraded `WorldRenderer.ts` toward warmer late-afternoon sunlight with earlier fog falloff, cooler sky bounce, larger cream-tinted cloud masses, and more atmospheric distant mountains.
+- Reworked plains / foothill terrain tinting and grass instancing so the meadow reads broader and more painterly: taller/wider blades, directional sweep, brighter straw-cream tips, and less harsh posterization.
+- Added a shader-driven sky dome so the opening sky is no longer a flat solid color and carries soft sun bloom plus painterly cloud breakup.
+- `npm run build` passes after the lighting pass.
+- Headless Playwright screenshots against the local Vite server were not reliable for this scene: Chromium captured an over-washed, faceted WebGL frame that does not appear safe to use as visual truth. A real browser check is still the right next verification step for final tuning.
+- Hybrid meadow lighting + grass pass:
+- Recentered the opening-plains look toward the second reference without losing the soft Mossu mood: lower warmer sun, later fog falloff, bluer sky separation, and fewer larger cloud masses.
+- Added an opening-meadow emphasis mask in `WorldRenderer.ts` so plains/hills terrain and grass get the strongest olive/straw treatment near the start route while alpine/ridge grass stays close to the lighter existing treatment.
+- Reworked meadow grass to read more like a field: slimmer/taller blades, stronger left-to-right lean, banded wind, brighter grazing highlights, and distance-aware color compression so the near field stays blade-defined while the mid/far field fills in as a coherent mass.
+- Added a small `FollowCamera.ts` framing tweak so the initial spawn view carries a bit more horizon and less immediate downward tilt, which better exposes the opening meadow treatment.
+- `npm run build` passes after the hybrid meadow pass.
+- Real-browser verification used a local Vite server plus Safari + `screencapture` instead of headless Chromium. The on-screen shot confirms the updated meadow/river framing path is live, though Safari reused an existing localhost tab so the captured URL bar was not a clean proof of the temporary port.
+- Starter spirit close-up verification:
+- Local dev server for this verification run is on `http://127.0.0.1:4179/`.
+- The stock `develop-web-game` Playwright client still fails in this repo flow: direct launch from the skill path cannot resolve the local `playwright` package, and the symlinked repo-path launch hangs with no artifacts in `output/spirit-check`.
+- Added a repo-local fallback probe at `.codex-tmp/spirit-closeup-check.mjs`, but headless Chromium needed escalation and still did not yield usable screenshot artifacts in this environment.
+- Computer Use + Safari did verify the live build loads and the starter scene still reflects the lighter/paler ambient-spirit pass at a wide shot.
+- The current browser-control path did not produce a trustworthy close-up of the fauna cluster, so idle/wander silhouette verification is still incomplete.
+- If close-up spirit validation is required next, the most reliable follow-up is a temporary debug spawn/camera hook that places one ambient spirit directly in front of the start view for screenshots.
+- Spirit close-up debug hook:
+- Added a debug-only `?spiritCloseup=1` URL flag in `src/render/app/GameApp.ts` and `src/render/world/WorldRenderer.ts`.
+- In that mode, `WorldRenderer` re-stages the first few ambient spirits near the spawn camera and scales the lead spirit up slightly so the opening frame can show the fauna clearly without changing normal gameplay.
+- `npm run build` passes after the hook.
+- Safari + Computer Use verification against `http://127.0.0.1:4179/?spiritCloseup=1` now shows the staged spirits in-frame near Mossu; the pale fluffy silhouette and larger dark eyes read correctly in-context.
+
+Map readability pass:
+- Reworked `M` map mode in `src/render/app/GameApp.ts` from a mostly-camera-based overview into a dedicated illustrated HUD map board built from real world data.
+- Added a stylized floating-island silhouette, river path, climb route line, compass, labeled landmarks, route-step sidebar, live player marker, shrine marker, and discovered/unvisited landmark states.
+- Kept the existing `map_lookdown` camera as the background path, but the useful readability now comes from the map overlay rather than from the raw 3D terrain alone.
+- `src/styles.css` now includes a full map-board presentation with parchment shell, legend, route-step states, and landmark/marker styling.
+
+Verification:
+- `npm run build` passes after the map overlay work.
+- Live headless Playwright state check against `http://127.0.0.1:4178/` confirmed `mode` switches from `third_person` to `map_lookdown` after pressing `M`.
+- Full-page screenshots remain unreliable because the WebGL canvas can hang the capture, but a targeted element screenshot of `.world-map__shell` succeeded and was visually inspected at `/tmp/mossu-map-overlay-panel.png`.
+- Green-grass-v3 comparison pass:
+- Used Computer Use to inspect `https://green-grass-v3.vercel.app/` directly and translated the strongest traits into `mossu`: cleaner blue sky, lower warmer sun, narrower taller meadow blades, stronger shared blade lean, and more aggressive near-to-far field compression.
+- Reworked `WorldRenderer.ts` so the opening plains rely more on coherent meadow massing than painterly breakup: simpler olive/straw terrain underpainting, sparser larger cloud masses, calmer atmospheric veil, meadow-biased placement/orientation, and denser opening-field instancing without forcing the alpine route onto the same look.
+- Added another `FollowCamera.ts` adjustment to lower the gameplay rig and carry more horizon into the opening view after the live Safari check still felt too lookdown-heavy.
+- `npm run build` passes after the green-grass comparison pass, and Computer Use + Safari verification confirms the opening field is denser and more directional even though the overall game remains more stylized/low-poly than the reference.
+- Grass V3 technique-followup:
+- Pushed the meadow closer to the reference technique rather than just the color grade by switching opening-field grass to crossed-card blade geometry, reducing alpha cutoff, and thickening the base/far-field fusion in the grass fragment shader.
+- Kept alpine/ridge grass on the lighter single-plane path so the extra volume stays concentrated in the start meadow instead of inflating the whole world.
+- Fixed a local compile blocker in `src/render/app/CharacterPreview.ts` by filling the newer `PlayerState` water fields used elsewhere in the repo.
+- `npm run build` passes after the technique-followup, and a live Safari check on `http://127.0.0.1:4182/` confirms the meadow now reads fuller and less like isolated spikes.
+- Meadow LOD + self-shadow pass:
+- Split the opening meadow into separate near/mid/far grass passes in `WorldRenderer.ts`, each with its own blade geometry, density bias, size profile, and camera-distance fade band so the field can read differently across depth instead of relying on one shared grass mesh.
+- Extended the grass shader with explicit tier fade uniforms plus stronger self-shadowing: darker roots, more body occlusion away from the sun stripe, and heavier distance compression for the far field.
+- Alpine/ridge grass stayed on a single lighter pass while the meadow tiers use 3-plane near grass, 2-plane mid grass, and a wider single-plane far field.
+- `npm run build` passes after this pass, and a live Safari check on `http://127.0.0.1:4183/` shows the meadow tiers blending without an obvious seam from the opening camera.
+- Shoreline milkiness pass:
+- Shifted the water art direction toward a softer Studio Ghibli edge treatment by adding per-profile `shorelineMilkColor` and `shorelineMilkStrength` controls in `WorldRenderer.ts`.
+- Updated the water fragment shader so shallow banks blend into a pale silty wash before the foam line, with less harsh edge contrast and slightly softer shoreline alpha.
+- Fixed adjacent compile drift in `WorldRenderer.ts` and `src/render/app/CharacterPreview.ts` so the shoreline pass lands in a clean state instead of sitting on top of unrelated TypeScript breakage.
+- `npm run build` passes after the shoreline pass.
+- Opening lake pass:
+- Added a small swimmable lake near the starting meadow by carving a dedicated basin and water volume into `src/simulation/world.ts`.
+- Added a radial lake water surface in `src/render/world/WorldRenderer.ts` so the opening area now has a calm pond using the same stylized water shading family as the river instead of a flat placeholder mesh.
+- Reduced grass density inside the basin so the lake reads as a real opening-area landmark rather than grass clipping through the water.
+- `npm run build` passes after the opening lake pass.
+- Opening lake enlargement + live verification:
+- Increased the opening lake footprint substantially by widening the basin, deepening it, and broadening the rendered radial surface so it reads more like a real lake from the starting camera.
+- Re-verified the opening view live in Safari against `http://127.0.0.1:4186/`; the updated lake is now clearly visible in the start area.
+- Saved the verification capture to `output/opening-lake-verify-4.png`.
+- Systems refactor pass:
+- Extracted the full grass mesh/shader pipeline out of `src/render/world/WorldRenderer.ts` into `src/render/world/grassSystem.ts`, then rewired the renderer to use the new module instead of carrying a second inlined grass implementation.
+- Extracted map projection/data helpers into `src/render/app/worldMap.ts` so `GameApp.ts` no longer owns the SVG namespace, viewbox math, route-path generation, or label-layout tables.
+- Extracted landmark collection/progress helpers into `src/simulation/landmarkProgress.ts` so `GameState.ts` can focus on player simulation while the landmark catalog, nearby-target, and closest-landmark logic live in one place.
+- `npm run build` passes after the refactor pass.
+- World renderer subsystem split:
+- Extracted the remaining scene-heavy renderer subsystems into dedicated modules: `src/render/world/waterSystem.ts`, `src/render/world/atmosphereSystem.ts`, `src/render/world/ambientBlobs.ts`, `src/render/world/terrainDecorations.ts`, and shared helpers in `src/render/world/sceneHelpers.ts`.
+- Removed the duplicate inlined water, sky/cloud/atmosphere, ambient blob, and terrain-decoration implementations from `src/render/world/WorldRenderer.ts`, leaving the renderer to compose and orchestrate the systems instead of owning their factory code directly.
+- Preserved the current blob blink/idle-pose behavior in the extracted ambient system so the refactor does not regress creature animation while reducing the renderer’s state surface.
+- `npm run build` passes after the renderer subsystem split.
+- Game state subsystem split:
+- Reworked `src/simulation/gameState.ts` into a coordinator over focused player-simulation modules instead of a monolithic traversal file.
+- Extracted shared traversal constants into `src/simulation/playerSimulationConstants.ts`, transient timer state into `src/simulation/playerSimulationRuntime.ts`, locomotion into `src/simulation/movementPhysics.ts`, water traversal into `src/simulation/waterTraversal.ts`, stamina/ability handling into `src/simulation/staminaAbilities.ts`, and void fall / respawn logic into `src/simulation/respawnSystem.ts`.
+- Kept landmark and forageable progress in the existing extracted modules so `gameState.ts` now mainly wires frame state, character-screen data, and the top-level update order together.
+- `npm run build` passes after the game state subsystem split.
+- Ongoing coordinator refactor pass:
+- Extracted character-screen view shaping out of `src/simulation/gameState.ts` into `src/simulation/characterScreenData.ts`, so the simulation coordinator no longer owns the full Adventure Card presentation model.
+- Extracted the DOM-heavy HUD, pause menu, Adventure Card, and region-map shell out of `src/render/app/GameApp.ts` into `src/render/app/HudShell.ts`, leaving `GameApp.ts` focused on app flow, view-mode transitions, input gating, and renderer/camera orchestration.
+- `npm run build` passes after the coordinator refactor pass.

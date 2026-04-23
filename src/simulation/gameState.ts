@@ -1,26 +1,44 @@
-import { MathUtils, Vector2, Vector3 } from "three";
+import { Vector3 } from "three";
 import { InputSnapshot } from "./input";
 import {
   AbilityId,
-  collectibleOrbs,
-  CollectibleOrb,
-  isInsideIslandPlayableBounds,
+  BiomeZone,
   sampleBiomeZone,
-  sampleIslandVoidThreshold,
   sampleObjectiveText,
   sampleTerrainHeight,
-  sampleTerrainNormal,
+  sampleWaterState,
   startingPosition,
   worldLandmarks,
 } from "./world";
+import { updateForageableProgress } from "./forageableProgress";
+import { updateLandmarkProgress } from "./landmarkProgress";
+import { createMovementScratch, applyMovementPhysics, tickMovementTimers } from "./movementPhysics";
+import { createPlayerSimulationRuntime } from "./playerSimulationRuntime";
+import { beginVoidFall, respawnPlayerAtStart, shouldStartVoidFall, updateVoidFall } from "./respawnSystem";
+import { tickStaminaCooldown, updateStaminaAndAbilityState } from "./staminaAbilities";
+import { buildCharacterScreenData, type CharacterScreenView } from "./characterScreenData";
+import {
+  applySwimForces,
+  applyWaterState,
+  clampSwimVelocity,
+  resolveWaterContact,
+  shouldSwim,
+} from "./waterTraversal";
+import { STAMINA_MAX } from "./playerSimulationConstants";
 
 export interface PlayerState {
   position: Vector3;
   velocity: Vector3;
   heading: number;
+  stamina: number;
+  staminaMax: number;
+  staminaVisible: boolean;
   rolling: boolean;
   rollingBoostActive: boolean;
   grounded: boolean;
+  swimming: boolean;
+  waterDepth: number;
+  waterSurfaceY: number;
   fallingToVoid: boolean;
   voidFallTime: number;
   justLanded: boolean;
@@ -29,8 +47,36 @@ export interface PlayerState {
 }
 
 export interface SaveState {
-  collectedOrbIds: Set<string>;
   unlockedAbilities: Set<AbilityId>;
+  catalogedLandmarkIds: Set<string>;
+  gatheredForageableIds: Set<string>;
+}
+
+export interface InteractionTargetState {
+  landmarkId: string;
+  landmarkTitle: string;
+  keepsakeTitle: string;
+  keepsakeSummary: string;
+  distance: number;
+  alreadyCataloged: boolean;
+}
+
+export interface InventoryEntryState {
+  landmarkId: string;
+  landmarkTitle: string;
+  keepsakeTitle: string;
+  keepsakeSummary: string;
+  zone: BiomeZone;
+  discovered: boolean;
+}
+
+export interface ForageableEntryState {
+  forageableId: string;
+  title: string;
+  summary: string;
+  kind: "fruit" | "plant";
+  zone: BiomeZone;
+  gathered: boolean;
 }
 
 export interface FrameState {
@@ -39,51 +85,31 @@ export interface FrameState {
   currentZone: ReturnType<typeof sampleBiomeZone>;
   currentLandmark: string;
   objective: ReturnType<typeof sampleObjectiveText>;
+  interactionTarget: InteractionTargetState | null;
+  lastCatalogedLandmarkId: string | null;
+  lastGatheredForageableId: string | null;
 }
-
-const PLAYER_RADIUS = 2.2;
-const WALK_SPEED = 18.5;
-const ROLL_SPEED = 27.5;
-const ROLL_BOOST_DELAY = 3;
-const ROLL_BOOST_MULTIPLIER = 1.2;
-const AIR_SPEED = 17;
-const GROUND_ACCELERATION = 84;
-const GROUND_DECELERATION = 110;
-const GROUND_TURN_ACCELERATION = 118;
-const AIR_ACCELERATION = 28;
-const AIR_DECELERATION = 10;
-const JUMP_VELOCITY = 24.5;
-const GRAVITY = 38;
-const FLOAT_GRAVITY_SCALE = 0.28;
-const FLOAT_FORWARD_BONUS = 6;
-const ORB_PICKUP_RADIUS = 4.4;
-const VOID_FALL_DURATION = 10;
-const VOID_HORIZONTAL_DRAG = 0.985;
 
 export class GameState {
   readonly frame: FrameState;
-
-  private readonly moveVector = new Vector3();
-  private readonly worldMove = new Vector3();
-  private readonly desiredPlanarVelocity = new Vector3();
-  private readonly planarVelocity = new Vector3();
-  private readonly cameraForward = new Vector3();
-  private readonly cameraRight = new Vector3();
-  private readonly groundNormal = new Vector3();
-  private readonly orbitalScratch = new Vector2();
-  private readonly remainingOrbs = new Map<string, CollectibleOrb>();
-  private rollingChargeSeconds = 0;
+  private readonly movementScratch = createMovementScratch();
+  private readonly simulationRuntime = createPlayerSimulationRuntime();
 
   constructor() {
-    collectibleOrbs.forEach((orb) => this.remainingOrbs.set(orb.id, orb));
     this.frame = {
       player: {
         position: startingPosition.clone(),
         velocity: new Vector3(),
         heading: 0,
+        stamina: STAMINA_MAX,
+        staminaMax: STAMINA_MAX,
+        staminaVisible: false,
         rolling: false,
         rollingBoostActive: false,
         grounded: true,
+        swimming: false,
+        waterDepth: 0,
+        waterSurfaceY: 0,
         fallingToVoid: false,
         voidFallTime: 0,
         justLanded: false,
@@ -91,226 +117,95 @@ export class GameState {
         landingImpact: 0,
       },
       save: {
-        collectedOrbIds: new Set<string>(),
-        unlockedAbilities: new Set<AbilityId>(),
+        unlockedAbilities: new Set<AbilityId>(["breeze_float"]),
+        catalogedLandmarkIds: new Set<string>(),
+        gatheredForageableIds: new Set<string>(),
       },
       currentZone: sampleBiomeZone(startingPosition.x, startingPosition.z, sampleTerrainHeight(startingPosition.x, startingPosition.z)),
       currentLandmark: worldLandmarks[0]?.title ?? "Mossu",
-      objective: sampleObjectiveText(0, false),
+      objective: sampleObjectiveText(),
+      interactionTarget: null,
+      lastCatalogedLandmarkId: null,
+      lastGatheredForageableId: null,
     };
+    this.updateProgress();
   }
 
   update(dt: number, input: InputSnapshot, cameraYaw: number) {
     const player = this.frame.player;
+    const runtime = this.simulationRuntime;
     const wasGrounded = player.grounded;
     const downwardSpeedBeforeResolve = Math.max(0, -player.velocity.y);
     player.justLanded = false;
     player.justRespawned = false;
     player.landingImpact = 0;
-    this.moveVector.set(input.moveX, 0, input.moveY);
-    this.groundNormal.copy(sampleTerrainNormal(player.position.x, player.position.z));
+    this.frame.lastCatalogedLandmarkId = null;
+    tickStaminaCooldown(runtime, dt);
+    tickMovementTimers(player, input, dt, runtime);
+
+    const waterStateAtStart = sampleWaterState(player.position.x, player.position.z);
+    applyWaterState(player, waterStateAtStart);
+    player.swimming = shouldSwim(player, waterStateAtStart);
 
     if (player.fallingToVoid) {
-      player.rolling = false;
-      player.rollingBoostActive = false;
-      player.grounded = false;
-      player.voidFallTime += dt;
-      player.velocity.x *= Math.pow(VOID_HORIZONTAL_DRAG, dt * 60);
-      player.velocity.z *= Math.pow(VOID_HORIZONTAL_DRAG, dt * 60);
-      player.velocity.y -= GRAVITY * 0.9 * dt;
-      player.position.addScaledVector(player.velocity, dt);
-
-      if (player.voidFallTime >= VOID_FALL_DURATION) {
-        this.respawnAtStart();
+      if (updateVoidFall(player, dt)) {
+        respawnPlayerAtStart(player, runtime);
       }
 
       this.updateProgress();
       return;
     }
 
-    if (this.moveVector.lengthSq() > 0.0001) {
-      this.moveVector.normalize();
-      this.cameraForward.set(Math.sin(cameraYaw), 0, Math.cos(cameraYaw)).normalize();
-      this.cameraRight.set(this.cameraForward.z, 0, -this.cameraForward.x).normalize();
-      this.worldMove
-        .copy(this.cameraRight)
-        .multiplyScalar(this.moveVector.x)
-        .addScaledVector(this.cameraForward, this.moveVector.z)
-        .normalize();
-
-      if (player.grounded) {
-        this.worldMove.projectOnPlane(this.groundNormal).normalize();
-      }
-    } else {
-      this.worldMove.setScalar(0);
-    }
-
-    if (input.shiftPressed) {
-      player.rolling = !player.rolling;
-    }
-    const sustainedRolling = player.rolling && player.grounded && this.worldMove.lengthSq() > 0.001;
-    if (sustainedRolling) {
-      this.rollingChargeSeconds += dt;
-    } else {
-      this.rollingChargeSeconds = 0;
-    }
-    player.rollingBoostActive = this.rollingChargeSeconds >= ROLL_BOOST_DELAY;
-    const groundSpeed = player.rolling
-      ? ROLL_SPEED * (player.rollingBoostActive ? ROLL_BOOST_MULTIPLIER : 1)
-      : WALK_SPEED;
-
-    this.planarVelocity.set(player.velocity.x, 0, player.velocity.z);
-    this.desiredPlanarVelocity
-      .copy(this.worldMove)
-      .multiplyScalar(player.grounded ? groundSpeed : AIR_SPEED);
-
-    const hasMoveInput = this.worldMove.lengthSq() > 0.001;
-    const alignment =
-      hasMoveInput && this.planarVelocity.lengthSq() > 0.001
-        ? this.planarVelocity.clone().normalize().dot(this.worldMove)
-        : 1;
-
-    const acceleration = player.grounded
-      ? alignment < 0 ? GROUND_TURN_ACCELERATION : GROUND_ACCELERATION
-      : AIR_ACCELERATION;
-    const deceleration = player.grounded ? GROUND_DECELERATION : AIR_DECELERATION;
-
-    this.planarVelocity.x = this.moveTowards(
-      this.planarVelocity.x,
-      hasMoveInput ? this.desiredPlanarVelocity.x : 0,
-      (hasMoveInput ? acceleration : deceleration) * dt,
-    );
-    this.planarVelocity.z = this.moveTowards(
-      this.planarVelocity.z,
-      hasMoveInput ? this.desiredPlanarVelocity.z : 0,
-      (hasMoveInput ? acceleration : deceleration) * dt,
+    const { sustainedRolling, isFloating, horizontalSpeed } = applyMovementPhysics(
+      player,
+      this.frame.save,
+      input,
+      cameraYaw,
+      dt,
+      runtime,
+      this.movementScratch,
     );
 
-    if (player.grounded && this.planarVelocity.lengthSq() > 0.0001) {
-      this.planarVelocity.projectOnPlane(this.groundNormal).setLength(
-        Math.min(this.planarVelocity.length(), groundSpeed),
-      );
-    } else if (this.planarVelocity.lengthSq() > 0.0001) {
-      this.planarVelocity.setLength(Math.min(this.planarVelocity.length(), AIR_SPEED + 2.5));
-    }
-
-    player.velocity.x = this.planarVelocity.x;
-    player.velocity.z = this.planarVelocity.z;
-
-    if (player.grounded && input.jumpPressed) {
-      player.velocity.y = JUMP_VELOCITY;
-      player.grounded = false;
-    }
-
-    const canFloat = this.frame.save.unlockedAbilities.has("breeze_float");
-    const horizontalSpeed = Math.hypot(player.velocity.x, player.velocity.z);
-    const isFloating = canFloat && !player.grounded && input.jumpHeld && player.velocity.y < 5;
-
-    player.velocity.y -= GRAVITY * (isFloating ? FLOAT_GRAVITY_SCALE : 1) * dt;
-
-    if (isFloating && horizontalSpeed > 0.15) {
-      const boost = FLOAT_FORWARD_BONUS * dt;
-      player.velocity.x += (player.velocity.x / horizontalSpeed) * boost;
-      player.velocity.z += (player.velocity.z / horizontalSpeed) * boost;
+    if (player.swimming && waterStateAtStart) {
+      applySwimForces(player, waterStateAtStart, dt);
+      clampSwimVelocity(player, input.jumpHeld, dt);
     }
 
     player.position.addScaledVector(player.velocity, dt);
 
-    if (!isInsideIslandPlayableBounds(player.position.x, player.position.z)
-      && player.position.y <= sampleIslandVoidThreshold(player.position.x, player.position.z)) {
-      player.fallingToVoid = true;
-      player.voidFallTime = 0;
-      player.grounded = false;
-      player.rolling = false;
-      player.rollingBoostActive = false;
-      this.rollingChargeSeconds = 0;
+    if (shouldStartVoidFall(player)) {
+      beginVoidFall(player, runtime);
       this.updateProgress();
       return;
     }
 
     const terrainHeight = sampleTerrainHeight(player.position.x, player.position.z);
-    const groundY = terrainHeight + PLAYER_RADIUS;
-    if (player.position.y <= groundY) {
-      player.position.y = groundY;
-      player.velocity.y = 0;
-      player.grounded = true;
-      if (!wasGrounded) {
-        player.justLanded = true;
-        player.landingImpact = MathUtils.clamp(downwardSpeedBeforeResolve / 26, 0.2, 1.35);
-      }
-    } else {
-      player.grounded = false;
-    }
+    const waterStateAfterMove = sampleWaterState(player.position.x, player.position.z);
+    resolveWaterContact(player, terrainHeight, waterStateAfterMove, wasGrounded, downwardSpeedBeforeResolve, runtime);
+
+    updateStaminaAndAbilityState(player, dt, runtime, sustainedRolling, isFloating);
 
     if (horizontalSpeed > 0.3) {
       player.heading = Math.atan2(player.velocity.x, player.velocity.z);
     }
 
-    this.collectNearbyOrbs();
     this.updateProgress();
   }
 
-  getOrbCount() {
-    return this.frame.save.collectedOrbIds.size;
-  }
-
-  getRemainingOrbs() {
-    return this.remainingOrbs;
-  }
-
-  private collectNearbyOrbs() {
-    for (const [id, orb] of this.remainingOrbs) {
-      if (orb.position.distanceTo(this.frame.player.position) <= ORB_PICKUP_RADIUS) {
-        this.remainingOrbs.delete(id);
-        this.frame.save.collectedOrbIds.add(id);
-      }
-    }
+  getCharacterScreenData(): CharacterScreenView {
+    return buildCharacterScreenData(this.frame.save, this.frame);
   }
 
   private updateProgress() {
-    const orbCount = this.getOrbCount();
-    if (orbCount >= 8) {
-      this.frame.save.unlockedAbilities.add("breeze_float");
-    }
-
     const player = this.frame.player.position;
     const height = sampleTerrainHeight(player.x, player.z);
     this.frame.currentZone = sampleBiomeZone(player.x, player.z, height);
-    this.frame.objective = sampleObjectiveText(orbCount, this.frame.save.unlockedAbilities.has("breeze_float"));
-
-    let closestTitle = worldLandmarks[0]?.title ?? "Mossu";
-    let closestDistance = Number.POSITIVE_INFINITY;
-    for (const landmark of worldLandmarks) {
-      this.orbitalScratch.set(player.x - landmark.position.x, player.z - landmark.position.z);
-      const distance = this.orbitalScratch.lengthSq();
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestTitle = landmark.title;
-      }
-    }
-    this.frame.currentLandmark = closestTitle;
-  }
-
-  private respawnAtStart() {
-    const player = this.frame.player;
-    player.position.copy(startingPosition);
-    player.velocity.set(0, 0, 0);
-    player.heading = 0;
-    player.rolling = false;
-    player.rollingBoostActive = false;
-    player.grounded = true;
-    player.fallingToVoid = false;
-    player.voidFallTime = 0;
-    player.justRespawned = true;
-    player.justLanded = false;
-    player.landingImpact = 0;
-    this.rollingChargeSeconds = 0;
-  }
-
-  private moveTowards(current: number, target: number, maxDelta: number) {
-    if (Math.abs(target - current) <= maxDelta) {
-      return target;
-    }
-    return current + Math.sign(target - current) * maxDelta;
+    this.frame.objective = sampleObjectiveText();
+    const landmarkProgress = updateLandmarkProgress(player, this.frame.save.catalogedLandmarkIds);
+    const forageableProgress = updateForageableProgress(player, this.frame.save.gatheredForageableIds);
+    this.frame.currentLandmark = landmarkProgress.currentLandmark;
+    this.frame.interactionTarget = landmarkProgress.interactionTarget;
+    this.frame.lastCatalogedLandmarkId = landmarkProgress.lastCatalogedLandmarkId;
+    this.frame.lastGatheredForageableId = forageableProgress.lastGatheredForageableId;
   }
 }

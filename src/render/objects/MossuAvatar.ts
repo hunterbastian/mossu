@@ -26,6 +26,7 @@ export class MossuAvatar {
   private readonly bodyMaterial: MeshStandardMaterial;
   private readonly localVelocity = new Vector3();
   private readonly rollAxis = new Vector3();
+  private readonly upAxis = new Vector3(0, 1, 0);
   private readonly rollQuat = new Quaternion();
   private readonly identityQuat = new Quaternion();
   private bob = 0;
@@ -173,7 +174,7 @@ export class MossuAvatar {
 
     const planarVelocity = this.localVelocity.set(player.velocity.x, 0, player.velocity.z);
     const planarSpeed = planarVelocity.length();
-    const bobStrength = player.grounded ? 1 : 0.35;
+    const bobStrength = player.swimming ? 1.35 : player.grounded ? 1 : 0.35;
     this.bob += dt * MathUtils.clamp(planarSpeed * 0.09, 0.3, 3);
     this.group.position.y += Math.sin(this.bob * 2.7) * 0.06 * bobStrength;
     this.rollBlend = MathUtils.damp(this.rollBlend, player.rolling ? 1 : 0, 9, dt);
@@ -186,7 +187,9 @@ export class MossuAvatar {
       1 - Math.exp(-dt * 9),
     );
 
-    const squashStretch = player.grounded
+    const squashStretch = player.swimming
+      ? 1 + Math.sin(this.bob * 2.2) * 0.04
+      : player.grounded
       ? 1 - Math.min(0.12, planarSpeed * 0.0022)
       : 1 + MathUtils.clamp(player.velocity.y * 0.012, -0.08, 0.16);
     this.locomotionRoot.scale.set(
@@ -198,7 +201,7 @@ export class MossuAvatar {
     if (player.rolling && planarSpeed > 0.001) {
       this.localVelocity
         .set(player.velocity.x, 0, player.velocity.z)
-        .applyAxisAngle(new Vector3(0, 1, 0), -this.locomotionRoot.rotation.y);
+        .applyAxisAngle(this.upAxis, -this.locomotionRoot.rotation.y);
 
       this.rollAxis.set(this.localVelocity.z, 0, -this.localVelocity.x).normalize();
       const rollAngle = (planarSpeed * dt) / this.radius;
@@ -234,7 +237,7 @@ export class MossuAvatar {
       tuft.rotation.z = Math.cos(this.bob * 1.35 + index * 0.7) * 0.08;
     });
 
-    const snowTint = player.grounded ? "#f4f8fb" : "#eef5ff";
+    const snowTint = player.swimming ? "#e4f1f7" : player.grounded ? "#f4f8fb" : "#eef5ff";
     this.bodyMaterial.color.set(snowTint);
 
     this.legs.forEach((leg, index) => {
@@ -246,7 +249,7 @@ export class MossuAvatar {
       leg.position.y = baseY + stepLift;
       leg.position.z = baseZ + stepSwing;
       leg.rotation.x = stepSwing * 1.25;
-      leg.visible = this.rollBlend < 0.98;
+      leg.visible = this.rollBlend < 0.98 && !player.swimming;
     });
   }
 }
