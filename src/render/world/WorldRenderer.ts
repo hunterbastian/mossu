@@ -1,9 +1,8 @@
 import {
   AmbientLight,
   BufferAttribute,
-  CatmullRomCurve3,
+  BufferGeometry,
   Color,
-  ConeGeometry,
   CylinderGeometry,
   DirectionalLight,
   DoubleSide,
@@ -11,7 +10,6 @@ import {
   Float32BufferAttribute,
   Group,
   HemisphereLight,
-  InstancedBufferAttribute,
   InstancedMesh,
   MathUtils,
   Mesh,
@@ -22,29 +20,42 @@ import {
   PlaneGeometry,
   PointLight,
   Quaternion,
-  RepeatWrapping,
   Scene,
   SphereGeometry,
-  TubeGeometry,
   Vector3,
 } from "three";
 import { FrameState } from "../../simulation/gameState";
 import {
-  collectibleOrbs,
+  ForageableKind,
   sampleBaseTerrainHeight,
   sampleBiomeZone,
   sampleIslandBoundaryPoint,
-  sampleGrassDensity,
-  sampleRiverCenter,
-  sampleRiverWidth,
   sampleTerrainHeight,
   sampleTerrainNormal,
   sampleWindField,
-  scenicPockets,
   shadowPockets,
   worldLandmarks,
+  worldForageables,
 } from "../../simulation/world";
 import { MossuAvatar } from "../objects/MossuAvatar";
+import { createGrassMesh, GrassShader, sampleOpeningMeadowMask } from "./grassSystem";
+import { buildClouds, buildMountainAtmosphere, buildSkyDome } from "./atmosphereSystem";
+import { AmbientBlob, buildAmbientBlobs, updateAmbientBlobs } from "./ambientBlobs";
+import {
+  buildGroundLayer,
+  buildHighlandAccents,
+  buildLandmarkTrees,
+  buildMidLayer,
+  buildTreeClusters,
+} from "./terrainDecorations";
+import { markCameraCollider } from "./sceneHelpers";
+import {
+  buildHighlandWaterways,
+  makeOpeningLakeSurface,
+  makeRiverMesh,
+  WaterSurfaceController,
+  WaterSurfaceGroup,
+} from "./waterSystem";
 
 const WORLD_SIZE = 560;
 const TERRAIN_SEGMENTS = 240;
@@ -52,12 +63,6 @@ const GRASS_COUNT = 7600;
 const ALPINE_GRASS_COUNT = 2400;
 const LANDING_SPLASH_PARTICLES = 18;
 const SNOW_TRAIL_PARTICLES = 20;
-
-interface GrassShader {
-  uniforms: Record<string, { value: unknown }>;
-  vertexShader: string;
-  fragmentShader: string;
-}
 
 interface LandingSplashParticle {
   mesh: Mesh;
@@ -87,14 +92,18 @@ interface MapMarker {
   pulseSpeed: number;
 }
 
-interface AmbientBlob {
+interface ForageableVisual {
+  id: string;
+  kind: ForageableKind;
   group: Group;
-  home: Vector3;
-  target: Vector3;
-  velocity: Vector3;
-  restUntil: number;
-  mode: "rest" | "wander" | "curious" | "shy";
+  baseY: number;
   bobOffset: number;
+  swayOffset: number;
+  spinDirection: number;
+}
+
+interface WorldRendererOptions {
+  debugSpiritCloseup?: boolean;
 }
 
 function colorForTerrain(x: number, y: number, z: number) {
@@ -104,32 +113,45 @@ function colorForTerrain(x: number, y: number, z: number) {
   const painterlyNoise = Math.sin(x * 0.07) * 0.04 + Math.cos(z * 0.05) * 0.03 + Math.sin((x - z) * 0.03) * 0.05;
   const patch = Math.round((Math.sin(x * 0.12 + z * 0.08) * 0.5 + 0.5) * 5) / 5;
   const mixValue = Math.min(1, Math.max(0, patch * 0.5 + painterlyNoise + y / 220));
+  const openingMask = sampleOpeningMeadowMask(x, z);
+  const sunWash = Math.sin(x * 0.018 - z * 0.014 + 1.2) * 0.5 + 0.5;
+  const fieldBands = Math.sin(x * 0.022 + z * 0.006 - 1.2) * 0.5 + 0.5;
+  const meadowBloom = MathUtils.clamp((1 - slope * 2.8) * (0.04 + sunWash * 0.1 + openingMask * 0.08), 0, 0.18);
 
   if (zone === "plains" || zone === "hills") {
-    const low = new Color("#88c66c");
-    const high = zone === "plains" ? new Color("#b7de83") : new Color("#9fce73");
-    const color = low.lerp(high, mixValue);
-    return color.lerp(new Color("#c6e4a6"), Math.min(0.22, slope * 0.2));
+    const shadow = zone === "plains" ? new Color("#4b6137") : new Color("#53683c");
+    const low = zone === "plains" ? new Color("#648144") : new Color("#6e8749");
+    const high = zone === "plains" ? new Color("#98b25c") : new Color("#90aa57");
+    const fieldTint = new Color("#7d9551");
+    const color = shadow
+      .lerp(low, 0.46 + mixValue * 0.28)
+      .lerp(high, mixValue * 0.46 + openingMask * 0.08)
+      .lerp(fieldTint, openingMask * (0.12 + fieldBands * 0.14));
+    return color
+      .lerp(new Color("#cdbf77"), meadowBloom * (0.42 + openingMask * 0.12))
+      .lerp(new Color("#e5dab0"), Math.min(0.04 + openingMask * 0.05, slope * 0.06 + openingMask * 0.05));
   }
 
   if (zone === "foothills") {
-    const grassy = new Color("#7ea868");
-    const moss = new Color("#67895a");
-    const stone = new Color("#b9b09a");
+    const grassy = new Color("#73895a");
+    const moss = new Color("#5d7348");
+    const stone = new Color("#c0b39b");
     const color = grassy.lerp(moss, mixValue * 0.45);
-    return color.lerp(stone, Math.min(0.55, slope * 1.6));
+    return color
+      .lerp(new Color("#d5c183"), meadowBloom * 0.28)
+      .lerp(stone, Math.min(0.55, slope * 1.6));
   }
 
   if (zone === "alpine" || zone === "ridge") {
-    const rockA = new Color("#e2dccd");
-    const rockB = new Color("#a9a89d");
-    const moss = new Color("#708b67");
+    const rockA = new Color("#ddd8cc");
+    const rockB = new Color(zone === "ridge" ? "#9ea29b" : "#a9a79d");
+    const moss = new Color(zone === "ridge" ? "#6d7f66" : "#728a67");
     const rockMix = zone === "ridge" ? 0.58 : 0.42;
     const color = rockA.lerp(rockB, 0.3 + mixValue * 0.35);
     return moss.lerp(color, Math.min(1, slope * 2.2 + rockMix));
   }
 
-  return new Color("#f1e9d4").lerp(new Color("#b8b0a0"), Math.min(1, slope * 1.9 + mixValue * 0.3));
+  return new Color("#f4efe2").lerp(new Color("#bcb6ab"), Math.min(1, slope * 1.9 + mixValue * 0.3));
 }
 
 function makeTerrainMesh() {
@@ -164,82 +186,13 @@ function makeTerrainMesh() {
   return mesh;
 }
 
-function makeRiverMesh() {
-  const points: Vector3[] = [];
-  for (let i = 0; i <= 140; i += 1) {
-    const t = i / 140;
-    const z = -180 + t * 300;
-    const x = sampleRiverCenter(z);
-    const y = sampleTerrainHeight(x, z) + 0.35;
-    points.push(new Vector3(x, y, z));
-  }
-
-  const curve = new CatmullRomCurve3(points);
-  const geometry = new TubeGeometry(curve, 180, 8, 8, false);
-  const material = new MeshStandardMaterial({
-    color: "#9fd0dc",
-    roughness: 0.22,
-    metalness: 0,
-    transparent: true,
-    opacity: 0.86,
-  });
-  const mesh = new Mesh(geometry, material);
-  mesh.position.y -= 0.8;
-  return mesh;
-}
-
-function makeCloudCluster(position: Vector3, scale: number) {
-  const group = new Group();
-  const puffGeometry = new SphereGeometry(1.2, 14, 12);
-  const puffMaterial = new MeshLambertMaterial({
-    color: "#fffdf6",
-    transparent: true,
-    opacity: 0.94,
-  });
-
-  const puffs = [
-    [0, 0, 0, 3.5],
-    [3.2, 0.8, -0.3, 2.8],
-    [-3, 0.5, 0.2, 2.4],
-    [1.6, 1.6, 0.8, 2.2],
-    [-1.8, 1.4, -0.8, 2.5],
-  ];
-
-  puffs.forEach(([x, y, z, size]) => {
-    const puff = new Mesh(puffGeometry, puffMaterial);
-    puff.position.set(x as number, y as number, z as number);
-    puff.scale.setScalar((size as number) * scale);
-    group.add(puff);
-  });
-
-  group.position.copy(position);
-  return group;
-}
-
-function buildClouds() {
-  const clouds = new Group();
-  const sets = [
-    new Vector3(-88, 112, -84),
-    new Vector3(42, 126, 12),
-    new Vector3(-12, 146, 128),
-    new Vector3(98, 162, 182),
-    new Vector3(-122, 154, 150),
-  ];
-
-  sets.forEach((position, index) => {
-    clouds.add(makeCloudCluster(position, 3.4 + index * 0.38));
-  });
-
-  return clouds;
-}
-
 function buildShrine() {
   const shrine = new Group();
   const stoneMaterial = new MeshStandardMaterial({ color: "#f0e7ce", roughness: 1 });
   const mossMaterial = new MeshStandardMaterial({ color: "#8bb66f", roughness: 1 });
-  const base = new Mesh(new CylinderGeometry(4.4, 5.6, 2.2, 7), stoneMaterial);
-  const cap = new Mesh(new CylinderGeometry(3.5, 3.8, 3.2, 7), stoneMaterial);
-  const moss = new Mesh(new CylinderGeometry(4.6, 4.4, 0.7, 7), mossMaterial);
+  const base = markCameraCollider(new Mesh(new CylinderGeometry(4.4, 5.6, 2.2, 7), stoneMaterial));
+  const cap = markCameraCollider(new Mesh(new CylinderGeometry(3.5, 3.8, 3.2, 7), stoneMaterial));
+  const moss = markCameraCollider(new Mesh(new CylinderGeometry(4.6, 4.4, 0.7, 7), mossMaterial));
   base.position.y = 1.1;
   cap.position.y = 3.6;
   moss.position.y = 2.2;
@@ -257,7 +210,7 @@ function buildLandmarkTrees() {
 
   const makeTree = (x: number, z: number, color: MeshStandardMaterial) => {
     const tree = new Group();
-    const trunk = new Mesh(new CylinderGeometry(0.33, 0.44, 7.2, 8), trunkMaterial);
+    const trunk = markCameraCollider(new Mesh(new CylinderGeometry(0.33, 0.44, 7.2, 8), trunkMaterial));
     trunk.position.y = 3.6;
     tree.add(trunk);
 
@@ -279,6 +232,7 @@ function buildLandmarkTrees() {
       tree.add(stripe);
     }
 
+    tree.scale.setScalar(TREE_SIZE_MULTIPLIER);
     tree.position.set(x, sampleTerrainHeight(x, z), z);
     group.add(tree);
   };
@@ -298,6 +252,11 @@ function freezeStaticHierarchy(object: Object3D) {
   });
 }
 
+function markCameraCollider(mesh: Mesh) {
+  mesh.userData.cameraCollider = true;
+  return mesh;
+}
+
 function scatterAroundPocket(
   pocket: { position: Vector3; radius: number },
   index: number,
@@ -313,13 +272,16 @@ function scatterAroundPocket(
   };
 }
 
+const TREE_SIZE_MULTIPLIER = 4;
+
 function makeRoundTree(scale: number, leafColor: string) {
+  const scaledSize = scale * TREE_SIZE_MULTIPLIER;
   const group = new Group();
-  const trunk = new Mesh(
-    new CylinderGeometry(0.22 * scale, 0.34 * scale, 3.8 * scale, 7),
+  const trunk = markCameraCollider(new Mesh(
+    new CylinderGeometry(0.22 * scaledSize, 0.34 * scaledSize, 3.8 * scaledSize, 7),
     new MeshLambertMaterial({ color: "#8f7253" }),
-  );
-  trunk.position.y = 1.9 * scale;
+  ));
+  trunk.position.y = 1.9 * scaledSize;
   group.add(trunk);
 
   for (const [x, y, z, size] of [
@@ -329,10 +291,10 @@ function makeRoundTree(scale: number, leafColor: string) {
     [0.18, 5.45, -0.18, 1.05],
   ]) {
     const canopy = new Mesh(
-      new SphereGeometry(size * scale, 10, 8),
+      new SphereGeometry(size * scaledSize, 10, 8),
       new MeshLambertMaterial({ color: leafColor }),
     );
-    canopy.position.set(x * scale, y * scale, z * scale);
+    canopy.position.set(x * scaledSize, y * scaledSize, z * scaledSize);
     group.add(canopy);
   }
 
@@ -340,12 +302,13 @@ function makeRoundTree(scale: number, leafColor: string) {
 }
 
 function makePineTree(scale: number, tone = "#5b7d4d") {
+  const scaledSize = scale * TREE_SIZE_MULTIPLIER;
   const group = new Group();
-  const trunk = new Mesh(
-    new CylinderGeometry(0.18 * scale, 0.28 * scale, 4.8 * scale, 7),
+  const trunk = markCameraCollider(new Mesh(
+    new CylinderGeometry(0.18 * scaledSize, 0.28 * scaledSize, 4.8 * scaledSize, 7),
     new MeshLambertMaterial({ color: "#7a6347" }),
-  );
-  trunk.position.y = 2.4 * scale;
+  ));
+  trunk.position.y = 2.4 * scaledSize;
   group.add(trunk);
 
   for (const [y, radius, height] of [
@@ -354,10 +317,10 @@ function makePineTree(scale: number, tone = "#5b7d4d") {
     [4.45, 0.72, 1.55],
   ]) {
     const cone = new Mesh(
-      new ConeGeometry(radius * scale, height * scale, 6),
+      new ConeGeometry(radius * scaledSize, height * scaledSize, 6),
       new MeshLambertMaterial({ color: tone }),
     );
-    cone.position.y = y * scale;
+    cone.position.y = y * scaledSize;
     group.add(cone);
   }
 
@@ -475,7 +438,7 @@ function makeRockFormation(scale: number, tone: string) {
     [0.48, 0.42, -0.18, 0.92, 1.24, 0.86],
     [-0.44, 0.34, 0.22, 0.82, 1.02, 0.78],
   ]) {
-    const rock = new Mesh(new SphereGeometry(0.72 * scale, 8, 7), material);
+    const rock = markCameraCollider(new Mesh(new SphereGeometry(0.72 * scale, 8, 7), material));
     rock.scale.set(sx * scale, sy * scale, sz * scale);
     rock.position.set(x * scale, y * scale, z * scale);
     group.add(rock);
@@ -512,19 +475,18 @@ function makeWaterfallRibbon(height: number, width: number) {
   return group;
 }
 
-function makeCreekRibbon(points: Vector3[], radius: number, color: string, opacity = 0.82) {
-  const curve = new CatmullRomCurve3(points);
-  const mesh = new Mesh(
-    new TubeGeometry(curve, 48, radius, 6, false),
-    new MeshStandardMaterial({
-      color,
-      roughness: 0.24,
-      metalness: 0,
-      transparent: true,
-      opacity,
-    }),
-  );
-  return mesh;
+function makeCreekSurface(
+  points: Vector3[],
+  radius: number,
+  profile: WaterProfile,
+  opacity = profile.opacity,
+) {
+  return createWaterSurface(points, {
+    profile,
+    width: radius * 2.35,
+    segments: 52,
+    opacity,
+  });
 }
 
 function makeMistPuff(scale: number, color: string, opacity: number) {
@@ -560,47 +522,91 @@ function makeMushroom(scale: number, capColor: string) {
 
 function makeAmbientBlob(scale: number) {
   const group = new Group();
-  const bodyMaterial = new MeshLambertMaterial({ color: "#7f96ff" });
-  const fluffMaterial = new MeshLambertMaterial({ color: "#96aaff" });
-  const deepFluffMaterial = new MeshLambertMaterial({ color: "#6478df" });
-  const eyeMaterial = new MeshStandardMaterial({ color: "#141c24", roughness: 0.12 });
-  const body = new Mesh(new SphereGeometry(0.52 * scale, 12, 10), bodyMaterial);
-  body.scale.set(1, 0.94, 1);
-  body.position.y = 0.78 * scale;
-  group.add(body);
-
-  const fluffPuffs = [
-    { x: -0.24, y: 0.92, z: 0.06, s: 0.24, material: fluffMaterial },
-    { x: 0.24, y: 0.9, z: 0.08, s: 0.22, material: fluffMaterial },
-    { x: -0.16, y: 1.08, z: -0.02, s: 0.17, material: deepFluffMaterial },
-    { x: 0.18, y: 1.06, z: -0.04, s: 0.16, material: deepFluffMaterial },
-    { x: -0.32, y: 0.72, z: -0.08, s: 0.18, material: fluffMaterial },
-    { x: 0.3, y: 0.7, z: -0.05, s: 0.18, material: fluffMaterial },
-    { x: 0, y: 1.15, z: 0.05, s: 0.14, material: deepFluffMaterial },
-  ];
-
-  fluffPuffs.forEach(({ x, y, z, s, material }) => {
-    const puff = new Mesh(new SphereGeometry(s * scale, 8, 7), material);
-    puff.position.set(x * scale, y * scale, z * scale);
-    puff.scale.set(1.08, 0.92, 1);
-    group.add(puff);
+  const root = new Group();
+  const bodyMaterial = new MeshStandardMaterial({
+    color: "#effbff",
+    emissive: "#dff2ff",
+    emissiveIntensity: 0.06,
+    roughness: 0.98,
+    metalness: 0,
+  });
+  const fluffMaterial = new MeshStandardMaterial({ color: "#d9f2ff", roughness: 1, metalness: 0 });
+  const deepFluffMaterial = new MeshStandardMaterial({ color: "#b9ddf5", roughness: 1, metalness: 0 });
+  const footMaterial = new MeshStandardMaterial({ color: "#f3fbff", roughness: 1, metalness: 0 });
+  const eyeMaterial = new MeshStandardMaterial({ color: "#121b24", roughness: 0.08, metalness: 0.02 });
+  const eyeHighlightMaterial = new MeshStandardMaterial({
+    color: "#ffffff",
+    emissive: "#ffffff",
+    emissiveIntensity: 0.25,
+    roughness: 0.18,
+    metalness: 0,
   });
 
-  for (const x of [-0.16, 0.16]) {
-    const leg = new Mesh(new SphereGeometry(0.12 * scale, 8, 7), fluffMaterial);
-    leg.scale.set(1.1, 1.3, 1);
-    leg.position.set(x * scale, 0.14 * scale, 0.16 * scale);
-    group.add(leg);
-  }
+  group.add(root);
 
-  for (const x of [-0.16, 0.16]) {
-    const eye = new Mesh(new SphereGeometry(0.07 * scale, 8, 7), eyeMaterial);
-    eye.scale.set(0.82, 1.18, 0.68);
-    eye.position.set(x * scale, 0.86 * scale, 0.46 * scale);
-    group.add(eye);
-  }
+  const body = new Mesh(new SphereGeometry(0.58 * scale, 18, 16), bodyMaterial);
+  body.scale.set(1.12, 1.42, 1.08);
+  body.position.y = 0.76 * scale;
+  root.add(body);
 
-  return group;
+  const fluffPuffs: Mesh[] = [];
+  [
+    { x: -0.35, y: 0.74, z: 0.08, sx: 0.48, sy: 0.56, sz: 0.46, material: fluffMaterial },
+    { x: 0.35, y: 0.74, z: 0.08, sx: 0.48, sy: 0.56, sz: 0.46, material: fluffMaterial },
+    { x: -0.28, y: 0.38, z: 0.16, sx: 0.36, sy: 0.22, sz: 0.3, material: fluffMaterial },
+    { x: 0.28, y: 0.38, z: 0.16, sx: 0.36, sy: 0.22, sz: 0.3, material: fluffMaterial },
+    { x: -0.18, y: 1.15, z: 0.04, sx: 0.3, sy: 0.36, sz: 0.28, material: deepFluffMaterial },
+    { x: 0.18, y: 1.13, z: 0.05, sx: 0.29, sy: 0.35, sz: 0.27, material: deepFluffMaterial },
+    { x: 0, y: 1.34, z: 0.02, sx: 0.24, sy: 0.28, sz: 0.22, material: fluffMaterial },
+    { x: -0.26, y: 0.46, z: 0.3, sx: 0.2, sy: 0.17, sz: 0.18, material: deepFluffMaterial },
+    { x: 0.26, y: 0.46, z: 0.3, sx: 0.2, sy: 0.17, sz: 0.18, material: deepFluffMaterial },
+    { x: 0, y: 0.28, z: 0.22, sx: 0.24, sy: 0.14, sz: 0.18, material: deepFluffMaterial },
+    { x: 0, y: 0.74, z: -0.08, sx: 0.34, sy: 0.4, sz: 0.26, material: deepFluffMaterial },
+  ].forEach(({ x, y, z, sx, sy, sz, material }) => {
+    const puff = new Mesh(new SphereGeometry(0.5 * scale, 10, 9), material);
+    puff.position.set(x * scale, y * scale, z * scale);
+    puff.scale.set(sx * scale, sy * scale, sz * scale);
+    root.add(puff);
+    fluffPuffs.push(puff);
+  });
+
+  const face = new Group();
+  face.position.set(0, 0.88 * scale, 0.5 * scale);
+  root.add(face);
+
+  const leftEye = new Mesh(new SphereGeometry(0.112 * scale, 10, 9), eyeMaterial);
+  leftEye.scale.set(0.86, 1.34, 0.68);
+  leftEye.position.set(-0.18 * scale, -0.01 * scale, 0);
+  face.add(leftEye);
+  const leftEyeHighlight = new Mesh(new SphereGeometry(0.028 * scale, 8, 7), eyeHighlightMaterial);
+  leftEyeHighlight.scale.set(0.72, 0.9, 0.45);
+  leftEyeHighlight.position.set(-0.028 * scale, 0.04 * scale, 0.07 * scale);
+  leftEye.add(leftEyeHighlight);
+
+  const rightEye = leftEye.clone();
+  rightEye.position.x = 0.18 * scale;
+  face.add(rightEye);
+
+  const leftFoot = new Mesh(new SphereGeometry(0.1 * scale, 10, 9), footMaterial);
+  leftFoot.scale.set(1.08, 0.72, 0.9);
+  leftFoot.position.set(-0.18 * scale, 0.1 * scale, 0.26 * scale);
+  root.add(leftFoot);
+
+  const rightFoot = leftFoot.clone();
+  rightFoot.position.x = 0.18 * scale;
+  root.add(rightFoot);
+
+  return {
+    group,
+    root,
+    body,
+    face,
+    leftEye,
+    rightEye,
+    feet: [leftFoot, rightFoot] as [Mesh, Mesh],
+    fluffPuffs,
+    creatureScale: scale,
+  };
 }
 
 function buildGroundLayer() {
@@ -608,19 +614,32 @@ function buildGroundLayer() {
   const flowerPalette = ["#fff7f0", "#ffd969", "#f6c6df", "#fdf8b9", "#f7d7ff"];
 
   scenicPockets.forEach((pocket) => {
+    const isStartPocket = pocket.id === "start-meadow";
+    const isUpperRoutePocket = pocket.id === "mistfall-basin" || pocket.id === "windstep-shelf" || pocket.id === "ridge-crossing";
     const clusterCount =
-      pocket.zone === "plains" ? 7 :
+      isStartPocket ? 4 :
+      pocket.zone === "plains" ? 8 :
       pocket.zone === "hills" ? 5 :
-      pocket.zone === "foothills" ? 3 :
-      pocket.zone === "alpine" ? (pocket.kind === "stream_bend" ? 1 : 0) :
+      pocket.zone === "foothills" ? (pocket.id === "fir-gate-entry" ? 4 : 3) :
+      pocket.zone === "alpine" ? (pocket.kind === "stream_bend" || isUpperRoutePocket ? 2 : 0) :
+      pocket.zone === "ridge" ? (isUpperRoutePocket ? 1 : 0) :
       0;
-    const cloverCount = pocket.zone === "plains" ? 4 : pocket.zone === "hills" ? 2 : 0;
+    const cloverCount =
+      isStartPocket ? 2 :
+      pocket.zone === "plains" ? 5 :
+      pocket.zone === "hills" ? 2 :
+      0;
 
     for (let i = 0; i < clusterCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, i, pocket.kind === "stream_bend" ? 0.72 : 0.9);
       const y = sampleTerrainHeight(x, z);
       const flowerGroup = new Group();
-      const bloomCount = pocket.zone === "plains" ? 9 : pocket.zone === "hills" ? 7 : pocket.zone === "foothills" ? 4 : 3;
+      const bloomCount =
+        pocket.zone === "plains" ? 10 :
+        pocket.zone === "hills" ? 7 :
+        pocket.zone === "foothills" ? 4 :
+        pocket.zone === "alpine" ? 3 :
+        2;
       for (let j = 0; j < bloomCount; j += 1) {
         const localAngle = (j / Math.max(1, bloomCount)) * Math.PI * 2;
         const localRadius = 0.35 + (j % 3) * 0.16;
@@ -645,7 +664,12 @@ function buildGroundLayer() {
       group.add(patch);
     }
 
-    const grassPatchCount = pocket.zone === "alpine" || pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? 2 : 4;
+    const grassPatchCount =
+      isStartPocket ? 3 :
+      pocket.zone === "foothills" ? 5 :
+      pocket.zone === "alpine" ? 3 :
+      pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? 2 :
+      4;
     for (let i = 0; i < grassPatchCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, 50 + i, 0.82);
       const y = sampleTerrainHeight(x, z);
@@ -658,8 +682,9 @@ function buildGroundLayer() {
     }
 
     const rockCount =
+      isStartPocket ? 1 :
       pocket.zone === "foothills" ? 5 :
-      pocket.zone === "alpine" ? 6 :
+      pocket.zone === "alpine" ? 7 :
       pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? 7 :
       3;
     for (let i = 0; i < rockCount; i += 1) {
@@ -692,12 +717,14 @@ function buildMidLayer() {
   const group = new Group();
 
   scenicPockets.forEach((pocket) => {
+    const isStartPocket = pocket.id === "start-meadow";
     const bushCount =
+      isStartPocket ? 1 :
       pocket.zone === "plains" ? 2 :
       pocket.zone === "hills" ? 3 :
-      pocket.zone === "foothills" ? 4 :
-      pocket.zone === "alpine" ? 3 :
-      pocket.zone === "ridge" ? 2 :
+      pocket.zone === "foothills" ? (pocket.id === "fir-gate-entry" ? 5 : 4) :
+      pocket.zone === "alpine" ? 2 :
+      pocket.zone === "ridge" ? 1 :
       1;
     for (let i = 0; i < bushCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, 100 + i, 0.82);
@@ -717,7 +744,8 @@ function buildMidLayer() {
     }
 
     if (pocket.zone === "plains" || pocket.zone === "hills" || pocket.zone === "foothills") {
-      for (let i = 0; i < (pocket.zone === "plains" ? 3 : 2); i += 1) {
+      const mushroomCount = isStartPocket ? 1 : pocket.zone === "plains" ? 3 : 2;
+      for (let i = 0; i < mushroomCount; i += 1) {
         const { x, z } = scatterAroundPocket(pocket, 120 + i, 0.7);
         const y = sampleTerrainHeight(x, z);
         const mushroom = makeMushroom(0.72 + i * 0.08, i % 2 === 0 ? "#d8a476" : "#e4b893");
@@ -727,7 +755,10 @@ function buildMidLayer() {
     }
 
     if (pocket.zone !== "peak_shrine") {
-      const saplingCount = pocket.zone === "alpine" || pocket.zone === "ridge" ? 3 : 2;
+      const saplingCount =
+        pocket.zone === "foothills" ? 3 :
+        pocket.zone === "alpine" || pocket.zone === "ridge" ? 4 :
+        2;
       for (let i = 0; i < saplingCount; i += 1) {
         const { x, z } = scatterAroundPocket(pocket, 140 + i, 0.9);
         const y = sampleTerrainHeight(x, z);
@@ -749,11 +780,11 @@ function buildMidLayer() {
 function buildTreeClusters() {
   const group = new Group();
   const roundClusters = [
-    [-96, -138, 1.12, "#9ed46f"],
-    [-76, -94, 0.92, "#89c96f"],
-    [-18, -58, 1.04, "#a8da79"],
-    [42, -24, 0.88, "#7fc362"],
-    [-52, 18, 0.84, "#8ecc68"],
+    [-108, -146, 1.12, "#9fd571"],
+    [-76, -104, 0.96, "#91cf74"],
+    [-22, -56, 1.04, "#aedf80"],
+    [28, -8, 0.84, "#88c86c"],
+    [-60, 22, 0.82, "#8dcc6d"],
   ];
   roundClusters.forEach(([x, z, scale, color], index) => {
     const tree = makeRoundTree(scale as number, color as string);
@@ -763,17 +794,18 @@ function buildTreeClusters() {
   });
 
   const mixedClusters = [
-    [-8, 74, 0.92, "round"],
-    [34, 92, 0.86, "pine"],
-    [-26, 102, 0.76, "round"],
-    [12, 122, 0.98, "pine"],
-    [48, 144, 1.08, "pine"],
-    [-44, 154, 1.02, "pine"],
-    [22, 182, 1.12, "pine"],
-    [-4, 136, 0.92, "pine"],
-    [60, 132, 0.96, "pine"],
-    [-38, 176, 1.18, "pine"],
-    [42, 196, 1.2, "pine"],
+    [-4, 72, 0.9, "round"],
+    [18, 86, 0.96, "pine"],
+    [34, 100, 1.08, "pine"],
+    [-10, 106, 0.8, "round"],
+    [14, 118, 1.04, "pine"],
+    [42, 130, 1.12, "pine"],
+    [-14, 146, 0.96, "pine"],
+    [10, 156, 1.16, "pine"],
+    [-28, 168, 1.12, "pine"],
+    [20, 186, 1.22, "pine"],
+    [-4, 198, 1.18, "pine"],
+    [48, 210, 1.08, "pine"],
   ];
   mixedClusters.forEach(([x, z, scale, type], index) => {
     const tree = type === "round"
@@ -852,16 +884,67 @@ function buildHighlandAccents() {
         pool.position.set(pocket.position.x + 12, sampleTerrainHeight(pocket.position.x + 12, pocket.position.z + 6) + 0.4, pocket.position.z + 6);
         group.add(pool);
       }
+
+      if (pocket.id === "fir-gate-entry") {
+        for (const [xOffset, zOffset, scale] of [[-6, -1, 1.32], [5, 2, 1.46]] as const) {
+          const pine = makePineTree(scale, "#5f804f");
+          pine.position.set(
+            pocket.position.x + xOffset,
+            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
+            pocket.position.z + zOffset,
+          );
+          pine.rotation.y = xOffset * 0.12;
+          group.add(pine);
+        }
+      }
+
+      if (pocket.id === "mistfall-basin") {
+        const basinPool = new Mesh(
+          new SphereGeometry(3.8, 12, 10),
+          new MeshStandardMaterial({ color: "#a9d1de", roughness: 0.24, metalness: 0 }),
+        );
+        basinPool.scale.set(1.85, 0.2, 1.28);
+        basinPool.position.set(pocket.position.x + 4, sampleTerrainHeight(pocket.position.x + 4, pocket.position.z + 4) + 0.36, pocket.position.z + 4);
+        group.add(basinPool);
+      }
+
+      if (pocket.id === "windstep-shelf") {
+        for (const [xOffset, zOffset, scale] of [[-7, -4, 1.46], [0, 0, 1.62], [7, 3, 1.38]] as const) {
+          const rock = makeRockFormation(scale, "#aca79c");
+          rock.position.set(
+            pocket.position.x + xOffset,
+            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
+            pocket.position.z + zOffset,
+          );
+          rock.rotation.y = xOffset * 0.08 + zOffset * 0.04;
+          group.add(rock);
+        }
+      }
+
+      if (pocket.id === "ridge-crossing") {
+        for (const [xOffset, zOffset, scale] of [[-8, -2, 1.52], [8, 2, 1.44]] as const) {
+          const pine = makePineTree(scale, "#4d6743");
+          pine.position.set(
+            pocket.position.x + xOffset,
+            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
+            pocket.position.z + zOffset,
+          );
+          group.add(pine);
+        }
+      }
     });
 
   return group;
 }
 
-function buildHighlandWaterways() {
+function buildHighlandWaterways(): WaterSurfaceGroup {
   const group = new Group();
+  const controllers: WaterSurfaceController[] = [];
   const waterfallPocket = scenicPockets.find((pocket) => pocket.id === "mistfall-cascade");
+  const basinPocket = scenicPockets.find((pocket) => pocket.id === "mistfall-basin");
+  const shelfPocket = scenicPockets.find((pocket) => pocket.id === "windstep-shelf");
   if (waterfallPocket) {
-    const ridgeRun = makeCreekRibbon(
+    const ridgeRun = makeCreekSurface(
       [
         new Vector3(56, sampleTerrainHeight(56, 112) + 0.5, 112),
         new Vector3(48, sampleTerrainHeight(48, 120) + 0.55, 120),
@@ -869,11 +952,12 @@ function buildHighlandWaterways() {
         new Vector3(waterfallPocket.position.x + 8, sampleTerrainHeight(waterfallPocket.position.x + 8, waterfallPocket.position.z - 4) + 0.5, waterfallPocket.position.z - 4),
       ],
       1.3,
-      "#8fc8db",
+      WATER_PROFILES.alpineRunoff,
     );
-    group.add(ridgeRun);
+    group.add(ridgeRun.mesh);
+    controllers.push(ridgeRun);
 
-    const lowerRun = makeCreekRibbon(
+    const lowerRun = makeCreekSurface(
       [
         new Vector3(waterfallPocket.position.x + 12, sampleTerrainHeight(waterfallPocket.position.x + 12, waterfallPocket.position.z + 8) + 0.45, waterfallPocket.position.z + 8),
         new Vector3(26, sampleTerrainHeight(26, 142) + 0.42, 142),
@@ -881,13 +965,30 @@ function buildHighlandWaterways() {
         new Vector3(4, sampleTerrainHeight(4, 170) + 0.35, 170),
       ],
       1.05,
-      "#99cedf",
+      WATER_PROFILES.waterfallOutflow,
       0.74,
     );
-    group.add(lowerRun);
+    group.add(lowerRun.mesh);
+    controllers.push(lowerRun);
   }
 
-  const foothillRun = makeCreekRibbon(
+  if (basinPocket && shelfPocket) {
+    const shelfRun = makeCreekSurface(
+      [
+        new Vector3(basinPocket.position.x + 4, sampleTerrainHeight(basinPocket.position.x + 4, basinPocket.position.z + 6) + 0.38, basinPocket.position.z + 6),
+        new Vector3(24, sampleTerrainHeight(24, 146) + 0.34, 146),
+        new Vector3(shelfPocket.position.x + 4, sampleTerrainHeight(shelfPocket.position.x + 4, shelfPocket.position.z + 8) + 0.32, shelfPocket.position.z + 8),
+        new Vector3(10, sampleTerrainHeight(10, 184) + 0.28, 184),
+      ],
+      0.92,
+      WATER_PROFILES.alpineRunoff,
+      0.66,
+    );
+    group.add(shelfRun.mesh);
+    controllers.push(shelfRun);
+  }
+
+  const foothillRun = makeCreekSurface(
     [
       new Vector3(26, sampleTerrainHeight(26, 84) + 0.32, 84),
       new Vector3(22, sampleTerrainHeight(22, 96) + 0.3, 96),
@@ -895,12 +996,13 @@ function buildHighlandWaterways() {
       new Vector3(8, sampleTerrainHeight(8, 120) + 0.25, 120),
     ],
     0.9,
-    "#9ecfda",
+    WATER_PROFILES.foothillCreek,
     0.68,
   );
-  group.add(foothillRun);
+  group.add(foothillRun.mesh);
+  controllers.push(foothillRun);
 
-  return group;
+  return { group, controllers };
 }
 
 function buildMountainAtmosphere() {
@@ -911,13 +1013,14 @@ function buildMountainAtmosphere() {
     .forEach((pocket, pocketIndex) => {
       const cluster = new Group();
       const baseY = pocket.position.y + (pocket.zone === "peak_shrine" ? 14 : pocket.zone === "ridge" ? 10 : 8);
-      for (let i = 0; i < 4; i += 1) {
+      const puffCount = pocket.zone === "peak_shrine" ? 5 : pocket.zone === "ridge" ? 5 : 4;
+      for (let i = 0; i < puffCount; i += 1) {
         const puff = makeMistPuff(
-          pocket.zone === "peak_shrine" ? 14 + i * 2 : 10 + i * 1.8,
+          pocket.zone === "peak_shrine" ? 14 + i * 2 : pocket.zone === "ridge" ? 12 + i * 1.9 : 10 + i * 1.8,
           pocket.zone === "peak_shrine" ? "#eef6ff" : "#e2eef6",
           pocket.zone === "peak_shrine" ? 0.16 - i * 0.02 : 0.14 - i * 0.02,
         );
-        const baseY = i * (pocket.zone === "peak_shrine" ? 3.6 : 2.8);
+        const baseY = i * (pocket.zone === "peak_shrine" ? 3.4 : pocket.zone === "ridge" ? 3 : 2.8);
         puff.position.set(
           Math.cos(i * 1.4 + pocketIndex) * (8 + i * 5),
           baseY,
@@ -935,222 +1038,107 @@ function buildMountainAtmosphere() {
   return group;
 }
 
-function buildAmbientBlobs() {
+function stageAmbientBlobCloseup(blobs: AmbientBlob[]) {
+  const forward = new Vector3().subVectors(startingLookTarget, startingPosition).setY(0).normalize();
+  const right = new Vector3(forward.z, 0, -forward.x).normalize();
+  const layouts = [
+    { forwardOffset: 9.2, rightOffset: 9.8, restUntil: 0.2, groupScale: 1.32 },
+    { forwardOffset: 12.8, rightOffset: 5.2, restUntil: 1.1, groupScale: 1.14 },
+    { forwardOffset: 15.6, rightOffset: 11.6, restUntil: 1.8, groupScale: 1.08 },
+  ];
+
+  layouts.forEach((layout, index) => {
+    const blob = blobs[index];
+    if (!blob) {
+      return;
+    }
+
+    const x = startingPosition.x + forward.x * layout.forwardOffset + right.x * layout.rightOffset;
+    const z = startingPosition.z + forward.z * layout.forwardOffset + right.z * layout.rightOffset;
+    const y = sampleTerrainHeight(x, z);
+    const facingYaw = Math.atan2(startingPosition.x - x, startingPosition.z - z);
+    blob.group.position.set(x, y, z);
+    blob.home.set(x, y, z);
+    blob.target.set(x, y, z);
+    blob.velocity.set(0, 0, 0);
+    blob.mode = "rest";
+    blob.restUntil = layout.restUntil;
+    blob.facingYaw = facingYaw;
+    blob.group.rotation.y = facingYaw;
+    blob.group.scale.setScalar(layout.groupScale);
+  });
+
+  const stagedHerdId = blobs[0]?.herdId;
+  if (stagedHerdId !== undefined) {
+    const stagedCenter = new Vector3();
+    let stagedCount = 0;
+    layouts.forEach((_layout, index) => {
+      const blob = blobs[index];
+      if (!blob || blob.herdId !== stagedHerdId) {
+        return;
+      }
+      stagedCenter.add(blob.group.position);
+      stagedCount += 1;
+    });
+    if (stagedCount > 0) {
+      stagedCenter.multiplyScalar(1 / stagedCount);
+      layouts.forEach((_layout, index) => {
+        const blob = blobs[index];
+        if (blob && blob.herdId === stagedHerdId) {
+          blob.herdCenter.copy(stagedCenter);
+        }
+      });
+    }
+  }
+
+  return blobs;
+}
+
+function buildAmbientBlobs(options: WorldRendererOptions = {}) {
   const plainsHomes = scenicPockets.filter((pocket) => pocket.zone === "plains");
-  return plainsHomes.flatMap((pocket, pocketIndex): AmbientBlob[] =>
+  const blobs = plainsHomes.flatMap((pocket, pocketIndex): AmbientBlob[] =>
     Array.from({ length: pocketIndex === 0 ? 3 : 2 }, (_, index) => {
       const { x, z } = scatterAroundPocket(pocket, 200 + pocketIndex * 20 + index, 0.46);
       const y = sampleTerrainHeight(x, z);
-      const group = makeAmbientBlob(1 + index * 0.08);
-      group.position.set(x, y, z);
+      const herdCenter = new Vector3(
+        pocket.position.x,
+        sampleTerrainHeight(pocket.position.x, pocket.position.z),
+        pocket.position.z,
+      );
+      const creatureScale = 1.18 + index * 0.12;
+      const rig = makeAmbientBlob(creatureScale);
+      rig.group.position.set(x, y, z);
+      const facingYaw = Math.sin((pocketIndex + 1) * 2.6 + index * 1.9) * 0.7;
+      rig.group.rotation.y = facingYaw;
       const blob: AmbientBlob = {
-        group,
+        ...rig,
+        herdId: pocketIndex,
+        herdCenter,
         home: new Vector3(x, y, z),
         target: new Vector3(x, y, z),
         velocity: new Vector3(),
         restUntil: 0.8 + index * 0.5,
+        avoidPlayerUntil: 0,
+        investigateAgainAt: 0,
+        nextBlinkAt: 0.9 + pocketIndex * 0.28 + index * 0.34,
+        blinkUntil: 0,
+        nextIdlePoseAt: 1.8 + pocketIndex * 0.4 + index * 0.45,
+        idlePoseStartAt: 0,
+        idlePoseUntil: 0,
+        idlePose: "none",
+        nextHopAt: 1.6 + pocketIndex * 0.35 + index * 0.5,
+        hopUntil: 0,
         mode: "rest",
         bobOffset: pocketIndex * 0.9 + index * 0.7,
+        poseSeed: pocketIndex * 2.2 + index * 1.4,
+        facingYaw,
+        creatureScale,
       };
       return blob;
     }),
   );
-}
 
-function makeGrassBladeGeometry(width: number, height: number) {
-  const geometry = new PlaneGeometry(width, height, 4, 6);
-  geometry.translate(0, height * 0.5, 0);
-
-  const positions = geometry.attributes.position as BufferAttribute;
-  for (let i = 0; i < positions.count; i += 1) {
-    const y = positions.getY(i);
-    const x = positions.getX(i);
-    const yNorm = MathUtils.clamp(y / height, 0, 1);
-    const center = 1 - Math.abs(x / (width * 0.5));
-    const tuftWidth = MathUtils.lerp(0.14, 1.08, (1 - yNorm) ** 0.32);
-    const topPinch = MathUtils.lerp(1, 0.38, yNorm ** 1.7);
-    const shoulderLift = Math.sin(yNorm * Math.PI) * 0.18;
-
-    positions.setX(i, x * tuftWidth * topPinch);
-    positions.setZ(i, shoulderLift * center * 0.26);
-  }
-
-  return geometry;
-}
-
-function makeGrass(count: number, zoneFilter: (zone: ReturnType<typeof sampleBiomeZone>) => boolean, tintBottom: Color, tintTop: Color) {
-  const bladeGeometry = makeGrassBladeGeometry(0.98, 2.45);
-  const material = new MeshLambertMaterial({
-    color: "#9fd97d",
-    side: DoubleSide,
-    transparent: true,
-    alphaTest: 0.12,
-  });
-
-  const mesh = new InstancedMesh(bladeGeometry, material, count);
-  const dummy = new Object3D();
-  const phases = new Float32Array(count);
-  const tints = new Float32Array(count * 3);
-  const scales = new Float32Array(count);
-  const widths = new Float32Array(count);
-  const roots = new Float32Array(count * 3);
-  let placed = 0;
-
-  while (placed < count) {
-    const x = (Math.random() - 0.5) * (WORLD_SIZE - 32);
-    const z = (Math.random() - 0.5) * (WORLD_SIZE - 32);
-    const height = sampleTerrainHeight(x, z);
-    const zone = sampleBiomeZone(x, z, height);
-    if (!zoneFilter(zone)) {
-      continue;
-    }
-
-    const density = sampleGrassDensity(x, z);
-    if (Math.random() > density) {
-      continue;
-    }
-
-    const normal = sampleTerrainNormal(x, z);
-    if (normal.y < 0.62) {
-      continue;
-    }
-
-    dummy.position.set(x, height + 0.1, z);
-    dummy.rotation.set((Math.random() - 0.5) * 0.18, Math.random() * Math.PI, (Math.random() - 0.5) * 0.14);
-    const scale = 0.62 + Math.random() * (zone === "alpine" || zone === "ridge" ? 0.28 : 0.78);
-    const width = zone === "alpine" || zone === "ridge"
-      ? 0.64 + Math.random() * 0.22
-      : 0.86 + Math.random() * 0.38;
-    dummy.scale.set(width, scale, width);
-    dummy.updateMatrix();
-    mesh.setMatrixAt(placed, dummy.matrix);
-
-    const sunPatch = Math.sin(x * 0.022 + z * 0.017) * 0.5 + 0.5;
-    const coolPatch = Math.cos(x * 0.018 - z * 0.013) * 0.5 + 0.5;
-    const patchMix = MathUtils.clamp(sunPatch * 0.7 + coolPatch * 0.3, 0, 1);
-    const color = tintBottom.clone().lerp(tintTop, MathUtils.clamp(0.08 + patchMix * 0.82 + Math.random() * 0.08, 0, 1));
-    tints[placed * 3] = color.r;
-    tints[placed * 3 + 1] = color.g;
-    tints[placed * 3 + 2] = color.b;
-    phases[placed] = Math.random() * Math.PI * 2;
-    scales[placed] = scale;
-    widths[placed] = width;
-    roots[placed * 3] = x;
-    roots[placed * 3 + 1] = height;
-    roots[placed * 3 + 2] = z;
-    placed += 1;
-  }
-
-  mesh.geometry.setAttribute("instancePhase", new InstancedBufferAttribute(phases, 1));
-  mesh.geometry.setAttribute("instanceTint", new InstancedBufferAttribute(tints, 3));
-  mesh.geometry.setAttribute("instanceScale", new InstancedBufferAttribute(scales, 1));
-  mesh.geometry.setAttribute("instanceWidth", new InstancedBufferAttribute(widths, 1));
-  mesh.geometry.setAttribute("instanceRoot", new InstancedBufferAttribute(roots, 3));
-
-  material.onBeforeCompile = (shader: GrassShader) => {
-    shader.uniforms.uTime = { value: 0 };
-    shader.uniforms.uPlayerPosition = { value: new Vector3() };
-    shader.uniforms.uPlayerVelocity = { value: new Vector3() };
-    shader.uniforms.uPlayerPush = { value: 0 };
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-        attribute float instancePhase;
-        attribute float instanceScale;
-        attribute float instanceWidth;
-        attribute vec3 instanceTint;
-        attribute vec3 instanceRoot;
-        varying float vBladeMix;
-        varying float vSoftEdge;
-        varying float vPlayerFade;
-        varying vec3 vTint;
-        uniform float uTime;
-        uniform vec3 uPlayerPosition;
-        uniform vec3 uPlayerVelocity;
-        uniform float uPlayerPush;
-      `,
-      )
-      .replace(
-        "#include <begin_vertex>",
-        `#include <begin_vertex>
-        vBladeMix = uv.y;
-        float bladeSide = abs(uv.x - 0.5) * 2.0;
-        vSoftEdge = bladeSide;
-        vTint = instanceTint;
-        vec2 playerOffset = instanceRoot.xz - uPlayerPosition.xz;
-        float playerDistance = length(playerOffset);
-        vec2 playerAway = playerDistance > 0.001 ? normalize(playerOffset) : vec2(0.0, 0.0);
-        float playerMask = (1.0 - smoothstep(5.4, 12.5, playerDistance)) * uPlayerPush;
-        float macroWind = sin(instanceRoot.x * 0.016 + uTime * 0.48 + instanceRoot.z * 0.012)
-          + cos(instanceRoot.z * 0.015 - uTime * 0.37 + instanceRoot.x * 0.006);
-        float microWind = sin(instanceRoot.x * 0.094 + uTime * 1.6 + instancePhase * 1.3) * 0.56
-          + cos(instanceRoot.z * 0.072 + uTime * 1.18 + instancePhase * 0.7) * 0.42;
-        float patchWind = macroWind * 0.56 + microWind * 0.24;
-        float tuftWeight = pow(uv.y, 1.25);
-        float bend = (0.12 + patchWind * 0.12) * tuftWeight * instanceScale;
-        float playerDisplace = playerMask * (0.2 + tuftWeight * 0.72);
-        transformed.x *= mix(0.94, 1.22, instanceWidth - 0.7);
-        transformed.x += bend * sin(instancePhase);
-        transformed.z += bend * cos(instancePhase);
-        transformed.z += (0.18 - bladeSide * 0.08) * sin(instancePhase * 0.8) * tuftWeight * instanceScale;
-        transformed.x += playerAway.x * playerDisplace;
-        transformed.z += playerAway.y * playerDisplace;
-        vPlayerFade = 1.0 - playerMask * 0.28;
-      `,
-      );
-
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-        varying float vBladeMix;
-        varying float vSoftEdge;
-        varying float vPlayerFade;
-        varying vec3 vTint;
-      `,
-      )
-      .replace(
-        "vec4 diffuseColor = vec4( diffuse, opacity );",
-        `float sideMask = smoothstep(1.0, 0.32, vSoftEdge);
-        float tipMask = 1.0 - smoothstep(0.82, 1.0, vBladeMix + vSoftEdge * 0.14);
-        float alphaShape = sideMask * tipMask;
-        vec3 meadowColor = mix(vTint * 0.9, vTint * 1.08 + vec3(0.04, 0.055, 0.01), pow(vBladeMix, 0.72));
-        vec4 diffuseColor = vec4(meadowColor, opacity * alphaShape * vPlayerFade);`,
-      )
-      .replace(
-        "#include <color_fragment>",
-        `#include <color_fragment>
-        diffuseColor.rgb = floor(diffuseColor.rgb * 7.0) / 7.0;
-      `,
-      );
-
-    mesh.userData.shader = shader;
-  };
-
-  return mesh;
-}
-
-function buildOrbMeshes() {
-  const material = new MeshBasicMaterial({ color: "#96fff4" });
-  const glowMaterial = new MeshBasicMaterial({
-    color: "#caffff",
-    transparent: true,
-    opacity: 0.25,
-  });
-  const group = new Group();
-
-  collectibleOrbs.forEach((orb) => {
-    const orbGroup = new Group();
-    const orbMesh = new Mesh(new SphereGeometry(0.7, 14, 12), material);
-    const glow = new Mesh(new SphereGeometry(1.3, 12, 10), glowMaterial);
-    orbGroup.add(glow, orbMesh);
-    orbGroup.position.copy(orb.position);
-    orbGroup.userData.orbId = orb.id;
-    group.add(orbGroup);
-  });
-
-  return group;
+  return options.debugSpiritCloseup ? stageAmbientBlobCloseup(blobs) : blobs;
 }
 
 function buildShadowPockets() {
@@ -1205,23 +1193,27 @@ function buildFloatingIslandShell() {
   const upperSkirt = new Mesh(new CylinderGeometry(1.02, 0.88, 88, 40, 5, true), upperMaterial);
   upperSkirt.scale.set(radiusX * 1.02, 1, radiusZ * 1.04);
   upperSkirt.position.set(center.x, rimHeight - 56, center.z);
+  markCameraCollider(upperSkirt);
 
   const mossBand = new Mesh(new CylinderGeometry(1, 0.96, 10, 40, 1, true), mossMaterial);
   mossBand.scale.set(radiusX * 1.03, 1, radiusZ * 1.05);
   mossBand.position.set(center.x, rimHeight - 8, center.z);
+  markCameraCollider(mossBand);
 
   const lowerSkirt = new Mesh(new CylinderGeometry(0.88, 0.42, 124, 40, 6, true), lowerMaterial);
   lowerSkirt.scale.set(radiusX * 0.96, 1, radiusZ * 0.98);
   lowerSkirt.position.set(center.x, rimHeight - 158, center.z);
+  markCameraCollider(lowerSkirt);
 
   const lowerBelly = new Mesh(new SphereGeometry(1.2, 20, 18), lowerMaterial);
   lowerBelly.scale.set(radiusX * 0.56, 58, radiusZ * 0.5);
   lowerBelly.position.set(center.x, rimHeight - 238, center.z);
+  markCameraCollider(lowerBelly);
 
   group.add(upperSkirt, mossBand, lowerSkirt, lowerBelly);
 
   perimeter.forEach((point, index) => {
-    const cliffBulge = new Mesh(new SphereGeometry(1.08, 10, 8), index % 3 === 0 ? lowerMaterial : upperMaterial);
+    const cliffBulge = markCameraCollider(new Mesh(new SphereGeometry(1.08, 10, 8), index % 3 === 0 ? lowerMaterial : upperMaterial));
     cliffBulge.scale.set(
       14 + (index % 4) * 4,
       22 + (index % 3) * 8,
@@ -1263,15 +1255,106 @@ function createMapMarker(color: string, radius: number, height: number, opacity:
   return group;
 }
 
+function createFruitPickup(seed: number) {
+  const group = new Group();
+  const stemMaterial = new MeshLambertMaterial({ color: "#5f7845" });
+  const fruitMaterial = new MeshLambertMaterial({
+    color: seed % 3 === 0 ? "#ffba66" : seed % 2 === 0 ? "#ff8b78" : "#ffd06b",
+  });
+  const leafMaterial = new MeshLambertMaterial({
+    color: seed % 2 === 0 ? "#7cc170" : "#6aa462",
+    side: DoubleSide,
+  });
+
+  const stem = new Mesh(new CylinderGeometry(0.1, 0.16, 0.95, 8), stemMaterial);
+  stem.position.y = 0.52;
+  group.add(stem);
+
+  [
+    [0, 0.98, 0],
+    [-0.34, 0.72, 0.1],
+    [0.31, 0.78, -0.12],
+    [0.06, 0.58, 0.3],
+  ].forEach(([x, y, z], index) => {
+    const fruit = new Mesh(new SphereGeometry(index === 0 ? 0.34 : 0.28, 12, 10), fruitMaterial);
+    fruit.position.set(x as number, y as number, z as number);
+    fruit.scale.set(1, 0.92, 1);
+    group.add(fruit);
+  });
+
+  const leaf = new Mesh(new PlaneGeometry(0.68, 0.3, 1, 1), leafMaterial);
+  leaf.position.set(0.14, 1.03, -0.06);
+  leaf.rotation.set(-0.5, 0.45, -0.28);
+  group.add(leaf);
+
+  group.scale.setScalar(1 + (seed % 3) * 0.08);
+  return group;
+}
+
+function createPlantPickup(seed: number) {
+  const group = new Group();
+  const stemMaterial = new MeshLambertMaterial({
+    color: seed % 2 === 0 ? "#74b06e" : "#6aa46d",
+  });
+  const bloomMaterial = new MeshLambertMaterial({
+    color: seed % 3 === 0 ? "#d8efff" : seed % 2 === 0 ? "#bfe1ff" : "#d5f3e3",
+    transparent: true,
+    opacity: 0.9,
+    side: DoubleSide,
+  });
+
+  [-0.22, 0, 0.24].forEach((offset, index) => {
+    const stem = new Mesh(new ConeGeometry(0.14 + index * 0.02, 1.25 + index * 0.14, 7), stemMaterial);
+    stem.position.set(offset, 0.62 + index * 0.04, (index - 1) * 0.08);
+    stem.rotation.z = offset * -0.42;
+    group.add(stem);
+  });
+
+  const bloom = new Mesh(new SphereGeometry(0.28, 10, 8), bloomMaterial);
+  bloom.position.set(0.02, 1.24, 0);
+  bloom.scale.set(0.95, 0.72, 0.95);
+  group.add(bloom);
+
+  const leafPlane = new Mesh(new PlaneGeometry(0.76, 0.28, 1, 1), bloomMaterial.clone());
+  (leafPlane.material as MeshLambertMaterial).color.set("#93d798");
+  leafPlane.position.set(-0.02, 0.72, 0);
+  leafPlane.rotation.set(-0.15, 0.2, 0.48);
+  group.add(leafPlane);
+
+  group.scale.setScalar(0.94 + (seed % 3) * 0.06);
+  return group;
+}
+
+function buildForageableVisuals() {
+  return worldForageables.map<ForageableVisual>((forageable, index) => {
+    const group = forageable.kind === "fruit" ? createFruitPickup(index) : createPlantPickup(index);
+    group.position.copy(forageable.position);
+    group.position.y += forageable.kind === "fruit" ? 1.15 : 0.88;
+    return {
+      id: forageable.id,
+      kind: forageable.kind,
+      group,
+      baseY: group.position.y,
+      bobOffset: index * 0.9,
+      swayOffset: index * 0.55,
+      spinDirection: index % 2 === 0 ? 1 : -1,
+    };
+  });
+}
+
 export class WorldRenderer {
   readonly mossu = new MossuAvatar();
   readonly terrain = makeTerrainMesh();
+  readonly skyDome = buildSkyDome();
   readonly clouds = buildClouds();
-  readonly orbGroup = buildOrbMeshes();
   readonly windMeshes: Array<InstancedMesh> = [];
+  private readonly waterControllers: Array<WaterSurfaceController> = [];
+  private readonly cameraCollisionMeshes: Mesh[] = [];
+  private readonly gameplayFog = new Fog("#c4d1c2", 360, 860);
 
   private readonly shrine = buildShrine();
   private readonly river = makeRiverMesh();
+  private readonly openingLake = makeOpeningLakeSurface();
   private readonly islandShell = buildFloatingIslandShell();
   private readonly groundLayer = buildGroundLayer();
   private readonly midLayer = buildMidLayer();
@@ -1282,14 +1365,14 @@ export class WorldRenderer {
   private readonly shadowVolumes = buildShadowPockets();
   private readonly landmarkTrees = buildLandmarkTrees();
   private readonly mountainSilhouettes = new Group();
-  private readonly sun = new DirectionalLight("#fff7dc", 2.4);
-  private readonly meadowGlow = new PointLight("#ffe6b3", 1.55, 210, 1.4);
+  private readonly sun = new DirectionalLight("#fff0cf", 3.12);
+  private readonly meadowGlow = new PointLight("#ffe6b3", 1.48, 220, 1.4);
   private readonly alpineGlow = new PointLight("#cddcff", 0.74, 260, 1.1);
   private readonly landingSplash = new Group();
   private readonly landingParticles: LandingSplashParticle[] = [];
   private readonly snowTrail = new Group();
   private readonly snowTrailParticles: SnowTrailParticle[] = [];
-  private readonly ambientBlobs = buildAmbientBlobs();
+  private readonly ambientBlobs: AmbientBlob[];
   private readonly ambientBlobGroup = new Group();
   private readonly landingUp = new Vector3(0, 1, 0);
   private readonly landingQuat = new Quaternion();
@@ -1297,8 +1380,17 @@ export class WorldRenderer {
   private readonly landingNormal = new Vector3();
   private readonly trailVelocity = new Vector3();
   private readonly trailDirection = new Vector3();
+  private readonly ambientPlayerMotion = new Vector3();
+  private readonly ambientToPlayer = new Vector3();
+  private readonly ambientNeighborOffset = new Vector3();
+  private readonly ambientGroupCenter = new Vector3();
+  private readonly ambientCohesion = new Vector3();
+  private readonly ambientSeparation = new Vector3();
+  private readonly ambientDesiredTarget = new Vector3();
   private trailEmissionCarry = 0;
   private readonly mapMarkerGroup = new Group();
+  private readonly forageableGroup = new Group();
+  private readonly forageableVisuals = buildForageableVisuals();
   private readonly playerMapMarker: MapMarker = {
     group: createMapMarker("#78f3ff", 3.2, 12, 0.42),
     baseScale: 1,
@@ -1311,61 +1403,135 @@ export class WorldRenderer {
   };
   private readonly landmarkMapMarkers: Array<MapMarker> = [];
 
-  constructor(private readonly scene: Scene) {
-    scene.background = new Color("#dcefff");
-    scene.fog = new Fog("#dee7df", 210, 510);
+  constructor(private readonly scene: Scene, options: WorldRendererOptions = {}) {
+    this.ambientBlobs = buildAmbientBlobs(options);
+    scene.background = new Color("#d8f6ff");
+    scene.fog = this.gameplayFog;
 
-    const ambient = new AmbientLight("#fff4df", 1.34);
-    const skyFill = new HemisphereLight("#f2f8ff", "#c7dcb1", 1.28);
-    scene.add(ambient, skyFill);
+    const ambient = new AmbientLight("#f4fff9", 0.84);
+    const skyFill = new HemisphereLight("#c8f7ff", "#d5e7a4", 1.02);
+    const skyBounce = new DirectionalLight("#dffcff", 0.32);
+    skyBounce.position.set(148, 126, 196);
+    scene.add(ambient, skyFill, skyBounce);
 
-    this.sun.position.set(108, 176, 46);
+    this.sun.position.set(-244, 84, -46);
     this.sun.castShadow = false;
+    this.sun.target.position.set(58, 12, 98);
+    scene.add(this.sun.target);
     scene.add(this.sun);
-    this.meadowGlow.position.set(-52, 34, -118);
-    this.alpineGlow.position.set(24, 112, 164);
+    this.meadowGlow.color.set("#ffe1a2");
+    this.meadowGlow.intensity = 0.46;
+    this.meadowGlow.distance = 240;
+    this.meadowGlow.position.set(-186, 38, -122);
+    this.alpineGlow.color.set("#dbe8ff");
+    this.alpineGlow.intensity = 0.56;
+    this.alpineGlow.position.set(44, 128, 186);
     scene.add(this.meadowGlow, this.alpineGlow);
 
+    scene.add(this.skyDome);
     scene.add(this.terrain);
     scene.add(this.islandShell);
-    scene.add(this.river);
+    scene.add(this.river.mesh);
+    scene.add(this.openingLake.mesh);
     scene.add(this.groundLayer);
     scene.add(this.midLayer);
     scene.add(this.treeClusters);
     scene.add(this.highlandAccents);
-    scene.add(this.highlandWaterways);
+    scene.add(this.highlandWaterways.group);
     scene.add(this.mountainAtmosphere);
     scene.add(this.landmarkTrees);
     scene.add(this.shadowVolumes);
     scene.add(this.shrine);
     scene.add(this.clouds);
-    scene.add(this.orbGroup);
     scene.add(this.mossu.group);
     scene.add(this.landingSplash);
     scene.add(this.snowTrail);
+    scene.add(this.forageableGroup);
     scene.add(this.ambientBlobGroup);
     scene.add(this.mapMarkerGroup);
 
-    const meadowGrass = makeGrass(
-      GRASS_COUNT + 1200,
+    const meadowNearGrass = createGrassMesh(
+      Math.round(GRASS_COUNT * 0.37),
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#78ad5e"),
-      new Color("#c2e28d"),
+      new Color("#4e6540"),
+      new Color("#d4e492"),
+      {
+        crossPlanes: 3,
+        bladeWidth: 0.72,
+        bladeHeight: 3.6,
+        placementMultiplier: 0.72,
+        scaleMultiplier: 1.1,
+        widthMultiplier: 0.92,
+        fadeInStart: -1,
+        fadeInEnd: 0,
+        fadeOutStart: 34,
+        fadeOutEnd: 68,
+        rootFillBoost: 0.08,
+        selfShadowStrength: 0.92,
+        distanceCompressionBoost: 0.04,
+      },
     );
-    const alpineGrass = makeGrass(
+    const meadowMidGrass = createGrassMesh(
+      Math.round(GRASS_COUNT * 0.56),
+      (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
+      new Color("#4a623c"),
+      new Color("#c7d987"),
+      {
+        crossPlanes: 2,
+        bladeWidth: 0.86,
+        bladeHeight: 3.1,
+        placementMultiplier: 0.94,
+        scaleMultiplier: 1.04,
+        widthMultiplier: 1.06,
+        fadeInStart: 24,
+        fadeInEnd: 44,
+        fadeOutStart: 96,
+        fadeOutEnd: 144,
+        rootFillBoost: 0.18,
+        selfShadowStrength: 0.72,
+        distanceCompressionBoost: 0.14,
+      },
+    );
+    const meadowFarGrass = createGrassMesh(
+      GRASS_COUNT - 260,
+      (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
+      new Color("#49603a"),
+      new Color("#b7c777"),
+      {
+        crossPlanes: 1,
+        bladeWidth: 1.02,
+        bladeHeight: 2.7,
+        placementMultiplier: 1.1,
+        scaleMultiplier: 0.98,
+        widthMultiplier: 1.18,
+        fadeInStart: 84,
+        fadeInEnd: 118,
+        fadeOutStart: 220,
+        fadeOutEnd: 320,
+        rootFillBoost: 0.28,
+        selfShadowStrength: 0.6,
+        distanceCompressionBoost: 0.26,
+      },
+    );
+    const alpineGrass = createGrassMesh(
       ALPINE_GRASS_COUNT,
       (zone) => zone === "alpine" || zone === "ridge",
-      new Color("#739a67"),
-      new Color("#bcd6a2"),
+      new Color("#64785a"),
+      new Color("#c5d8a0"),
+      {
+        crossPlanes: 1,
+        selfShadowStrength: 0.42,
+      },
     );
-    this.windMeshes.push(meadowGrass, alpineGrass);
-    scene.add(meadowGrass, alpineGrass);
+    this.windMeshes.push(meadowNearGrass, meadowMidGrass, meadowFarGrass, alpineGrass);
+    scene.add(meadowNearGrass, meadowMidGrass, meadowFarGrass, alpineGrass);
 
-    const stoneMaterial = new MeshStandardMaterial({ color: "#d8d1bc", roughness: 1 });
+    const stoneMaterial = new MeshStandardMaterial({ color: "#bcc8ba", roughness: 1 });
     for (const [x, z, sx, sy, sz] of [
-      [-140, 176, 90, 120, 120],
-      [110, 188, 110, 145, 120],
-      [22, 206, 150, 180, 132],
+      [-152, 184, 86, 118, 114],
+      [118, 198, 102, 136, 120],
+      [8, 232, 126, 162, 122],
+      [76, 240, 66, 94, 70],
     ]) {
       const mountain = new Mesh(new SphereGeometry(1.2, 16, 14), stoneMaterial);
       mountain.scale.set(sx as number, sy as number, sz as number);
@@ -1422,6 +1588,9 @@ export class WorldRenderer {
     }
 
     this.mapMarkerGroup.visible = false;
+    this.forageableVisuals.forEach((visual) => {
+      this.forageableGroup.add(visual.group);
+    });
     this.mapMarkerGroup.add(this.playerMapMarker.group);
     this.mapMarkerGroup.add(this.shrineMapMarker.group);
     worldLandmarks.forEach((landmark, index) => {
@@ -1443,15 +1612,24 @@ export class WorldRenderer {
       this.ambientBlobGroup.add(blob.group);
     });
 
+    this.waterControllers.push(this.river, this.openingLake, ...this.highlandWaterways.controllers);
+    this.registerCameraCollider(this.terrain);
+    this.collectCameraColliders(this.islandShell);
+    this.collectCameraColliders(this.shrine);
+    this.collectCameraColliders(this.treeClusters);
+    this.collectCameraColliders(this.highlandAccents);
+    this.collectCameraColliders(this.landmarkTrees);
+
     [
       this.terrain,
       this.islandShell,
-      this.river,
+      this.river.mesh,
+      this.openingLake.mesh,
       this.groundLayer,
       this.midLayer,
       this.treeClusters,
       this.highlandAccents,
-      this.highlandWaterways,
+      this.highlandWaterways.group,
       this.shadowVolumes,
       this.landmarkTrees,
       this.shrine,
@@ -1459,22 +1637,69 @@ export class WorldRenderer {
     ].forEach((object) => freezeStaticHierarchy(object));
   }
 
+  getCameraCollisionMeshes() {
+    return this.cameraCollisionMeshes;
+  }
+
   update(frame: FrameState, elapsed: number, dt: number, mapLookdown = false) {
     this.mossu.update(frame.player, dt);
+    this.skyDome.position.copy(frame.player.position);
+    this.scene.fog = mapLookdown ? null : this.gameplayFog;
     this.updateWind(frame, elapsed);
+    this.updateWater(elapsed);
     this.updateClouds(elapsed);
-    this.updateOrbs(frame, elapsed);
     this.updateAmbientBlobs(frame, elapsed, dt, mapLookdown);
     this.updateLandingSplash(frame, dt);
     this.updateSnowTrail(frame, dt);
+    this.updateForageables(frame, elapsed, mapLookdown);
     this.updateMapMarkers(frame, elapsed, mapLookdown);
     this.windMeshes.forEach((mesh) => {
       mesh.visible = !mapLookdown;
     });
+    this.skyDome.visible = !mapLookdown;
     this.islandShell.visible = !mapLookdown;
     this.clouds.visible = !mapLookdown;
     this.mountainSilhouettes.visible = !mapLookdown;
     this.mountainAtmosphere.visible = !mapLookdown;
+  }
+
+  private updateForageables(frame: FrameState, elapsed: number, mapLookdown: boolean) {
+    this.forageableGroup.visible = !mapLookdown;
+    if (mapLookdown) {
+      return;
+    }
+
+    this.forageableVisuals.forEach((visual, index) => {
+      const gathered = frame.save.gatheredForageableIds.has(visual.id);
+      visual.group.visible = !gathered;
+      if (gathered) {
+        return;
+      }
+
+      const bob = Math.sin(elapsed * 1.8 + visual.bobOffset) * 0.18;
+      visual.group.position.y = visual.baseY + bob;
+      if (visual.kind === "fruit") {
+        visual.group.rotation.y = elapsed * 0.55 * visual.spinDirection + visual.swayOffset;
+      } else {
+        visual.group.rotation.y = visual.swayOffset;
+        visual.group.rotation.z = Math.sin(elapsed * 1.5 + visual.swayOffset + index * 0.3) * 0.08;
+      }
+    });
+  }
+
+  private collectCameraColliders(root: Object3D) {
+    root.traverse((node) => {
+      const mesh = node as Mesh;
+      if (mesh.isMesh && mesh.userData.cameraCollider) {
+        this.registerCameraCollider(mesh);
+      }
+    });
+  }
+
+  private registerCameraCollider(mesh: Mesh) {
+    if (!this.cameraCollisionMeshes.includes(mesh)) {
+      this.cameraCollisionMeshes.push(mesh);
+    }
   }
 
   private updateWind(frame: FrameState, elapsed: number) {
@@ -1492,6 +1717,12 @@ export class WorldRenderer {
         (shader.uniforms.uPlayerVelocity.value as Vector3).set(frame.player.velocity.x, 0, frame.player.velocity.z);
         shader.uniforms.uPlayerPush.value = playerPush;
       }
+    });
+  }
+
+  private updateWater(elapsed: number) {
+    this.waterControllers.forEach((controller) => {
+      controller.update(elapsed);
     });
   }
 
@@ -1514,20 +1745,6 @@ export class WorldRenderer {
         const baseY = (puff.userData.baseY as number | undefined) ?? puff.position.y;
         puff.position.y = baseY + Math.sin(elapsed * 0.28 + puffIndex * 0.9 + index) * 0.7;
       });
-    });
-  }
-
-  private updateOrbs(frame: FrameState, elapsed: number) {
-    this.orbGroup.children.forEach((orbNode: Object3D, index: number) => {
-      const id = orbNode.userData.orbId as string;
-      orbNode.visible = !frame.save.collectedOrbIds.has(id);
-      if (!orbNode.visible) {
-        return;
-      }
-      const base = collectibleOrbs[index];
-      orbNode.position.copy(base.position);
-      orbNode.position.y += Math.sin(elapsed * 1.9 + index) * 0.45;
-      orbNode.rotation.y += 0.025;
     });
   }
 
@@ -1648,21 +1865,109 @@ export class WorldRenderer {
     }
 
     const playerPosition = frame.player.position;
+    const playerPlanarSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
+    this.ambientPlayerMotion.set(frame.player.velocity.x, 0, frame.player.velocity.z);
     this.ambientBlobs.forEach((blob, index) => {
       const groundY = sampleTerrainHeight(blob.group.position.x, blob.group.position.z);
-      const toPlayer = new Vector3().subVectors(playerPosition, blob.group.position);
+      const toPlayer = this.ambientToPlayer.subVectors(playerPosition, blob.group.position);
       const planarToPlayer = Math.hypot(toPlayer.x, toPlayer.z);
+      const playerTooClose = planarToPlayer < 8.5;
+      const playerApproachAlignment =
+        playerPlanarSpeed > 0.001 && planarToPlayer > 0.001
+          ? this.ambientPlayerMotion.dot(toPlayer) / (playerPlanarSpeed * planarToPlayer)
+          : 0;
+      const playerApproaching =
+        frame.player.grounded &&
+        !frame.player.swimming &&
+        planarToPlayer < 15.5 &&
+        playerPlanarSpeed > 5 &&
+        playerApproachAlignment > 0.55;
+      const stillAvoidingPlayer = elapsed < blob.avoidPlayerUntil;
 
-      if (planarToPlayer < 8.5) {
+      this.ambientGroupCenter.copy(blob.group.position);
+      this.ambientCohesion.set(0, 0, 0);
+      this.ambientSeparation.set(0, 0, 0);
+
+      let herdMateCount = 1;
+      let nearbyMateCount = 0;
+      let nearestMateDistance = Number.POSITIVE_INFINITY;
+      this.ambientBlobs.forEach((otherBlob, otherIndex) => {
+        if (otherIndex === index || otherBlob.herdId !== blob.herdId) {
+          return;
+        }
+
+        this.ambientNeighborOffset
+          .subVectors(otherBlob.group.position, blob.group.position)
+          .setY(0);
+        const neighborDistance = this.ambientNeighborOffset.length();
+        if (neighborDistance <= 0.001) {
+          return;
+        }
+
+        herdMateCount += 1;
+        nearestMateDistance = Math.min(nearestMateDistance, neighborDistance);
+        this.ambientGroupCenter.add(otherBlob.group.position);
+
+        if (neighborDistance < 5.8) {
+          nearbyMateCount += 1;
+        }
+        if (neighborDistance < 3.1) {
+          this.ambientSeparation.addScaledVector(
+            this.ambientNeighborOffset,
+            -((3.1 - neighborDistance) / (3.1 * neighborDistance)),
+          );
+        }
+      });
+
+      if (herdMateCount > 1) {
+        this.ambientGroupCenter.multiplyScalar(1 / herdMateCount);
+      } else {
+        this.ambientGroupCenter.copy(blob.herdCenter);
+      }
+      this.ambientGroupCenter.y = groundY;
+
+      const herdOffset = this.ambientCohesion
+        .subVectors(this.ambientGroupCenter, blob.group.position)
+        .setY(0);
+      const herdDistance = herdOffset.length();
+      if (herdDistance > 0.001) {
+        herdOffset.multiplyScalar(1 / herdDistance);
+      }
+      const separatedFromHerd =
+        herdDistance > 4.8 || (herdMateCount > 1 && nearbyMateCount === 0 && nearestMateDistance > 6.4);
+      const herdPullStrength = herdDistance > 2.2 ? MathUtils.clamp((herdDistance - 2.2) / 4.4, 0, 1.25) : 0;
+      const separationStrength = this.ambientSeparation.length();
+
+      if (blob.mode === "curious" && blob.restUntil < elapsed) {
+        blob.investigateAgainAt = elapsed + 2.6 + (index % 2) * 0.5;
+      }
+
+      if (playerTooClose || playerApproaching || stillAvoidingPlayer) {
         blob.mode = "shy";
-        const away = planarToPlayer > 0.001 ? toPlayer.multiplyScalar(-1 / planarToPlayer) : new Vector3(1, 0, 0);
+        const away = planarToPlayer > 0.001 ? toPlayer.multiplyScalar(-1 / planarToPlayer) : toPlayer.set(1, 0, 0);
+        this.ambientDesiredTarget.copy(blob.group.position).addScaledVector(away, playerApproaching ? 6.6 : 4.8);
+        if (herdPullStrength > 0) {
+          this.ambientDesiredTarget.addScaledVector(herdOffset, 1.6 + herdPullStrength * 1.5);
+        }
         blob.target.set(
-          blob.home.x + away.x * 6,
+          this.ambientDesiredTarget.x,
           blob.home.y,
-          blob.home.z + away.z * 6,
+          this.ambientDesiredTarget.z,
         );
-        blob.restUntil = elapsed + 1.1;
-      } else if (planarToPlayer < 16 && blob.mode !== "shy" && blob.restUntil < elapsed) {
+        if (playerTooClose || playerApproaching) {
+          blob.avoidPlayerUntil = Math.max(
+            blob.avoidPlayerUntil,
+            elapsed + (playerApproaching ? 3 : 2.8 + (index % 3) * 0.35),
+          );
+        }
+        blob.restUntil = Math.max(blob.restUntil, elapsed + (playerApproaching ? 1.4 : 1.1));
+      } else if (
+        planarToPlayer < 16 &&
+        blob.mode !== "shy" &&
+        blob.restUntil < elapsed &&
+        elapsed >= blob.avoidPlayerUntil &&
+        elapsed >= blob.investigateAgainAt
+      ) {
         blob.mode = "curious";
         blob.target.set(
           playerPosition.x - toPlayer.x * 0.35,
@@ -1671,7 +1976,16 @@ export class WorldRenderer {
         );
         blob.restUntil = elapsed + 1.3;
       } else if (blob.restUntil < elapsed) {
-        if (blob.mode === "rest") {
+        if (separatedFromHerd && elapsed >= blob.avoidPlayerUntil) {
+          blob.mode = "wander";
+          const regroupAngle = blob.poseSeed + elapsed * 0.2;
+          blob.target.set(
+            this.ambientGroupCenter.x + Math.cos(regroupAngle) * 1.4,
+            blob.home.y,
+            this.ambientGroupCenter.z + Math.sin(regroupAngle) * 1.2,
+          );
+          blob.restUntil = elapsed + 1.5;
+        } else if (blob.mode === "rest") {
           blob.mode = "wander";
           const wanderAngle = elapsed * 0.45 + index * 1.7;
           blob.target.set(
@@ -1687,10 +2001,80 @@ export class WorldRenderer {
         }
       }
 
+      if (elapsed >= blob.nextBlinkAt) {
+        blob.blinkUntil = elapsed + 0.12;
+        blob.nextBlinkAt =
+          elapsed +
+          1.8 +
+          (((Math.sin(blob.poseSeed * 2.7 + elapsed * 0.42) + 1) * 0.5) * 2.4) +
+          (blob.mode === "rest" ? 0.2 : 0);
+      }
+
+      const canDoIdlePose =
+        (blob.mode === "rest" || blob.mode === "wander") &&
+        elapsed >= blob.avoidPlayerUntil &&
+        planarToPlayer > 10.5;
+      if (canDoIdlePose && elapsed >= blob.nextIdlePoseAt) {
+        const idleRoll = (Math.sin(blob.poseSeed * 3.1 + elapsed * 0.58) + 1) * 0.5;
+        blob.idlePose =
+          idleRoll < 0.24 ? "look_left" :
+          idleRoll < 0.48 ? "look_right" :
+          idleRoll < 0.74 ? "sniff" :
+          "settle";
+        const idleDuration =
+          blob.idlePose === "sniff" ? 0.9 :
+          blob.idlePose === "settle" ? 1.35 :
+          1.05;
+        blob.idlePoseStartAt = elapsed;
+        blob.idlePoseUntil = elapsed + idleDuration;
+        blob.nextIdlePoseAt =
+          elapsed +
+          idleDuration +
+          1.8 +
+          (((Math.sin(blob.poseSeed * 1.6 + elapsed * 0.31) + 1) * 0.5) * 2.6);
+        if (blob.mode === "rest") {
+          blob.restUntil = Math.max(blob.restUntil, elapsed + idleDuration * 0.9);
+        }
+      } else if (!canDoIdlePose && blob.idlePoseUntil > elapsed) {
+        blob.idlePose = "none";
+        blob.idlePoseUntil = elapsed;
+      }
+
+      const canDoIdleHop =
+        (blob.mode === "rest" || blob.mode === "wander") &&
+        elapsed >= blob.avoidPlayerUntil &&
+        planarToPlayer > 10.5;
+      if (canDoIdleHop && elapsed >= blob.nextHopAt) {
+        blob.hopUntil = elapsed + 0.42;
+        blob.nextHopAt =
+          elapsed +
+          2.8 +
+          (((Math.sin(blob.poseSeed * 1.9 + elapsed * 0.35) + 1) * 0.5) * 2.4) +
+          (index % 3) * 0.25;
+        if (blob.mode === "rest") {
+          blob.restUntil = Math.max(blob.restUntil, elapsed + 0.45);
+        }
+      } else if (!canDoIdleHop && blob.hopUntil > elapsed) {
+        blob.hopUntil = elapsed;
+      }
+
       const moveStrength = blob.mode === "shy" ? 4.2 : blob.mode === "curious" ? 2.2 : blob.mode === "wander" ? 1.4 : 0;
       if (moveStrength > 0) {
+        this.ambientDesiredTarget.copy(blob.target);
+        if (herdPullStrength > 0 && blob.mode !== "curious") {
+          this.ambientDesiredTarget.addScaledVector(
+            herdOffset,
+            (blob.mode === "shy" ? 1.2 : 1.8) * herdPullStrength,
+          );
+        }
+        if (separationStrength > 0.001) {
+          this.ambientDesiredTarget.addScaledVector(
+            this.ambientSeparation,
+            blob.mode === "shy" ? 1.8 : 1.2,
+          );
+        }
         this.trailDirection
-          .subVectors(blob.target, blob.group.position)
+          .subVectors(this.ambientDesiredTarget, blob.group.position)
           .setY(0);
         const distance = this.trailDirection.length();
         if (distance > 0.12) {
@@ -1707,8 +2091,120 @@ export class WorldRenderer {
         blob.velocity.multiplyScalar(0.84);
       }
 
-      blob.group.position.y = groundY + 0.08 + Math.max(0, Math.sin(elapsed * 4.2 + blob.bobOffset)) * blob.velocity.length() * 0.08;
-      blob.group.rotation.y = Math.atan2(blob.velocity.x || 0.001, blob.velocity.z || 0.001);
+      const planarSpeed = blob.velocity.length();
+      const scale = blob.creatureScale;
+      const restPulse = Math.sin(elapsed * 2.3 + blob.poseSeed);
+      const curiousSway = Math.sin(elapsed * 2.1 + blob.poseSeed * 1.4);
+      const wanderHop = Math.max(0, Math.sin(elapsed * 6.8 + blob.poseSeed));
+      const shyHop = Math.max(0, Math.sin(elapsed * 9.6 + blob.poseSeed));
+      const blinkT = blob.blinkUntil > elapsed ? 1 - (blob.blinkUntil - elapsed) / 0.12 : 0;
+      const blink = blinkT > 0 && blinkT < 1 ? Math.sin(blinkT * Math.PI) : 0;
+      const idlePoseDuration = Math.max(0.001, blob.idlePoseUntil - blob.idlePoseStartAt);
+      const idlePoseT =
+        blob.idlePoseUntil > elapsed && elapsed >= blob.idlePoseStartAt
+          ? MathUtils.clamp((elapsed - blob.idlePoseStartAt) / idlePoseDuration, 0, 1)
+          : 0;
+      const idlePoseBlend = idlePoseT > 0 && idlePoseT < 1 ? Math.sin(idlePoseT * Math.PI) : 0;
+      const idleLookYaw =
+        blob.idlePose === "look_left" ? -0.42 * idlePoseBlend :
+        blob.idlePose === "look_right" ? 0.42 * idlePoseBlend :
+        0;
+      const idleSniff = blob.idlePose === "sniff" ? idlePoseBlend : 0;
+      const idleSettle = blob.idlePose === "settle" ? idlePoseBlend : 0;
+      const idleHopT = blob.hopUntil > elapsed ? 1 - (blob.hopUntil - elapsed) / 0.42 : 0;
+      const idleHop = idleHopT > 0 && idleHopT < 1 ? Math.sin(idleHopT * Math.PI) : 0;
+      const idleHopSettle = idleHopT > 0 && idleHopT < 0.2 ? 1 - idleHopT / 0.2 : 0;
+      const groundedBob = Math.max(0, Math.sin(elapsed * 4.2 + blob.bobOffset)) * planarSpeed * 0.08;
+      const poseLift =
+        blob.mode === "wander" ? Math.max(wanderHop * 0.2 * scale, idleHop * 0.15 * scale) :
+        blob.mode === "shy" ? shyHop * 0.16 * scale :
+        idleHop * 0.15 * scale;
+      const poseDrop =
+        blob.mode === "rest" ? (0.03 + restPulse * 0.012 + idleHopSettle * 0.028 + idleSettle * 0.022) * scale :
+        blob.mode === "shy" ? (0.05 + (1 - shyHop) * 0.04) * scale :
+        (idleHopSettle * 0.024 + idleSettle * 0.016) * scale;
+      const stretch =
+        blob.mode === "wander" ? 1 + wanderHop * 0.08 + idleHop * 0.03 :
+        blob.mode === "shy" ? 1 + shyHop * 0.05 :
+        1 + Math.max(0, restPulse) * 0.02 + idleHop * 0.05 + idleSniff * 0.03;
+      const squash =
+        blob.mode === "rest" ? 1 - (0.06 + Math.max(0, -restPulse) * 0.04 + idleHopSettle * 0.05 + idleSettle * 0.05) :
+        blob.mode === "shy" ? 1 - (0.08 + (1 - shyHop) * 0.06) :
+        blob.mode === "wander" ? 1 - (wanderHop * 0.06 + idleHopSettle * 0.04 + idleSettle * 0.03) :
+        1 - idleHop * 0.04;
+      const desiredYaw =
+        planarSpeed > 0.05 ? Math.atan2(blob.velocity.x, blob.velocity.z) :
+        blob.mode === "curious" && planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) :
+        blob.facingYaw + (blob.mode === "rest" ? curiousSway * 0.06 : 0);
+      const yawBlend = 1 - Math.exp(-dt * (blob.mode === "shy" ? 8 : 5));
+      blob.facingYaw = MathUtils.lerp(blob.facingYaw, desiredYaw, yawBlend);
+
+      blob.group.position.y = groundY + 0.08 + groundedBob;
+      blob.group.rotation.y = blob.facingYaw;
+      blob.root.position.y = poseLift - poseDrop;
+      blob.root.rotation.x =
+        blob.mode === "curious" ? -0.12 + curiousSway * 0.03 :
+        blob.mode === "shy" ? -0.08 :
+        blob.mode === "wander" ? -0.03 + wanderHop * 0.02 - idleSniff * 0.07 - idleSettle * 0.05 :
+        -0.02 + restPulse * 0.015 - idleHop * 0.03 - idleSniff * 0.12 - idleSettle * 0.06;
+      blob.root.rotation.z =
+        blob.mode === "curious" ? curiousSway * 0.08 :
+        blob.mode === "wander" ? Math.sin(elapsed * 3.6 + blob.poseSeed) * 0.04 + idleLookYaw * 0.18 :
+        restPulse * 0.02 + idleLookYaw * 0.22;
+
+      blob.body.scale.set(1.12 * squash, 1.42 * stretch, 1.08 * squash);
+      blob.body.position.y =
+        0.76 * scale +
+        (blob.mode === "rest" ? restPulse * 0.015 * scale : 0) -
+        idleSettle * 0.015 * scale;
+      blob.face.rotation.y =
+        blob.mode === "curious" ? curiousSway * 0.28 :
+        (blob.mode === "rest" ? curiousSway * 0.08 : 0) + idleLookYaw;
+      blob.face.position.y =
+        0.88 * scale +
+        (blob.mode === "rest" ? restPulse * 0.012 * scale : 0) +
+        idleSniff * 0.05 * scale -
+        idleSettle * 0.015 * scale;
+      blob.face.position.z =
+        0.5 * scale +
+        (blob.mode === "shy" ? -0.03 * scale : 0) +
+        idleSniff * 0.035 * scale;
+
+      const eyeSquish =
+        blob.mode === "rest" ? 0.35 + Math.max(0, -restPulse) * 0.22 + idleSettle * 0.16 + blink * 1.35 :
+        blob.mode === "shy" ? 0.24 :
+        blink * 1.35 + idleSniff * 0.08;
+      blob.leftEye.scale.set(0.86 + eyeSquish * 0.18, 1.34 - eyeSquish * 0.56, 0.68);
+      blob.rightEye.scale.copy(blob.leftEye.scale);
+
+      blob.feet.forEach((foot, footIndex) => {
+        const footHop =
+          blob.mode === "wander" ? Math.max(0, Math.sin(elapsed * 6.8 + blob.poseSeed + footIndex * Math.PI * 0.65)) * 0.05 * scale :
+          blob.mode === "shy" ? Math.max(0, Math.sin(elapsed * 9.6 + blob.poseSeed + footIndex * Math.PI * 0.75)) * 0.04 * scale :
+          idleHop * 0.02 * scale;
+        foot.position.set(
+          (footIndex === 0 ? -0.18 : 0.18) * scale,
+          0.1 * scale + footHop - idleSettle * 0.015 * scale,
+          (blob.mode === "shy" ? 0.18 : 0.26) * scale - idleSniff * 0.015 * scale,
+        );
+        foot.scale.set(
+          1.08 - eyeSquish * 0.08,
+          0.72 - eyeSquish * 0.08 + footHop / Math.max(0.001, scale),
+          0.9,
+        );
+      });
+
+      blob.fluffPuffs.forEach((puff, puffIndex) => {
+        const sway = Math.sin(elapsed * 2.8 + blob.poseSeed + puffIndex * 0.8);
+        const puffScale = 1 + sway * 0.03 + (blob.mode === "wander" ? wanderHop * 0.02 : 0);
+        if (puffIndex < 4) {
+          puff.scale.set(0.42 * scale * puffScale, 0.4 * scale * (1 - sway * 0.02), 0.38 * scale);
+        } else if (puffIndex < 7) {
+          puff.scale.set(0.28 * scale * puffScale, 0.34 * scale, 0.26 * scale);
+        } else {
+          puff.scale.set(0.22 * scale * puffScale, 0.16 * scale, 0.18 * scale);
+        }
+      });
     });
   }
 
@@ -1757,7 +2253,8 @@ export class WorldRenderer {
 
     [this.playerMapMarker, this.shrineMapMarker, ...this.landmarkMapMarkers].forEach((marker, index) => {
       const pulse = 1 + Math.sin(elapsed * marker.pulseSpeed + index * 0.9) * 0.08;
-      marker.group.scale.setScalar(marker.baseScale * pulse);
+      const highlightBoost = marker === this.playerMapMarker ? 1.95 : marker === this.shrineMapMarker ? 1.6 : 1.28;
+      marker.group.scale.setScalar(marker.baseScale * pulse * highlightBoost);
     });
   }
 }
