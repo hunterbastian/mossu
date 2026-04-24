@@ -137,6 +137,7 @@ export class GameApp {
   renderGameToText() {
     const frame = this.state.frame;
     const characterData = this.state.getCharacterScreenData();
+    const faunaStats = this.world.getFaunaStats();
     const focusedCollection = characterData.collections.find(
       (entry) => entry.landmarkId === (characterData.latestCollectionId ?? this.focusedCollectionId),
     );
@@ -178,6 +179,14 @@ export class GameApp {
           latestEntry: latestGatheredGood?.title ?? null,
         },
       },
+      fauna: {
+        recruited: faunaStats.recruitedCount,
+        nearestRecruitableDistance:
+          faunaStats.nearestRecruitableDistance === null
+            ? null
+            : Number(faunaStats.nearestRecruitableDistance.toFixed(1)),
+        recruitedThisFrame: faunaStats.recruitedThisFrame,
+      },
       camera: this.followCamera.getDebugState(),
       performance: this.getPerformanceSnapshot(),
     });
@@ -185,6 +194,7 @@ export class GameApp {
 
   private tick(dt: number, elapsed: number) {
     const input = this.input.sample();
+    let faunaRecruitPressed = false;
 
     if (this.pauseMenuOpen) {
       if (input.escapePressed) {
@@ -220,6 +230,7 @@ export class GameApp {
         this.openMap();
         this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
       } else {
+        faunaRecruitPressed = input.interactPressed;
         this.state.update(dt, input, this.followCamera.getYaw());
       }
     }
@@ -231,7 +242,7 @@ export class GameApp {
     }
 
     this.followCamera.update(this.state.frame.player, dt);
-    this.world.update(this.state.frame, elapsed, dt, this.viewMode === "map_lookdown");
+    this.world.update(this.state.frame, elapsed, dt, this.viewMode === "map_lookdown", faunaRecruitPressed);
     this.characterPreview.update(dt, this.characterScreenOpen);
     this.syncHud();
     this.renderer.render(this.scene, this.followCamera.camera);
@@ -247,6 +258,7 @@ export class GameApp {
       characterScreenOpen: this.characterScreenOpen,
       pointerLocked: this.followCamera.isPointerLocked(),
       focusedCollectionId: this.focusedCollectionId,
+      fauna: this.world.getFaunaStats(),
       windStrength: sampleWindStrength(
         this.state.frame.player.position.x,
         this.state.frame.player.position.z,

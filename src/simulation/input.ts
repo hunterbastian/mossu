@@ -24,26 +24,26 @@ export class InputController {
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab"].includes(event.code)) {
         event.preventDefault();
       }
-      if (!this.pressed.has(event.code) && event.code === "Space") {
+      if (!this.isPressed("Space", " ") && this.matchesKey(event, "Space", " ")) {
         this.jumpPressedFrame = true;
       }
-      if (!this.pressed.has(event.code) && event.code === "KeyE") {
+      if (!this.isPressed("KeyE", "e") && this.matchesKey(event, "KeyE", "e")) {
         this.interactPressedFrame = true;
       }
-      if (!this.pressed.has(event.code) && event.code === "Tab") {
+      if (!this.isPressed("Tab", "tab") && this.matchesKey(event, "Tab", "tab")) {
         this.inventoryTogglePressedFrame = true;
       }
-      if (!this.pressed.has(event.code) && event.code === "KeyM") {
+      if (!this.isPressed("KeyM", "m") && this.matchesKey(event, "KeyM", "m")) {
         this.mapTogglePressedFrame = true;
       }
-      if (!this.pressed.has(event.code) && event.code === "Escape") {
+      if (!this.isPressed("Escape", "escape") && this.matchesKey(event, "Escape", "escape")) {
         this.escapePressedFrame = true;
       }
-      this.pressed.add(event.code);
+      this.addPressed(event);
     };
 
     const keyup = (event: KeyboardEvent) => {
-      this.pressed.delete(event.code);
+      this.removePressed(event);
     };
 
     this.target.addEventListener("keydown", keydown as EventListener);
@@ -53,11 +53,11 @@ export class InputController {
   }
 
   sample(): InputSnapshot {
-    const moveX = (this.isPressed("KeyD") || this.isPressed("ArrowRight") ? 1 : 0) - (this.isPressed("KeyA") || this.isPressed("ArrowLeft") ? 1 : 0);
-    const moveY = (this.isPressed("KeyW") || this.isPressed("ArrowUp") ? 1 : 0) - (this.isPressed("KeyS") || this.isPressed("ArrowDown") ? 1 : 0);
-    const jumpHeld = this.isPressed("Space");
+    const moveX = (this.isPressed("KeyD", "d") || this.isPressed("ArrowRight", "arrowright") ? 1 : 0) - (this.isPressed("KeyA", "a") || this.isPressed("ArrowLeft", "arrowleft") ? 1 : 0);
+    const moveY = (this.isPressed("KeyW", "w") || this.isPressed("ArrowUp", "arrowup") ? 1 : 0) - (this.isPressed("KeyS", "s") || this.isPressed("ArrowDown", "arrowdown") ? 1 : 0);
+    const jumpHeld = this.isPressed("Space", " ");
     const jumpPressed = this.jumpPressedFrame;
-    const rollHeld = this.isPressed("ShiftLeft") || this.isPressed("ShiftRight");
+    const rollHeld = this.isPressed("ShiftLeft", "shift") || this.isPressed("ShiftRight", "shift");
     const interactPressed = this.interactPressedFrame;
     const inventoryTogglePressed = this.inventoryTogglePressedFrame;
     const mapTogglePressed = this.mapTogglePressedFrame;
@@ -84,7 +84,29 @@ export class InputController {
     this.disposeCallbacks.forEach((callback) => callback());
   }
 
-  private isPressed(code: string) {
-    return this.pressed.has(code);
+  private addPressed(event: KeyboardEvent) {
+    if (event.code) {
+      this.pressed.add(event.code);
+    }
+    if (event.key) {
+      this.pressed.add(event.key.toLowerCase());
+    }
+  }
+
+  private removePressed(event: KeyboardEvent) {
+    if (event.code) {
+      this.pressed.delete(event.code);
+    }
+    if (event.key) {
+      this.pressed.delete(event.key.toLowerCase());
+    }
+  }
+
+  private matchesKey(event: KeyboardEvent, code: string, key: string) {
+    return event.code === code || event.key.toLowerCase() === key;
+  }
+
+  private isPressed(code: string, key?: string) {
+    return this.pressed.has(code) || (key ? this.pressed.has(key) : false);
   }
 }

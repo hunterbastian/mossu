@@ -40,7 +40,7 @@ import {
 import { MossuAvatar } from "../objects/MossuAvatar";
 import { createGrassMesh, GrassShader, sampleOpeningMeadowMask } from "./grassSystem";
 import { buildClouds, buildMountainAtmosphere, buildSkyDome } from "./atmosphereSystem";
-import { AmbientBlob, buildAmbientBlobs, updateAmbientBlobs } from "./ambientBlobs";
+import { AmbientBlob, AmbientBlobUpdateStats, buildAmbientBlobs, updateAmbientBlobs } from "./ambientBlobs";
 import {
   buildGroundLayer,
   buildHighlandAccents,
@@ -507,6 +507,11 @@ export class WorldRenderer {
   private readonly snowTrailParticles: SnowTrailParticle[] = [];
   private readonly ambientBlobs: AmbientBlob[];
   private readonly ambientBlobGroup = new Group();
+  private faunaStats: AmbientBlobUpdateStats = {
+    recruitedCount: 0,
+    nearestRecruitableDistance: null,
+    recruitedThisFrame: 0,
+  };
   private readonly landingUp = new Vector3(0, 1, 0);
   private readonly landingQuat = new Quaternion();
   private readonly landingPosition = new Vector3();
@@ -775,7 +780,11 @@ export class WorldRenderer {
     return this.perfStats;
   }
 
-  update(frame: FrameState, elapsed: number, dt: number, mapLookdown = false) {
+  getFaunaStats() {
+    return this.faunaStats;
+  }
+
+  update(frame: FrameState, elapsed: number, dt: number, mapLookdown = false, recruitPressed = false) {
     this.mossu.update(frame.player, dt);
     this.skyDome.position.copy(frame.player.position);
     this.scene.fog = mapLookdown ? null : this.gameplayFog;
@@ -785,7 +794,15 @@ export class WorldRenderer {
       this.updateValleyMist(elapsed);
     }
     this.updateWater(elapsed);
-    updateAmbientBlobs(this.ambientBlobs, this.ambientBlobGroup, frame, elapsed, dt, mapLookdown);
+    this.faunaStats = updateAmbientBlobs(
+      this.ambientBlobs,
+      this.ambientBlobGroup,
+      frame,
+      elapsed,
+      dt,
+      mapLookdown,
+      recruitPressed,
+    );
     this.updateLandingSplash(frame, dt);
     this.updateSnowTrail(frame, dt);
     this.updateForageables(frame, elapsed, mapLookdown);

@@ -4,6 +4,7 @@ import { sampleTerrainHeight, scenicPockets, startingLookTarget, startingPositio
 import { scatterAroundPocket } from "./sceneHelpers";
 
 export interface AmbientBlob {
+  id: string;
   group: Group;
   root: Group;
   body: Mesh;
@@ -17,6 +18,9 @@ export interface AmbientBlob {
   home: Vector3;
   target: Vector3;
   velocity: Vector3;
+  recruited: boolean;
+  recruitedAt: number;
+  leaderSlot: number;
   restUntil: number;
   avoidPlayerUntil: number;
   investigateAgainAt: number;
@@ -39,6 +43,19 @@ export interface AmbientBlobBuildOptions {
   debugSpiritCloseup?: boolean;
 }
 
+export interface AmbientBlobUpdateStats {
+  recruitedCount: number;
+  nearestRecruitableDistance: number | null;
+  recruitedThisFrame: number;
+}
+
+const FAUNA_RECRUIT_RADIUS = 14.5;
+const FAUNA_CLUSTER_RECRUIT_RADIUS = 16;
+const FAUNA_CLUSTER_PLAYER_RADIUS = 19;
+const FAUNA_FOLLOW_NEIGHBOR_RADIUS = 13.5;
+const FAUNA_SEPARATION_RADIUS = 3.5;
+const FAUNA_PLAYER_PERSONAL_SPACE = 3.1;
+
 const ambientPlayerMotion = new Vector3();
 const ambientToPlayer = new Vector3();
 const ambientNeighborOffset = new Vector3();
@@ -47,6 +64,69 @@ const ambientCohesion = new Vector3();
 const ambientSeparation = new Vector3();
 const ambientDesiredTarget = new Vector3();
 const ambientTrailDirection = new Vector3();
+const ambientFollowDirection = new Vector3();
+const ambientRightDirection = new Vector3();
+const ambientLeaderSlot = new Vector3();
+const ambientBoidCohesion = new Vector3();
+const ambientAlignment = new Vector3();
+const ambientFollowSteer = new Vector3();
+const ambientPlayerSpace = new Vector3();
+const ambientBoidSteer = new Vector3();
+
+function planarDistance(a: Vector3, b: Vector3) {
+  return Math.hypot(a.x - b.x, a.z - b.z);
+}
+
+function findNearestRecruitable(blobs: AmbientBlob[], playerPosition: Vector3) {
+  let nearestBlob: AmbientBlob | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  blobs.forEach((blob) => {
+    if (blob.recruited) {
+      return;
+    }
+
+    const distance = planarDistance(blob.group.position, playerPosition);
+    if (distance < nearestDistance) {
+      nearestBlob = blob;
+      nearestDistance = distance;
+    }
+  });
+
+  return {
+    blob: nearestBlob,
+    distance: nearestBlob ? nearestDistance : null,
+  };
+}
+
+function recruitNearbyBlobs(blobs: AmbientBlob[], sourceBlob: AmbientBlob, playerPosition: Vector3, elapsed: number) {
+  let recruitedCount = 0;
+
+  blobs.forEach((blob) => {
+    if (blob.recruited) {
+      return;
+    }
+
+    const isSource = blob === sourceBlob;
+    const sameSmallHerd = blob.herdId === sourceBlob.herdId;
+    const closeToSource = planarDistance(blob.group.position, sourceBlob.group.position) <= FAUNA_CLUSTER_RECRUIT_RADIUS;
+    const closeToPlayer = planarDistance(blob.group.position, playerPosition) <= FAUNA_CLUSTER_PLAYER_RADIUS;
+    if (!isSource && (!sameSmallHerd || !closeToSource || !closeToPlayer)) {
+      return;
+    }
+
+    blob.recruited = true;
+    blob.recruitedAt = elapsed;
+    blob.mode = "curious";
+    blob.avoidPlayerUntil = 0;
+    blob.investigateAgainAt = elapsed + 5;
+    blob.restUntil = elapsed + 0.18;
+    blob.target.copy(playerPosition);
+    recruitedCount += 1;
+  });
+
+  return recruitedCount;
+}
 
 function makeAmbientBlob(scale: number) {
   const group = new Group();
@@ -211,11 +291,15 @@ export function buildAmbientBlobs(options: AmbientBlobBuildOptions = {}) {
       rig.group.rotation.y = facingYaw;
       return {
         ...rig,
+        id: `fauna-${pocketIndex}-${index}`,
         herdId: pocketIndex,
         herdCenter,
         home: new Vector3(x, y, z),
         target: new Vector3(x, y, z),
         velocity: new Vector3(),
+        recruited: false,
+        recruitedAt: 0,
+        leaderSlot: pocketIndex * 3 + index,
         restUntil: 0.8 + index * 0.5,
         avoidPlayerUntil: 0,
         investigateAgainAt: 0,
@@ -246,15 +330,29 @@ export function updateAmbientBlobs(
   elapsed: number,
   dt: number,
   mapLookdown: boolean,
-) {
+  recruitPressed = false,
+): AmbientBlobUpdateStats {
   ambientBlobGroup.visible = !mapLookdown;
   if (mapLookdown) {
-    return;
+    return {
+      recruitedCount: blobs.filter((blob) => blob.recruited).length,
+      nearestRecruitableDistance: null,
+      recruitedThisFrame: 0,
+    };
   }
 
   const playerPosition = frame.player.position;
   const playerPlanarSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
   ambientPlayerMotion.set(frame.player.velocity.x, 0, frame.player.velocity.z);
+  const nearestBeforeRecruit = findNearestRecruitable(blobs, playerPosition);
+  const recruitedThisFrame =
+    recruitPressed &&
+    nearestBeforeRecruit.blob &&
+    nearestBeforeRecruit.distance !== null &&
+    nearestBeforeRecruit.distance <= FAUNA_RECRUIT_RADIUS
+      ? recruitNearbyBlobs(blobs, nearestBeforeRecruit.blob, playerPosition, elapsed)
+      : 0;
+
   blobs.forEach((blob, index) => {
     const groundY = sampleTerrainHeight(blob.group.position.x, blob.group.position.z);
     const toPlayer = ambientToPlayer.subVectors(playerPosition, blob.group.position);
@@ -330,7 +428,125 @@ export function updateAmbientBlobs(
       blob.investigateAgainAt = elapsed + 2.6 + (index % 2) * 0.5;
     }
 
-    if (playerTooClose || playerApproaching || stillAvoidingPlayer) {
+    let recruitedMoveStrength = 0;
+    if (blob.recruited) {
+      blob.mode = "wander";
+      blob.avoidPlayerUntil = 0;
+      blob.restUntil = elapsed + 0.3;
+
+      if (playerPlanarSpeed > 0.25) {
+        ambientFollowDirection.copy(ambientPlayerMotion).normalize();
+      } else {
+        ambientFollowDirection.set(Math.sin(frame.player.heading), 0, Math.cos(frame.player.heading));
+        if (ambientFollowDirection.lengthSq() < 0.001) {
+          ambientFollowDirection.set(0, 0, 1);
+        }
+      }
+      ambientRightDirection.set(ambientFollowDirection.z, 0, -ambientFollowDirection.x).normalize();
+
+      const slotRow = Math.floor(blob.leaderSlot / 3);
+      const slotColumn = (blob.leaderSlot % 3) - 1;
+      const slotJitter = Math.sin(blob.poseSeed * 1.7) * 0.45;
+      const followBackDistance = 5.6 + slotRow * 2.45 + (blob.leaderSlot % 2) * 0.45;
+      const followSideDistance = slotColumn * (3.25 + slotRow * 0.28) + slotJitter;
+      ambientLeaderSlot
+        .copy(playerPosition)
+        .addScaledVector(ambientFollowDirection, -followBackDistance)
+        .addScaledVector(ambientRightDirection, followSideDistance);
+      ambientLeaderSlot.y = sampleTerrainHeight(ambientLeaderSlot.x, ambientLeaderSlot.z);
+
+      ambientBoidCohesion.set(0, 0, 0);
+      ambientAlignment.set(0, 0, 0);
+      ambientSeparation.set(0, 0, 0);
+      let recruitedNeighborCount = 0;
+
+      blobs.forEach((otherBlob, otherIndex) => {
+        if (otherIndex === index || !otherBlob.recruited) {
+          return;
+        }
+
+        ambientNeighborOffset
+          .subVectors(otherBlob.group.position, blob.group.position)
+          .setY(0);
+        const neighborDistance = ambientNeighborOffset.length();
+        if (neighborDistance <= 0.001) {
+          return;
+        }
+
+        if (neighborDistance < FAUNA_FOLLOW_NEIGHBOR_RADIUS) {
+          recruitedNeighborCount += 1;
+          ambientBoidCohesion.add(otherBlob.group.position);
+          ambientAlignment.add(otherBlob.velocity);
+        }
+
+        if (neighborDistance < FAUNA_SEPARATION_RADIUS) {
+          ambientSeparation.addScaledVector(
+            ambientNeighborOffset,
+            -((FAUNA_SEPARATION_RADIUS - neighborDistance) / (FAUNA_SEPARATION_RADIUS * neighborDistance)),
+          );
+        }
+      });
+
+      if (recruitedNeighborCount > 0) {
+        ambientBoidCohesion
+          .multiplyScalar(1 / recruitedNeighborCount)
+          .sub(blob.group.position)
+          .setY(0);
+        if (ambientBoidCohesion.lengthSq() > 0.001) {
+          ambientBoidCohesion.normalize();
+        }
+
+        ambientAlignment
+          .multiplyScalar(1 / recruitedNeighborCount)
+          .setY(0);
+        if (ambientAlignment.lengthSq() > 0.001) {
+          ambientAlignment.normalize();
+        }
+      }
+
+      ambientFollowSteer
+        .subVectors(ambientLeaderSlot, blob.group.position)
+        .setY(0);
+      const followDistance = ambientFollowSteer.length();
+      if (followDistance > 0.001) {
+        ambientFollowSteer.multiplyScalar(1 / followDistance);
+      }
+
+      ambientPlayerSpace.set(0, 0, 0);
+      if (planarToPlayer < FAUNA_PLAYER_PERSONAL_SPACE && planarToPlayer > 0.001) {
+        ambientPlayerSpace
+          .copy(toPlayer)
+          .setY(0)
+          .multiplyScalar(-1 / planarToPlayer);
+      }
+
+      ambientBoidSteer
+        .set(0, 0, 0)
+        .addScaledVector(ambientFollowSteer, 1.55 + MathUtils.clamp(followDistance / 14, 0, 1.2))
+        .addScaledVector(ambientSeparation, 1.95)
+        .addScaledVector(ambientBoidCohesion, 0.38)
+        .addScaledVector(ambientAlignment, 0.3)
+        .addScaledVector(ambientPlayerSpace, 1.35);
+      if (ambientBoidSteer.lengthSq() > 0.001) {
+        ambientBoidSteer.normalize();
+      } else {
+        ambientBoidSteer.copy(ambientFollowSteer);
+      }
+
+      const targetLead = MathUtils.clamp(followDistance * 0.3 + 2.4, 2.2, 7.4);
+      blob.target
+        .copy(blob.group.position)
+        .addScaledVector(ambientBoidSteer, targetLead);
+      blob.target.y = ambientLeaderSlot.y;
+      recruitedMoveStrength =
+        followDistance > 18 ? 5.6 :
+        followDistance > 9 ? 4.1 :
+        followDistance > 3.4 ? 2.55 :
+        1.15;
+      if (followDistance < 1.2 && ambientSeparation.lengthSq() < 0.001) {
+        recruitedMoveStrength = 0;
+      }
+    } else if (playerTooClose || playerApproaching || stillAvoidingPlayer) {
       blob.mode = "shy";
       const away = planarToPlayer > 0.001 ? toPlayer.multiplyScalar(-1 / planarToPlayer) : toPlayer.set(1, 0, 0);
       ambientDesiredTarget.copy(blob.group.position).addScaledVector(away, playerApproaching ? 6.6 : 4.8);
@@ -399,6 +615,7 @@ export function updateAmbientBlobs(
     }
 
     const canDoIdlePose =
+      !blob.recruited &&
       (blob.mode === "rest" || blob.mode === "wander") &&
       elapsed >= blob.avoidPlayerUntil &&
       planarToPlayer > 10.5;
@@ -429,6 +646,7 @@ export function updateAmbientBlobs(
     }
 
     const canDoIdleHop =
+      !blob.recruited &&
       (blob.mode === "rest" || blob.mode === "wander") &&
       elapsed >= blob.avoidPlayerUntil &&
       planarToPlayer > 10.5;
@@ -446,19 +664,22 @@ export function updateAmbientBlobs(
       blob.hopUntil = elapsed;
     }
 
-    const moveStrength = blob.mode === "shy" ? 4.2 : blob.mode === "curious" ? 2.2 : blob.mode === "wander" ? 1.4 : 0;
+    const moveStrength = blob.recruited
+      ? recruitedMoveStrength
+      : blob.mode === "shy" ? 4.2 : blob.mode === "curious" ? 2.2 : blob.mode === "wander" ? 1.4 : 0;
     if (moveStrength > 0) {
       ambientDesiredTarget.copy(blob.target);
-      if (herdPullStrength > 0 && blob.mode !== "curious") {
+      if (!blob.recruited && herdPullStrength > 0 && blob.mode !== "curious") {
         ambientDesiredTarget.addScaledVector(
           herdOffset,
           (blob.mode === "shy" ? 1.2 : 1.8) * herdPullStrength,
         );
       }
-      if (separationStrength > 0.001) {
+      const activeSeparationStrength = blob.recruited ? ambientSeparation.length() : separationStrength;
+      if (activeSeparationStrength > 0.001) {
         ambientDesiredTarget.addScaledVector(
           ambientSeparation,
-          blob.mode === "shy" ? 1.8 : 1.2,
+          blob.recruited ? 1.6 : blob.mode === "shy" ? 1.8 : 1.2,
         );
       }
       ambientTrailDirection
@@ -522,9 +743,10 @@ export function updateAmbientBlobs(
     1 - idleHop * 0.04;
     const desiredYaw =
       planarSpeed > 0.05 ? Math.atan2(blob.velocity.x, blob.velocity.z) :
+      blob.recruited && planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) :
       blob.mode === "curious" && planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) :
       blob.facingYaw + (blob.mode === "rest" ? curiousSway * 0.06 : 0);
-    const yawBlend = 1 - Math.exp(-dt * (blob.mode === "shy" ? 8 : 5));
+    const yawBlend = 1 - Math.exp(-dt * (blob.mode === "shy" ? 8 : blob.recruited ? 6 : 5));
     blob.facingYaw = MathUtils.lerp(blob.facingYaw, desiredYaw, yawBlend);
 
     blob.group.position.y = groundY + 0.08 + groundedBob;
@@ -594,4 +816,11 @@ export function updateAmbientBlobs(
       }
     });
   });
+
+  const nearestAfterRecruit = findNearestRecruitable(blobs, playerPosition);
+  return {
+    recruitedCount: blobs.filter((blob) => blob.recruited).length,
+    nearestRecruitableDistance: nearestAfterRecruit.distance,
+    recruitedThisFrame,
+  };
 }

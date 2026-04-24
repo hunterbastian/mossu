@@ -25,6 +25,11 @@ export interface HudShellUpdate {
   characterScreenOpen: boolean;
   pointerLocked: boolean;
   focusedCollectionId: string | null;
+  fauna: {
+    recruitedCount: number;
+    nearestRecruitableDistance: number | null;
+    recruitedThisFrame: number;
+  };
   windStrength: number;
 }
 
@@ -90,6 +95,7 @@ export class HudShell {
     characterScreenOpen,
     pointerLocked,
     focusedCollectionId,
+    fauna,
     windStrength,
   }: HudShellUpdate) {
     const isMapMode = viewMode === "map_lookdown";
@@ -102,6 +108,9 @@ export class HudShell {
     const latestGatheredGood = characterData.gatheredGoods.find(
       (entry) => entry.forageableId === characterData.latestGatheredGoodId,
     );
+    const nearbyRecruitableFauna =
+      fauna.nearestRecruitableDistance !== null &&
+      fauna.nearestRecruitableDistance <= 14.5;
     const shouldShowControlsPanel = pauseMenuOpen || characterScreenOpen || isMapMode || !pointerLocked;
 
     this.statusValues.zone.textContent = this.prettyZone(frame.currentZone);
@@ -157,6 +166,12 @@ export class HudShell {
       this.statusValues.prompt.innerHTML = `<strong>Foraged</strong> ${latestGatheredGood.title} was tucked into Mossu's gather pouch.`;
     } else if (latestCollection) {
       this.statusValues.prompt.innerHTML = `<strong>New Entry</strong> ${latestCollection.keepsakeTitle} was registered in Mossu's field log.`;
+    } else if (fauna.recruitedThisFrame > 0) {
+      this.statusValues.prompt.innerHTML = `<strong>Fauna</strong> ${fauna.recruitedThisFrame} little friend${fauna.recruitedThisFrame === 1 ? "" : "s"} joined Mossu's trail.`;
+    } else if (nearbyRecruitableFauna) {
+      this.statusValues.prompt.innerHTML = "<strong>Fauna</strong> Press E to have them follow Mossu.";
+    } else if (fauna.recruitedCount > 0) {
+      this.statusValues.prompt.innerHTML = `<strong>Fauna</strong> ${fauna.recruitedCount} little friend${fauna.recruitedCount === 1 ? "" : "s"} following Mossu.`;
     } else if (nearbyCollection) {
       this.statusValues.prompt.innerHTML = `<strong>Nearby Landmark</strong> ${nearbyCollection.landmarkTitle} will register automatically when Mossu reaches it.`;
     } else {
