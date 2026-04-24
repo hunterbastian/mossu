@@ -25,6 +25,8 @@ const PAUSED_INPUT: InputSnapshot = {
   moveY: 0,
   jumpHeld: false,
   jumpPressed: false,
+  interactHeld: false,
+  interactHoldSeconds: 0,
   rollHeld: false,
   interactPressed: false,
   inventoryTogglePressed: false,
@@ -61,6 +63,7 @@ export class GameApp {
   private readonly perfDebugEnabled: boolean;
   private cameraDebugPanel: HTMLDivElement | null = null;
   private perfDebugPanel: HTMLDivElement | null = null;
+  private faunaRegroupReady = true;
 
   private raf = 0;
 
@@ -187,6 +190,8 @@ export class GameApp {
             ? null
             : Number(faunaStats.nearestRecruitableDistance.toFixed(1)),
         recruitedThisFrame: faunaStats.recruitedThisFrame,
+        dominantMood: faunaStats.dominantMood,
+        regroupActive: faunaStats.regroupActive,
       },
       camera: this.followCamera.getDebugState(),
       performance: this.getPerformanceSnapshot(),
@@ -196,6 +201,7 @@ export class GameApp {
   private tick(dt: number, elapsed: number) {
     const input = this.input.sample();
     let faunaRecruitPressed = false;
+    let faunaRegroupPressed = false;
 
     if (this.pauseMenuOpen) {
       if (input.escapePressed) {
@@ -232,6 +238,13 @@ export class GameApp {
         this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
       } else {
         faunaRecruitPressed = input.interactPressed;
+        if (input.interactHeld && input.interactHoldSeconds >= 0.45 && this.faunaRegroupReady) {
+          faunaRegroupPressed = true;
+          this.faunaRegroupReady = false;
+        }
+        if (!input.interactHeld) {
+          this.faunaRegroupReady = true;
+        }
         this.state.update(dt, input, this.followCamera.getYaw());
       }
     }
@@ -243,7 +256,14 @@ export class GameApp {
     }
 
     this.followCamera.update(this.state.frame.player, dt);
-    this.world.update(this.state.frame, elapsed, dt, this.viewMode === "map_lookdown", faunaRecruitPressed);
+    this.world.update(
+      this.state.frame,
+      elapsed,
+      dt,
+      this.viewMode === "map_lookdown",
+      faunaRecruitPressed,
+      faunaRegroupPressed,
+    );
     this.characterPreview.update(dt, this.characterScreenOpen);
     this.syncHud();
     this.renderer.render(this.scene, this.followCamera.camera);

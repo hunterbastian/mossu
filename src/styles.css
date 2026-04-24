@@ -376,6 +376,9 @@ canvas.is-pointer-locked {
 }
 
 .prompt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.52rem;
   max-width: min(24rem, calc(100vw - 1.8rem));
   background:
     radial-gradient(circle at top, rgba(255, 255, 255, 0.94), transparent 28%),
@@ -391,6 +394,92 @@ canvas.is-pointer-locked {
 .prompt-chip em {
   font-style: normal;
   color: var(--ui-blue-dark);
+}
+
+.karu-mood-icon {
+  --karu-icon-base: #dff7ff;
+  --karu-icon-accent: #84c8e8;
+  position: relative;
+  flex: 0 0 auto;
+  width: 1.9rem;
+  aspect-ratio: 1;
+  border-radius: 42% 58% 48% 52% / 52% 44% 56% 48%;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.96) 0 13%, transparent 14%),
+    linear-gradient(145deg, var(--karu-icon-base), var(--karu-icon-accent));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 5px 12px rgba(43, 78, 115, 0.16);
+}
+
+.karu-mood-icon::before,
+.karu-mood-icon::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.karu-mood-icon::before {
+  left: 0.48rem;
+  top: 0.72rem;
+  width: 0.22rem;
+  height: 0.32rem;
+  border-radius: 999px;
+  background: #142235;
+  box-shadow: 0.58rem 0 #142235;
+}
+
+.karu-mood-icon--curious::after {
+  right: -0.1rem;
+  top: -0.14rem;
+  width: 0.64rem;
+  aspect-ratio: 1;
+  background: #ffe08a;
+  clip-path: polygon(50% 0, 62% 36%, 100% 50%, 62% 64%, 50% 100%, 38% 64%, 0 50%, 38% 36%);
+}
+
+.karu-mood-icon--shy {
+  --karu-icon-base: #e9f8d4;
+  --karu-icon-accent: #9ad17a;
+}
+
+.karu-mood-icon--shy::after {
+  left: -0.12rem;
+  bottom: 0.08rem;
+  width: 0.78rem;
+  height: 0.48rem;
+  border-radius: 100% 0 100% 0;
+  background: #78b964;
+  transform: rotate(-22deg);
+}
+
+.karu-mood-icon--brave {
+  --karu-icon-base: #f7fbff;
+  --karu-icon-accent: #9fdcf2;
+}
+
+.karu-mood-icon--brave::after {
+  right: -0.08rem;
+  bottom: 0.04rem;
+  width: 0.72rem;
+  aspect-ratio: 1;
+  background: #ffd46b;
+  clip-path: polygon(50% 0, 61% 34%, 96% 35%, 67% 56%, 78% 90%, 50% 70%, 22% 90%, 33% 56%, 4% 35%, 39% 34%);
+}
+
+.karu-mood-icon--sleepy {
+  --karu-icon-base: #ecf2ff;
+  --karu-icon-accent: #a9bbe6;
+}
+
+.karu-mood-icon--sleepy::after {
+  right: -0.08rem;
+  top: -0.04rem;
+  width: 0.72rem;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: #fff4b8;
+  box-shadow: -0.16rem 0 0 0 #a9bbe6;
 }
 
 .controls-panel {

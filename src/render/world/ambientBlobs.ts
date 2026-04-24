@@ -10,8 +10,10 @@ import {
   Vector3,
 } from "three";
 import { FrameState } from "../../simulation/gameState";
-import { sampleTerrainHeight, scenicPockets, startingLookTarget, startingPosition } from "../../simulation/world";
+import { sampleTerrainHeight, sampleWaterState, scenicPockets, startingLookTarget, startingPosition } from "../../simulation/world";
 import { scatterAroundPocket } from "./sceneHelpers";
+
+export type KaruMood = "curious" | "shy" | "brave" | "sleepy";
 
 export interface AmbientBlob {
   id: string;
@@ -31,6 +33,9 @@ export interface AmbientBlob {
   recruited: boolean;
   recruitedAt: number;
   leaderSlot: number;
+  mood: KaruMood;
+  regroupUntil: number;
+  waterReaction: "dry" | "splash" | "float" | "bank_wait";
   restUntil: number;
   avoidPlayerUntil: number;
   investigateAgainAt: number;
@@ -58,6 +63,8 @@ export interface AmbientBlobUpdateStats {
   recruitedCount: number;
   nearestRecruitableDistance: number | null;
   recruitedThisFrame: number;
+  dominantMood: KaruMood;
+  regroupActive: boolean;
 }
 
 export const AMBIENT_BLOB_SPECIES_NAME = "Karu";
@@ -67,6 +74,9 @@ const FAUNA_CLUSTER_PLAYER_RADIUS = 19;
 const FAUNA_FOLLOW_NEIGHBOR_RADIUS = 13.5;
 const FAUNA_SEPARATION_RADIUS = 3.5;
 const FAUNA_PLAYER_PERSONAL_SPACE = 3.1;
+const FAUNA_REGROUP_SECONDS = 3.4;
+const FAUNA_DEEP_WATER_DEPTH = 2.4;
+const FAUNA_SHALLOW_WATER_DEPTH = 0.25;
 
 const ambientPlayerMotion = new Vector3();
 const ambientToPlayer = new Vector3();
@@ -85,6 +95,65 @@ const ambientFollowSteer = new Vector3();
 const ambientPlayerSpace = new Vector3();
 const ambientBoidSteer = new Vector3();
 let karuTexture: CanvasTexture | null = null;
+
+function moodForBlob(pocketIndex: number, index: number): KaruMood {
+  const moods: KaruMood[] = ["curious", "shy", "brave", "sleepy"];
+  return moods[(pocketIndex * 2 + index) % moods.length];
+}
+
+function moodFollowTuning(mood: KaruMood) {
+  switch (mood) {
+    case "brave":
+      return { backOffset: -1.2, sideScale: 0.9, speedScale: 1.12, waterBravery: 1 };
+    case "shy":
+      return { backOffset: 2.2, sideScale: 1.2, speedScale: 0.92, waterBravery: 0 };
+    case "sleepy":
+      return { backOffset: 3.3, sideScale: 1.05, speedScale: 0.78, waterBravery: 0 };
+    case "curious":
+    default:
+      return { backOffset: 0, sideScale: 1, speedScale: 1, waterBravery: 0.35 };
+  }
+}
+
+function findNearestDryBank(point: Vector3, fallback: Vector3) {
+  const candidate = new Vector3();
+  const best = new Vector3();
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let radius = 4; radius <= 24; radius += 4) {
+    for (let step = 0; step < 16; step += 1) {
+      const angle = (step / 16) * Math.PI * 2;
+      candidate.set(point.x + Math.cos(angle) * radius, 0, point.z + Math.sin(angle) * radius);
+      const water = sampleWaterState(candidate.x, candidate.z);
+      if (water && water.swimAllowed && water.depth >= FAUNA_DEEP_WATER_DEPTH) {
+        continue;
+      }
+
+      const distance = Math.hypot(candidate.x - fallback.x, candidate.z - fallback.z);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best.set(candidate.x, sampleTerrainHeight(candidate.x, candidate.z), candidate.z);
+      }
+    }
+
+    if (bestDistance < Number.POSITIVE_INFINITY) {
+      return best;
+    }
+  }
+
+  best.set(fallback.x, sampleTerrainHeight(fallback.x, fallback.z), fallback.z);
+  return best;
+}
+
+function dominantMood(blobs: AmbientBlob[]): KaruMood {
+  const recruited = blobs.filter((blob) => blob.recruited);
+  const relevant = recruited.length > 0 ? recruited : blobs;
+  const counts = new Map<KaruMood, number>();
+  relevant.forEach((blob) => {
+    counts.set(blob.mood, (counts.get(blob.mood) ?? 0) + 1);
+  });
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "curious";
+}
 
 function planarDistance(a: Vector3, b: Vector3) {
   return Math.hypot(a.x - b.x, a.z - b.z);
@@ -130,6 +199,7 @@ function recruitNearbyBlobs(blobs: AmbientBlob[], sourceBlob: AmbientBlob, playe
 
     blob.recruited = true;
     blob.recruitedAt = elapsed;
+    blob.regroupUntil = elapsed + 1.6;
     blob.mode = "curious";
     blob.avoidPlayerUntil = 0;
     blob.investigateAgainAt = elapsed + 5;
@@ -386,6 +456,9 @@ export function buildAmbientBlobs(options: AmbientBlobBuildOptions = {}) {
         recruited: false,
         recruitedAt: 0,
         leaderSlot: pocketIndex * 3 + index,
+        mood: moodForBlob(pocketIndex, index),
+        regroupUntil: 0,
+        waterReaction: "dry",
         restUntil: 0.8 + index * 0.5,
         avoidPlayerUntil: 0,
         investigateAgainAt: 0,
@@ -417,6 +490,7 @@ export function updateAmbientBlobs(
   dt: number,
   mapLookdown: boolean,
   recruitPressed = false,
+  regroupPressed = false,
 ): AmbientBlobUpdateStats {
   ambientBlobGroup.visible = !mapLookdown;
   if (mapLookdown) {
@@ -425,6 +499,8 @@ export function updateAmbientBlobs(
       recruitedCount: blobs.filter((blob) => blob.recruited).length,
       nearestRecruitableDistance: null,
       recruitedThisFrame: 0,
+      dominantMood: dominantMood(blobs),
+      regroupActive: false,
     };
   }
 
@@ -439,6 +515,13 @@ export function updateAmbientBlobs(
     nearestBeforeRecruit.distance <= FAUNA_RECRUIT_RADIUS
       ? recruitNearbyBlobs(blobs, nearestBeforeRecruit.blob, playerPosition, elapsed)
       : 0;
+  if (regroupPressed) {
+    blobs.forEach((blob) => {
+      if (blob.recruited) {
+        blob.regroupUntil = elapsed + FAUNA_REGROUP_SECONDS;
+      }
+    });
+  }
 
   blobs.forEach((blob, index) => {
     const groundY = sampleTerrainHeight(blob.group.position.x, blob.group.position.z);
@@ -517,6 +600,8 @@ export function updateAmbientBlobs(
 
     let recruitedMoveStrength = 0;
     if (blob.recruited) {
+      const tuning = moodFollowTuning(blob.mood);
+      const regroupActive = elapsed < blob.regroupUntil;
       blob.mode = "wander";
       blob.avoidPlayerUntil = 0;
       blob.restUntil = elapsed + 0.3;
@@ -534,13 +619,30 @@ export function updateAmbientBlobs(
       const slotRow = Math.floor(blob.leaderSlot / 3);
       const slotColumn = (blob.leaderSlot % 3) - 1;
       const slotJitter = Math.sin(blob.poseSeed * 1.7) * 0.45;
-      const followBackDistance = 5.6 + slotRow * 2.45 + (blob.leaderSlot % 2) * 0.45;
-      const followSideDistance = slotColumn * (3.25 + slotRow * 0.28) + slotJitter;
+      const regroupTighten = regroupActive ? 0.62 : 1;
+      const followBackDistance =
+        (5.6 + slotRow * 2.45 + (blob.leaderSlot % 2) * 0.45 + tuning.backOffset) * regroupTighten;
+      const followSideDistance = (slotColumn * (3.25 + slotRow * 0.28) + slotJitter) * tuning.sideScale * regroupTighten;
       ambientLeaderSlot
         .copy(playerPosition)
         .addScaledVector(ambientFollowDirection, -followBackDistance)
         .addScaledVector(ambientRightDirection, followSideDistance);
       ambientLeaderSlot.y = sampleTerrainHeight(ambientLeaderSlot.x, ambientLeaderSlot.z);
+      blob.waterReaction = "dry";
+
+      const targetWater = sampleWaterState(ambientLeaderSlot.x, ambientLeaderSlot.z);
+      const isDeepTarget = !!targetWater && targetWater.swimAllowed && targetWater.depth >= FAUNA_DEEP_WATER_DEPTH;
+      if (targetWater && targetWater.depth > FAUNA_SHALLOW_WATER_DEPTH && !isDeepTarget) {
+        blob.waterReaction = "splash";
+      } else if (isDeepTarget) {
+        if (blob.mood === "brave" || tuning.waterBravery >= 1) {
+          blob.waterReaction = "float";
+          ambientLeaderSlot.y = targetWater.surfaceY + 0.28;
+        } else {
+          blob.waterReaction = "bank_wait";
+          ambientLeaderSlot.copy(findNearestDryBank(ambientLeaderSlot, playerPosition));
+        }
+      }
 
       ambientBoidCohesion.set(0, 0, 0);
       ambientAlignment.set(0, 0, 0);
@@ -609,7 +711,7 @@ export function updateAmbientBlobs(
 
       ambientBoidSteer
         .set(0, 0, 0)
-        .addScaledVector(ambientFollowSteer, 1.55 + MathUtils.clamp(followDistance / 14, 0, 1.2))
+        .addScaledVector(ambientFollowSteer, (1.55 + MathUtils.clamp(followDistance / 14, 0, 1.2)) * (regroupActive ? 1.25 : 1))
         .addScaledVector(ambientSeparation, 1.95)
         .addScaledVector(ambientBoidCohesion, 0.38)
         .addScaledVector(ambientAlignment, 0.3)
@@ -630,6 +732,12 @@ export function updateAmbientBlobs(
         followDistance > 9 ? 4.1 :
         followDistance > 3.4 ? 2.55 :
         1.15;
+      recruitedMoveStrength *= tuning.speedScale * (regroupActive ? 1.12 : 1);
+      if (blob.waterReaction === "bank_wait") {
+        recruitedMoveStrength *= 0.82;
+      } else if (blob.waterReaction === "float") {
+        recruitedMoveStrength *= 0.9;
+      }
       if (followDistance < 1.2 && ambientSeparation.lengthSq() < 0.001) {
         recruitedMoveStrength = 0;
       }
@@ -787,6 +895,20 @@ export function updateAmbientBlobs(
       blob.velocity.multiplyScalar(0.84);
     }
 
+  const currentWater = sampleWaterState(blob.group.position.x, blob.group.position.z);
+  if (blob.recruited && currentWater && currentWater.depth > FAUNA_SHALLOW_WATER_DEPTH) {
+    const currentDeepWater = currentWater.swimAllowed && currentWater.depth >= FAUNA_DEEP_WATER_DEPTH;
+    if (currentDeepWater && (blob.mood === "brave" || blob.waterReaction === "float")) {
+      blob.waterReaction = "float";
+    } else if (!currentDeepWater) {
+      blob.waterReaction = "splash";
+    } else {
+      blob.waterReaction = "bank_wait";
+    }
+  } else if (!blob.recruited || !currentWater || currentWater.depth <= FAUNA_SHALLOW_WATER_DEPTH) {
+    blob.waterReaction = "dry";
+  }
+
   const planarSpeed = blob.velocity.length();
   const scale = blob.creatureScale;
   const restPulse = Math.sin(elapsed * 2.3 + blob.poseSeed);
@@ -810,9 +932,14 @@ export function updateAmbientBlobs(
   const idleHopT = blob.hopUntil > elapsed ? 1 - (blob.hopUntil - elapsed) / 0.42 : 0;
   const idleHop = idleHopT > 0 && idleHopT < 1 ? Math.sin(idleHopT * Math.PI) : 0;
   const idleHopSettle = idleHopT > 0 && idleHopT < 0.2 ? 1 - idleHopT / 0.2 : 0;
+  const waterHop =
+    blob.waterReaction === "splash" ? Math.max(0, Math.sin(elapsed * 12.5 + blob.poseSeed)) * 0.28 * scale :
+    blob.waterReaction === "float" ? (0.1 + Math.sin(elapsed * 3.2 + blob.poseSeed) * 0.06) * scale :
+    blob.waterReaction === "bank_wait" ? Math.max(0, Math.sin(elapsed * 8.8 + blob.poseSeed)) * 0.08 * scale :
+    0;
   const groundedBob = Math.max(0, Math.sin(elapsed * 4.2 + blob.bobOffset)) * planarSpeed * 0.08;
   const poseLift =
-      blob.mode === "wander" ? Math.max(wanderHop * 0.2 * scale, idleHop * 0.15 * scale) :
+      blob.mode === "wander" ? Math.max(wanderHop * 0.2 * scale, idleHop * 0.15 * scale, waterHop) :
       blob.mode === "shy" ? shyHop * 0.16 * scale :
       idleHop * 0.15 * scale;
     const poseDrop =
@@ -820,13 +947,13 @@ export function updateAmbientBlobs(
     blob.mode === "shy" ? (0.05 + (1 - shyHop) * 0.04) * scale :
     (idleHopSettle * 0.024 + idleSettle * 0.016) * scale;
   const stretch =
-    blob.mode === "wander" ? 1 + wanderHop * 0.08 + idleHop * 0.03 :
+    blob.mode === "wander" ? 1 + wanderHop * 0.08 + idleHop * 0.03 + (blob.mood === "sleepy" ? 0.025 : 0) :
     blob.mode === "shy" ? 1 + shyHop * 0.05 :
     1 + Math.max(0, restPulse) * 0.02 + idleHop * 0.05 + idleSniff * 0.03;
   const squash =
     blob.mode === "rest" ? 1 - (0.06 + Math.max(0, -restPulse) * 0.04 + idleHopSettle * 0.05 + idleSettle * 0.05) :
     blob.mode === "shy" ? 1 - (0.08 + (1 - shyHop) * 0.06) :
-    blob.mode === "wander" ? 1 - (wanderHop * 0.06 + idleHopSettle * 0.04 + idleSettle * 0.03) :
+    blob.mode === "wander" ? 1 - (wanderHop * 0.06 + idleHopSettle * 0.04 + idleSettle * 0.03 + (blob.waterReaction === "splash" ? 0.035 : 0)) :
     1 - idleHop * 0.04;
     const desiredYaw =
       planarSpeed > 0.05 ? Math.atan2(blob.velocity.x, blob.velocity.z) :
@@ -836,7 +963,11 @@ export function updateAmbientBlobs(
     const yawBlend = 1 - Math.exp(-dt * (blob.mode === "shy" ? 8 : blob.recruited ? 6 : 5));
     blob.facingYaw = MathUtils.lerp(blob.facingYaw, desiredYaw, yawBlend);
 
-    blob.group.position.y = groundY + 0.08 + groundedBob;
+    const visualWaterY =
+      blob.recruited && currentWater && currentWater.depth > FAUNA_SHALLOW_WATER_DEPTH
+        ? currentWater.surfaceY + (blob.waterReaction === "float" ? 0.36 : 0.12)
+        : groundY + 0.08;
+    blob.group.position.y = visualWaterY + groundedBob;
   blob.group.rotation.y = blob.facingYaw;
   blob.root.position.y = poseLift - poseDrop;
   blob.root.rotation.x =
@@ -910,5 +1041,7 @@ export function updateAmbientBlobs(
     recruitedCount: blobs.filter((blob) => blob.recruited).length,
     nearestRecruitableDistance: nearestAfterRecruit.distance,
     recruitedThisFrame,
+    dominantMood: dominantMood(blobs),
+    regroupActive: blobs.some((blob) => blob.recruited && elapsed < blob.regroupUntil),
   };
 }

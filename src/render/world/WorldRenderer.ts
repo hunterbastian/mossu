@@ -518,6 +518,8 @@ export class WorldRenderer {
     recruitedCount: 0,
     nearestRecruitableDistance: null,
     recruitedThisFrame: 0,
+    dominantMood: "curious",
+    regroupActive: false,
   };
   private readonly landingUp = new Vector3(0, 1, 0);
   private readonly landingQuat = new Quaternion();
@@ -801,7 +803,14 @@ export class WorldRenderer {
     return this.faunaStats;
   }
 
-  update(frame: FrameState, elapsed: number, dt: number, mapLookdown = false, recruitPressed = false) {
+  update(
+    frame: FrameState,
+    elapsed: number,
+    dt: number,
+    mapLookdown = false,
+    recruitPressed = false,
+    regroupPressed = false,
+  ) {
     this.mossu.update(frame.player, dt);
     this.skyDome.position.copy(frame.player.position);
     this.scene.fog = mapLookdown ? null : this.gameplayFog;
@@ -819,6 +828,7 @@ export class WorldRenderer {
       dt,
       mapLookdown,
       recruitPressed,
+      regroupPressed,
     );
     this.updateLandingSplash(frame, dt);
     this.updateSnowTrail(frame, dt);

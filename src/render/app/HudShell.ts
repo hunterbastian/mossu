@@ -30,6 +30,8 @@ export interface HudShellUpdate {
     recruitedCount: number;
     nearestRecruitableDistance: number | null;
     recruitedThisFrame: number;
+    dominantMood: "curious" | "shy" | "brave" | "sleepy";
+    regroupActive: boolean;
   };
   windStrength: number;
 }
@@ -162,6 +164,9 @@ export class HudShell {
     this.statusValues.objectiveBody.textContent = frame.objective.body;
     this.statusValues.ability.textContent = "Ability ready: Breeze Float lets Mossu drift across ravines by holding Space in the air.";
 
+    const faunaMoodIcon = this.renderFaunaMoodIcon(fauna.dominantMood);
+    const faunaMoodLabel = `${fauna.dominantMood[0].toUpperCase()}${fauna.dominantMood.slice(1)}`;
+
     if (characterScreenOpen) {
       this.statusValues.prompt.innerHTML = "<strong>Inventory</strong> Tab or Esc closes Mossu's holo binder.";
     } else if (latestGatheredGood) {
@@ -169,11 +174,13 @@ export class HudShell {
     } else if (latestCollection) {
       this.statusValues.prompt.innerHTML = `<strong>New Entry</strong> ${latestCollection.keepsakeTitle} was registered in Mossu's field log.`;
     } else if (fauna.recruitedThisFrame > 0) {
-      this.statusValues.prompt.innerHTML = `<strong>${faunaName}</strong> ${fauna.recruitedThisFrame} ${faunaName} joined Mossu's trail.`;
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.recruitedThisFrame} ${faunaName} joined Mossu's trail.</span>`;
+    } else if (fauna.regroupActive && fauna.recruitedCount > 0) {
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> Regrouping close behind Mossu.</span>`;
     } else if (nearbyRecruitableFauna) {
-      this.statusValues.prompt.innerHTML = `<strong>${faunaName}</strong> Press E to have them follow Mossu.`;
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> Press E to have them follow Mossu.</span>`;
     } else if (fauna.recruitedCount > 0) {
-      this.statusValues.prompt.innerHTML = `<strong>${faunaName}</strong> ${fauna.recruitedCount} ${faunaName} following Mossu.`;
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.recruitedCount} following. ${faunaMoodLabel} mood. Hold E to call them in.</span>`;
     } else if (nearbyCollection) {
       this.statusValues.prompt.innerHTML = `<strong>Nearby Landmark</strong> ${nearbyCollection.landmarkTitle} will register automatically when Mossu reaches it.`;
     } else {
@@ -193,10 +200,15 @@ export class HudShell {
       ["Space", "jump / float"],
       ["Shift", "roll"],
       ["E", "interact"],
+      ["Hold E", "call Karu"],
       ["Tab", "inventory"],
       ["M", "map"],
       ["Esc", "pause"],
     ]);
+  }
+
+  private renderFaunaMoodIcon(mood: HudShellUpdate["fauna"]["dominantMood"]) {
+    return `<span class="karu-mood-icon karu-mood-icon--${mood}" aria-hidden="true"></span>`;
   }
 
   private updatePauseMenu(frame: FrameState, characterData: CharacterScreenView, windStrength: number) {
@@ -515,6 +527,7 @@ export class HudShell {
       ["Space", "jump / float"],
       ["Shift", "roll"],
       ["E", "interact"],
+      ["Hold E", "call Karu"],
       ["Tab", "inventory"],
       ["M", "map"],
       ["Esc", "pause"],

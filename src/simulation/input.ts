@@ -3,6 +3,8 @@ export interface InputSnapshot {
   moveY: number;
   jumpHeld: boolean;
   jumpPressed: boolean;
+  interactHeld: boolean;
+  interactHoldSeconds: number;
   rollHeld: boolean;
   interactPressed: boolean;
   inventoryTogglePressed: boolean;
@@ -12,6 +14,7 @@ export interface InputSnapshot {
 
 export class InputController {
   private pressed = new Set<string>();
+  private interactHeldSince: number | null = null;
   private jumpPressedFrame = false;
   private interactPressedFrame = false;
   private inventoryTogglePressedFrame = false;
@@ -29,6 +32,7 @@ export class InputController {
       }
       if (!this.isPressed("KeyE", "e") && this.matchesKey(event, "KeyE", "e")) {
         this.interactPressedFrame = true;
+        this.interactHeldSince = performance.now();
       }
       if (!this.isPressed("Tab", "tab") && this.matchesKey(event, "Tab", "tab")) {
         this.inventoryTogglePressedFrame = true;
@@ -57,6 +61,11 @@ export class InputController {
     const moveY = (this.isPressed("KeyW", "w") || this.isPressed("ArrowUp", "arrowup") ? 1 : 0) - (this.isPressed("KeyS", "s") || this.isPressed("ArrowDown", "arrowdown") ? 1 : 0);
     const jumpHeld = this.isPressed("Space", " ");
     const jumpPressed = this.jumpPressedFrame;
+    const interactHeld = this.isPressed("KeyE", "e");
+    const interactHoldSeconds =
+      interactHeld && this.interactHeldSince !== null
+        ? Math.max(0, (performance.now() - this.interactHeldSince) / 1000)
+        : 0;
     const rollHeld = this.isPressed("ShiftLeft", "shift") || this.isPressed("ShiftRight", "shift");
     const interactPressed = this.interactPressedFrame;
     const inventoryTogglePressed = this.inventoryTogglePressedFrame;
@@ -72,6 +81,8 @@ export class InputController {
       moveY,
       jumpHeld,
       jumpPressed,
+      interactHeld,
+      interactHoldSeconds,
       rollHeld,
       interactPressed,
       inventoryTogglePressed,
@@ -99,6 +110,9 @@ export class InputController {
     }
     if (event.key) {
       this.pressed.delete(event.key.toLowerCase());
+    }
+    if (this.matchesKey(event, "KeyE", "e")) {
+      this.interactHeldSince = null;
     }
   }
 
