@@ -60,7 +60,7 @@ Acceptance:
 
 Goal: turn inventory/profile into a collectible card-style interface.
 
-Status: next major feature pass.
+Status: first holo-card binder pass landed; needs collected-state playtest after route QA.
 
 References:
 
@@ -69,12 +69,15 @@ References:
 
 Tasks:
 
-- Keep `Tab` as inventory/profile.
-- Represent landmark keepsakes and gathered goods as collectible cards.
-- Add holo sheen, depth, and subtle pointer/hover movement.
-- Keep card text readable.
-- Preserve character stats/upgrades.
-- Make empty/undiscovered slots feel intentional.
+- [x] Keep `Tab` as inventory/profile.
+- [x] Represent landmark keepsakes and gathered goods as collectible cards.
+- [x] Add holo sheen, depth, and subtle pointer/hover movement.
+- [x] Keep card text readable.
+- [x] Preserve character stats/upgrades.
+- [x] Make empty/undiscovered slots feel intentional.
+- [x] Add binder shell, spine, section tabs, and album-page slot treatment.
+- [x] Check laptop and narrower desktop viewport behavior.
+- [ ] Playtest with discovered landmark cards and gathered goods populated.
 
 Acceptance:
 
@@ -212,7 +215,7 @@ Acceptance:
 ## Current Next Priorities
 
 1. Inventory holo-card binder pass:
-   Make the `Tab` inventory feel like a collectible card binder using the existing `inventory-holo-card` DOM/CSS foundation.
+   Playtest populated cards after collecting landmarks and goods, then tune copy/card density if needed.
 2. River route QA and tuning:
    Walk the route in Chrome, check swimming and bank readability, then tune any remaining overlap/thickness problems.
 3. Grass visual QA:

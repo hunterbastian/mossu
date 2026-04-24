@@ -159,7 +159,7 @@ function canPlaceInstancedTree(kind: InstancedForestKind, x: number, z: number) 
   }
 
   const lakeDistance = Math.hypot(x - OPENING_LAKE_CENTER_X, z - OPENING_LAKE_CENTER_Z);
-  if (lakeDistance < OPENING_LAKE_RADIUS + 12 || sampleRiverWetness(x, z) > 0.42) {
+  if (lakeDistance < OPENING_LAKE_RADIUS + 16 || sampleRiverWetness(x, z) > 0.26) {
     return false;
   }
 
@@ -185,7 +185,9 @@ function sampleInstancedTreeDensity(kind: InstancedForestKind, x: number, z: num
   const zone = sampleBiomeZone(x, z, y);
   const wetness = sampleRiverWetness(x, z);
   const lakeDistance = Math.hypot(x - OPENING_LAKE_CENTER_X, z - OPENING_LAKE_CENTER_Z);
-  const waterFade = MathUtils.smoothstep(lakeDistance, OPENING_LAKE_RADIUS + 8, OPENING_LAKE_RADIUS + 32) * (1 - wetness * 0.55);
+  const waterFade =
+    MathUtils.smoothstep(lakeDistance, OPENING_LAKE_RADIUS + 12, OPENING_LAKE_RADIUS + 38) *
+    Math.max(0, 1 - wetness * 0.92);
 
   if (kind === "round") {
     const biomeDensity =

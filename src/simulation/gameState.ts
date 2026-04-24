@@ -3,6 +3,7 @@ import { InputSnapshot } from "./input";
 import {
   AbilityId,
   BiomeZone,
+  ForageableKind,
   sampleBiomeZone,
   sampleObjectiveText,
   sampleTerrainHeight,
@@ -74,9 +75,16 @@ export interface ForageableEntryState {
   forageableId: string;
   title: string;
   summary: string;
-  kind: "fruit" | "plant";
+  kind: ForageableKind;
   zone: BiomeZone;
   gathered: boolean;
+}
+
+export interface ForageableTargetState {
+  forageableId: string;
+  title: string;
+  kind: ForageableKind;
+  distance: number;
 }
 
 export interface FrameState {
@@ -86,6 +94,7 @@ export interface FrameState {
   currentLandmark: string;
   objective: ReturnType<typeof sampleObjectiveText>;
   interactionTarget: InteractionTargetState | null;
+  forageableTarget: ForageableTargetState | null;
   lastCatalogedLandmarkId: string | null;
   lastGatheredForageableId: string | null;
 }
@@ -125,6 +134,7 @@ export class GameState {
       currentLandmark: worldLandmarks[0]?.title ?? "Mossu",
       objective: sampleObjectiveText(),
       interactionTarget: null,
+      forageableTarget: null,
       lastCatalogedLandmarkId: null,
       lastGatheredForageableId: null,
     };
@@ -152,7 +162,7 @@ export class GameState {
         respawnPlayerAtStart(player, runtime);
       }
 
-      this.updateProgress();
+      this.updateProgress(false);
       return;
     }
 
@@ -175,7 +185,7 @@ export class GameState {
 
     if (shouldStartVoidFall(player)) {
       beginVoidFall(player, runtime);
-      this.updateProgress();
+      this.updateProgress(false);
       return;
     }
 
@@ -189,22 +199,23 @@ export class GameState {
       player.heading = Math.atan2(player.velocity.x, player.velocity.z);
     }
 
-    this.updateProgress();
+    this.updateProgress(input.interactPressed);
   }
 
   getCharacterScreenData(): CharacterScreenView {
     return buildCharacterScreenData(this.frame.save, this.frame);
   }
 
-  private updateProgress() {
+  private updateProgress(gatherPressed = false) {
     const player = this.frame.player.position;
     const height = sampleTerrainHeight(player.x, player.z);
     this.frame.currentZone = sampleBiomeZone(player.x, player.z, height);
     this.frame.objective = sampleObjectiveText();
     const landmarkProgress = updateLandmarkProgress(player, this.frame.save.catalogedLandmarkIds);
-    const forageableProgress = updateForageableProgress(player, this.frame.save.gatheredForageableIds);
+    const forageableProgress = updateForageableProgress(player, this.frame.save.gatheredForageableIds, gatherPressed);
     this.frame.currentLandmark = landmarkProgress.currentLandmark;
     this.frame.interactionTarget = landmarkProgress.interactionTarget;
+    this.frame.forageableTarget = forageableProgress.forageableTarget;
     this.frame.lastCatalogedLandmarkId = landmarkProgress.lastCatalogedLandmarkId;
     this.frame.lastGatheredForageableId = forageableProgress.lastGatheredForageableId;
   }

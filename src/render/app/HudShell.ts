@@ -1,7 +1,8 @@
 import { MathUtils } from "three";
 import type { CharacterScreenView } from "../../simulation/characterScreenData";
 import type { FrameState } from "../../simulation/gameState";
-import { WorldLandmark, worldLandmarks } from "../../simulation/world";
+import { worldLandmarks } from "../../simulation/world";
+import type { ForageableKind, WorldLandmark } from "../../simulation/world";
 import { ViewMode } from "../../simulation/viewMode";
 import {
   createSvgElement,
@@ -16,6 +17,9 @@ import {
   projectWorldToMap,
   routeLandmarks,
 } from "./worldMap";
+
+const POUCH_KIND_ORDER: ForageableKind[] = ["seed", "shell", "moss_tuft", "berry", "smooth_stone", "feather"];
+const POUCH_REVEAL_MS = 4200;
 
 export interface HudShellUpdate {
   frame: FrameState;
@@ -32,6 +36,7 @@ export interface HudShellUpdate {
     recruitedThisFrame: number;
     dominantMood: "curious" | "shy" | "brave" | "sleepy";
     regroupActive: boolean;
+    callHeardActive: boolean;
   };
   windStrength: number;
 }
@@ -54,6 +59,11 @@ export class HudShell {
   private readonly staminaHud = document.createElement("section");
   private readonly staminaRing = document.createElement("div");
   private readonly staminaValue = document.createElement("p");
+  private readonly pouchHud = document.createElement("section");
+  private readonly pouchItems = document.createElement("div");
+  private readonly pouchDetail = document.createElement("div");
+  private readonly pouchDetailTitle = document.createElement("p");
+  private readonly pouchDetailBody = document.createElement("p");
   private readonly pauseMenu = document.createElement("aside");
   private readonly pauseSummary = document.createElement("p");
   private readonly pauseStatusValues = {
@@ -74,6 +84,42 @@ export class HudShell {
   private readonly collectionsSectionBadge = document.createElement("span");
   private readonly gatheredGoodsSectionBadge = document.createElement("span");
   private characterScreenSignature = "";
+  private latestPouchGatheredId: string | null = null;
+  private pouchRevealUntil = 0;
+  private selectedPouchKind: ForageableKind | null = null;
+  private pouchSignature = "";
+  private readonly handleInventoryCardPointerMove = (event: PointerEvent) => {
+    if (!(event.currentTarget instanceof HTMLElement)) {
+      return;
+    }
+
+    const card = event.currentTarget;
+    const bounds = card.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) {
+      return;
+    }
+
+    const x = MathUtils.clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
+    const y = MathUtils.clamp((event.clientY - bounds.top) / bounds.height, 0, 1);
+    const tiltX = (0.5 - y) * 4.4;
+    const tiltY = (x - 0.5) * 5.2;
+
+    card.style.setProperty("--card-tilt-x", `${tiltX.toFixed(2)}deg`);
+    card.style.setProperty("--card-tilt-y", `${tiltY.toFixed(2)}deg`);
+    card.style.setProperty("--card-glare-x", `${(x * 100).toFixed(1)}%`);
+    card.style.setProperty("--card-glare-y", `${(y * 100).toFixed(1)}%`);
+  };
+  private readonly handleInventoryCardPointerLeave = (event: PointerEvent) => {
+    if (!(event.currentTarget instanceof HTMLElement)) {
+      return;
+    }
+
+    const card = event.currentTarget;
+    card.style.removeProperty("--card-tilt-x");
+    card.style.removeProperty("--card-tilt-y");
+    card.style.removeProperty("--card-glare-x");
+    card.style.removeProperty("--card-glare-y");
+  };
   private readonly statusValues = {
     zone: document.createElement("p"),
     landmark: document.createElement("p"),
@@ -111,6 +157,7 @@ export class HudShell {
     const latestGatheredGood = characterData.gatheredGoods.find(
       (entry) => entry.forageableId === characterData.latestGatheredGoodId,
     );
+    const nearbyForageable = frame.forageableTarget;
     const faunaName = fauna.speciesName;
     const nearbyRecruitableFauna =
       fauna.nearestRecruitableDistance !== null &&
@@ -131,6 +178,7 @@ export class HudShell {
     this.updateMapOverlay(frame, characterData, viewMode);
     this.updatePauseMenu(frame, characterData, windStrength);
     this.updateCharacterScreen(characterData, focusedCollectionId, characterScreenOpen);
+    this.updatePouchHud(characterData, nearbyForageable?.kind ?? null, latestGatheredGood?.forageableId ?? null, isMapMode || pauseMenuOpen || characterScreenOpen);
 
     if (pauseMenuOpen) {
       this.statusValues.objectiveTitle.textContent = "Pause Menu";
@@ -173,10 +221,14 @@ export class HudShell {
       this.statusValues.prompt.innerHTML = `<strong>Foraged</strong> ${latestGatheredGood.title} was tucked into Mossu's gather pouch.`;
     } else if (latestCollection) {
       this.statusValues.prompt.innerHTML = `<strong>New Entry</strong> ${latestCollection.keepsakeTitle} was registered in Mossu's field log.`;
+    } else if (nearbyForageable) {
+      this.statusValues.prompt.innerHTML = `<strong>Forage</strong> Press E to tuck ${nearbyForageable.title} into Mossu's pouch.`;
     } else if (fauna.recruitedThisFrame > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.recruitedThisFrame} ${faunaName} joined Mossu's trail.</span>`;
+    } else if (fauna.callHeardActive && fauna.recruitedCount > 0) {
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> heard Mossu.</span>`;
     } else if (fauna.regroupActive && fauna.recruitedCount > 0) {
-      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> Regrouping close behind Mossu.</span>`;
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> hopping back in a little wave.</span>`;
     } else if (nearbyRecruitableFauna) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> Press E to have them follow Mossu.</span>`;
     } else if (fauna.recruitedCount > 0) {
@@ -199,12 +251,111 @@ export class HudShell {
       ["W/A/S/D", "move"],
       ["Space", "jump / float"],
       ["Shift", "roll"],
-      ["E", "interact"],
+      ["E", "gather / interact"],
       ["Hold E", "call Karu"],
       ["Tab", "inventory"],
       ["M", "map"],
       ["Esc", "pause"],
     ]);
+  }
+
+  private updatePouchHud(
+    characterData: CharacterScreenView,
+    nearbyKind: ForageableKind | null,
+    latestGatheredId: string | null,
+    overlayOpen: boolean,
+  ) {
+    if (latestGatheredId && latestGatheredId !== this.latestPouchGatheredId) {
+      this.latestPouchGatheredId = latestGatheredId;
+      this.pouchRevealUntil = performance.now() + POUCH_REVEAL_MS;
+    }
+
+    const gatheredCounts = new Map<ForageableKind, number>();
+    characterData.gatheredGoods.forEach((entry) => {
+      if (!entry.gathered) {
+        return;
+      }
+      gatheredCounts.set(entry.kind, (gatheredCounts.get(entry.kind) ?? 0) + 1);
+    });
+
+    const visibleKinds = POUCH_KIND_ORDER.filter((kind) => (gatheredCounts.get(kind) ?? 0) > 0 || kind === nearbyKind);
+    const shouldShow =
+      !overlayOpen &&
+      visibleKinds.length > 0 &&
+      (nearbyKind !== null || performance.now() < this.pouchRevealUntil);
+    if (this.selectedPouchKind && !visibleKinds.includes(this.selectedPouchKind)) {
+      this.selectedPouchKind = null;
+    }
+    const focusedKind = this.selectedPouchKind ?? nearbyKind ?? visibleKinds[0] ?? null;
+    const shouldExpand = shouldShow && focusedKind !== null && (this.selectedPouchKind !== null || nearbyKind !== null);
+    const signature = [
+      shouldShow ? "show" : "hide",
+      shouldExpand ? "expanded" : "compact",
+      nearbyKind ?? "none",
+      focusedKind ?? "none",
+      ...POUCH_KIND_ORDER.map((kind) => `${kind}:${gatheredCounts.get(kind) ?? 0}:${visibleKinds.includes(kind) ? 1 : 0}`),
+    ].join("|");
+
+    this.pouchHud.classList.toggle("pouch-hud--visible", shouldShow);
+    this.pouchHud.classList.toggle("pouch-hud--nearby", nearbyKind !== null);
+    this.pouchHud.classList.toggle("pouch-hud--expanded", shouldExpand);
+    if (signature === this.pouchSignature) {
+      return;
+    }
+
+    this.pouchSignature = signature;
+    this.pouchItems.replaceChildren(
+      ...visibleKinds.map((kind) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = [
+          "pouch-hud__item",
+          `pouch-hud__item--${kind}`,
+          kind === nearbyKind ? "pouch-hud__item--nearby" : "",
+          kind === focusedKind ? "pouch-hud__item--selected" : "",
+        ].join(" ");
+        chip.setAttribute("aria-pressed", kind === this.selectedPouchKind ? "true" : "false");
+        chip.setAttribute("aria-label", `${this.formatForageableKind(kind)}: ${gatheredCounts.get(kind) ?? 0} gathered`);
+        chip.addEventListener("pointerenter", () => {
+          this.selectedPouchKind = kind;
+          this.pouchSignature = "";
+        });
+        chip.addEventListener("focus", () => {
+          this.selectedPouchKind = kind;
+          this.pouchSignature = "";
+        });
+        chip.addEventListener("click", () => {
+          this.selectedPouchKind = this.selectedPouchKind === kind ? null : kind;
+          this.pouchSignature = "";
+        });
+
+        const label = document.createElement("span");
+        label.className = "pouch-hud__label";
+        label.textContent = this.formatForageableKind(kind);
+
+        const count = document.createElement("span");
+        count.className = "pouch-hud__count";
+        count.textContent = String(gatheredCounts.get(kind) ?? 0);
+
+        chip.append(label, count);
+        return chip;
+      }),
+    );
+
+    if (focusedKind) {
+      const count = gatheredCounts.get(focusedKind) ?? 0;
+      this.pouchDetailTitle.textContent = this.formatForageableKind(focusedKind);
+      this.pouchDetailBody.textContent = focusedKind === nearbyKind
+        ? count > 0
+          ? `Nearby. Press E to tuck another into Mossu's pouch.`
+          : `Nearby. Press E to tuck the first one into Mossu's pouch.`
+        : count > 0
+          ? `${count} tucked away. Tab opens the binder cards.`
+          : "Not gathered yet.";
+    } else {
+      this.pouchDetailTitle.textContent = "";
+      this.pouchDetailBody.textContent = "";
+    }
   }
 
   private renderFaunaMoodIcon(mood: HudShellUpdate["fauna"]["dominantMood"]) {
@@ -323,6 +474,8 @@ export class HudShell {
         ]
           .filter((className) => className.length > 0)
           .join(" ");
+        article.addEventListener("pointermove", this.handleInventoryCardPointerMove);
+        article.addEventListener("pointerleave", this.handleInventoryCardPointerLeave);
 
         const foil = document.createElement("div");
         foil.className = "inventory-holo-card__foil";
@@ -394,6 +547,8 @@ export class HudShell {
           entry.gathered ? "gathered-good--collected" : "gathered-good--locked",
           `gathered-good--${entry.kind}`,
         ].join(" ");
+        article.addEventListener("pointermove", this.handleInventoryCardPointerMove);
+        article.addEventListener("pointerleave", this.handleInventoryCardPointerLeave);
 
         const foil = document.createElement("div");
         foil.className = "inventory-holo-card__foil";
@@ -423,7 +578,7 @@ export class HudShell {
         art.className = `inventory-holo-card__art inventory-holo-card__art--good inventory-holo-card__art--${entry.kind}`;
         const artLabel = document.createElement("span");
         artLabel.className = "inventory-holo-card__symbol";
-        artLabel.textContent = entry.gathered ? (entry.kind === "fruit" ? "FRUIT" : "PLANT") : "???";
+        artLabel.textContent = entry.gathered ? this.formatForageableKind(entry.kind) : "???";
         art.append(artLabel);
 
         const zone = document.createElement("p");
@@ -436,7 +591,7 @@ export class HudShell {
 
         const kind = document.createElement("p");
         kind.className = "gathered-good__kind";
-        kind.textContent = entry.gathered ? (entry.kind === "fruit" ? "Fruit" : "Plant") : "Uncollected";
+        kind.textContent = entry.gathered ? this.formatForageableKind(entry.kind) : "Uncollected";
 
         const meta = document.createElement("div");
         meta.className = "inventory-holo-card__meta";
@@ -446,7 +601,7 @@ export class HudShell {
         body.className = "gathered-good__body";
         body.textContent = entry.gathered
           ? entry.summary
-          : "Something small grows here, waiting for Mossu to wander close enough to gather it.";
+          : "Something small waits here for Mossu to pick up and tuck into the gather pouch.";
 
         content.append(header, art, title, meta, body);
         article.append(foil, sheen, content);
@@ -490,7 +645,7 @@ export class HudShell {
     this.statusValues.hint.className = "hint-chip";
     this.statusValues.ability.className = "ability-pill";
     bottomStack.append(this.statusValues.prompt, this.buildControlsPanel(), this.statusValues.hint);
-    utilityStack.append(this.buildStaminaHud(), this.statusValues.ability);
+    utilityStack.append(this.buildPouchHud(), this.buildStaminaHud(), this.statusValues.ability);
     bottom.append(bottomStack, utilityStack);
 
     top.append(objective, status);
@@ -552,6 +707,28 @@ export class HudShell {
     return this.controlsPanel;
   }
 
+  private buildPouchHud() {
+    this.pouchHud.className = "pouch-hud";
+
+    const header = document.createElement("div");
+    header.className = "pouch-hud__header";
+    const title = document.createElement("p");
+    title.className = "pouch-hud__title";
+    title.textContent = "Pouch";
+    const hint = document.createElement("p");
+    hint.className = "pouch-hud__hint";
+    hint.textContent = "gathered";
+    header.append(title, hint);
+
+    this.pouchItems.className = "pouch-hud__items";
+    this.pouchDetail.className = "pouch-hud__detail";
+    this.pouchDetailTitle.className = "pouch-hud__detail-title";
+    this.pouchDetailBody.className = "pouch-hud__detail-body";
+    this.pouchDetail.append(this.pouchDetailTitle, this.pouchDetailBody);
+    this.pouchHud.append(header, this.pouchItems, this.pouchDetail);
+    return this.pouchHud;
+  }
+
   private buildStaminaHud() {
     this.staminaHud.className = "stamina-hud";
 
@@ -585,6 +762,10 @@ export class HudShell {
     const shell = document.createElement("div");
     shell.className = "character-screen__shell";
 
+    const binderSpine = document.createElement("div");
+    binderSpine.className = "character-screen__binder-spine";
+    binderSpine.setAttribute("aria-hidden", "true");
+
     const aside = document.createElement("section");
     aside.className = "character-screen__aside";
     const eyebrow = document.createElement("p");
@@ -609,29 +790,51 @@ export class HudShell {
     collectionsColumn.className = "character-screen__column character-screen__column--collections";
 
     const statsSection = this.buildCharacterSection("Stats", "Active field data");
+    statsSection.classList.add("character-section--stats");
     this.statsGrid.className = "character-stat-grid";
     statsSection.append(this.statsGrid);
 
     const upgradesSection = this.buildCharacterSection("Abilities", "Known techniques");
+    upgradesSection.classList.add("character-section--abilities");
     this.upgradesGrid.className = "upgrade-grid";
     upgradesSection.append(this.upgradesGrid);
 
     const collectionsSection = this.buildCharacterSection("Field Dex", "Registered landmarks", this.collectionsSectionBadge);
-    collectionsSection.classList.add("character-section--binder");
+    collectionsSection.classList.add("character-section--binder", "character-section--dex");
     this.collectionsList.className = "collection-list";
     collectionsSection.append(this.collectionsList);
 
-    const gatheredGoodsSection = this.buildCharacterSection("Gathered Goods", "Foraged plants and fruit", this.gatheredGoodsSectionBadge);
-    gatheredGoodsSection.classList.add("character-section--binder");
+    const gatheredGoodsSection = this.buildCharacterSection("Gathered Goods", "Seeds, shells, tufts, berries, stones, feathers", this.gatheredGoodsSectionBadge);
+    gatheredGoodsSection.classList.add("character-section--binder", "character-section--goods");
     this.gatheredGoodsList.className = "gathered-goods-list";
     gatheredGoodsSection.append(this.gatheredGoodsList);
 
     primaryColumn.append(statsSection, upgradesSection);
     collectionsColumn.append(collectionsSection, gatheredGoodsSection);
-    content.append(primaryColumn, collectionsColumn);
-    shell.append(aside, content);
+    content.append(this.buildBinderTabs(), primaryColumn, collectionsColumn);
+    shell.append(binderSpine, aside, content);
     this.characterScreen.append(shell);
     return this.characterScreen;
+  }
+
+  private buildBinderTabs() {
+    const tabs = document.createElement("div");
+    tabs.className = "character-screen__tabs";
+    tabs.setAttribute("aria-label", "Binder sections");
+
+    [
+      ["Stats", "profile"],
+      ["Cards", "keepsakes"],
+      ["Goods", "forage"],
+    ].forEach(([label, descriptor], index) => {
+      const tab = document.createElement("span");
+      tab.className = `character-screen__tab${index === 1 ? " character-screen__tab--active" : ""}`;
+      tab.textContent = label;
+      tab.setAttribute("aria-label", `${label}: ${descriptor}`);
+      tabs.append(tab);
+    });
+
+    return tabs;
   }
 
   private buildPauseMenu() {
@@ -1130,6 +1333,12 @@ export class HudShell {
 
   private prettyZone(zone: string) {
     return zone.replace("_", " ");
+  }
+
+  private formatForageableKind(kind: string) {
+    return kind
+      .replace("_", " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
   private binderZoneCode(zone: string) {

@@ -35,6 +35,8 @@ export interface AmbientBlob {
   leaderSlot: number;
   mood: KaruMood;
   regroupUntil: number;
+  callRespondUntil: number;
+  callWaveStartAt: number;
   waterReaction: "dry" | "splash" | "float" | "bank_wait";
   restUntil: number;
   avoidPlayerUntil: number;
@@ -65,6 +67,7 @@ export interface AmbientBlobUpdateStats {
   recruitedThisFrame: number;
   dominantMood: KaruMood;
   regroupActive: boolean;
+  callHeardActive: boolean;
 }
 
 export const AMBIENT_BLOB_SPECIES_NAME = "Karu";
@@ -75,6 +78,8 @@ const FAUNA_FOLLOW_NEIGHBOR_RADIUS = 13.5;
 const FAUNA_SEPARATION_RADIUS = 3.5;
 const FAUNA_PLAYER_PERSONAL_SPACE = 3.1;
 const FAUNA_REGROUP_SECONDS = 3.4;
+const FAUNA_CALL_LISTEN_SECONDS = 0.58;
+const FAUNA_CALL_WAVE_STAGGER = 0.13;
 const FAUNA_DEEP_WATER_DEPTH = 2.4;
 const FAUNA_SHALLOW_WATER_DEPTH = 0.25;
 
@@ -200,6 +205,8 @@ function recruitNearbyBlobs(blobs: AmbientBlob[], sourceBlob: AmbientBlob, playe
     blob.recruited = true;
     blob.recruitedAt = elapsed;
     blob.regroupUntil = elapsed + 1.6;
+    blob.callRespondUntil = elapsed + 0.35;
+    blob.callWaveStartAt = elapsed + 0.12 + blob.leaderSlot * 0.04;
     blob.mode = "curious";
     blob.avoidPlayerUntil = 0;
     blob.investigateAgainAt = elapsed + 5;
@@ -458,6 +465,8 @@ export function buildAmbientBlobs(options: AmbientBlobBuildOptions = {}) {
         leaderSlot: pocketIndex * 3 + index,
         mood: moodForBlob(pocketIndex, index),
         regroupUntil: 0,
+        callRespondUntil: 0,
+        callWaveStartAt: 0,
         waterReaction: "dry",
         restUntil: 0.8 + index * 0.5,
         avoidPlayerUntil: 0,
@@ -501,6 +510,7 @@ export function updateAmbientBlobs(
       recruitedThisFrame: 0,
       dominantMood: dominantMood(blobs),
       regroupActive: false,
+      callHeardActive: false,
     };
   }
 
@@ -519,6 +529,9 @@ export function updateAmbientBlobs(
     blobs.forEach((blob) => {
       if (blob.recruited) {
         blob.regroupUntil = elapsed + FAUNA_REGROUP_SECONDS;
+        blob.callRespondUntil = elapsed + FAUNA_CALL_LISTEN_SECONDS + blob.leaderSlot * 0.035;
+        blob.callWaveStartAt = elapsed + 0.2 + blob.leaderSlot * FAUNA_CALL_WAVE_STAGGER;
+        blob.restUntil = Math.max(blob.restUntil, blob.callRespondUntil);
       }
     });
   }
@@ -602,6 +615,8 @@ export function updateAmbientBlobs(
     if (blob.recruited) {
       const tuning = moodFollowTuning(blob.mood);
       const regroupActive = elapsed < blob.regroupUntil;
+      const listeningForCall = elapsed < blob.callRespondUntil;
+      const waitingForCallWave = regroupActive && elapsed < blob.callWaveStartAt;
       blob.mode = "wander";
       blob.avoidPlayerUntil = 0;
       blob.restUntil = elapsed + 0.3;
@@ -620,9 +635,11 @@ export function updateAmbientBlobs(
       const slotColumn = (blob.leaderSlot % 3) - 1;
       const slotJitter = Math.sin(blob.poseSeed * 1.7) * 0.45;
       const regroupTighten = regroupActive ? 0.62 : 1;
+      const callWaveTighten = waitingForCallWave ? 1.18 : 1;
       const followBackDistance =
-        (5.6 + slotRow * 2.45 + (blob.leaderSlot % 2) * 0.45 + tuning.backOffset) * regroupTighten;
-      const followSideDistance = (slotColumn * (3.25 + slotRow * 0.28) + slotJitter) * tuning.sideScale * regroupTighten;
+        (5.6 + slotRow * 2.45 + (blob.leaderSlot % 2) * 0.45 + tuning.backOffset) * regroupTighten * callWaveTighten;
+      const followSideDistance =
+        (slotColumn * (3.25 + slotRow * 0.28) + slotJitter) * tuning.sideScale * regroupTighten * callWaveTighten;
       ambientLeaderSlot
         .copy(playerPosition)
         .addScaledVector(ambientFollowDirection, -followBackDistance)
@@ -711,7 +728,10 @@ export function updateAmbientBlobs(
 
       ambientBoidSteer
         .set(0, 0, 0)
-        .addScaledVector(ambientFollowSteer, (1.55 + MathUtils.clamp(followDistance / 14, 0, 1.2)) * (regroupActive ? 1.25 : 1))
+        .addScaledVector(
+          ambientFollowSteer,
+          (1.55 + MathUtils.clamp(followDistance / 14, 0, 1.2)) * (regroupActive && !waitingForCallWave ? 1.25 : 1),
+        )
         .addScaledVector(ambientSeparation, 1.95)
         .addScaledVector(ambientBoidCohesion, 0.38)
         .addScaledVector(ambientAlignment, 0.3)
@@ -732,11 +752,17 @@ export function updateAmbientBlobs(
         followDistance > 9 ? 4.1 :
         followDistance > 3.4 ? 2.55 :
         1.15;
-      recruitedMoveStrength *= tuning.speedScale * (regroupActive ? 1.12 : 1);
+      recruitedMoveStrength *= tuning.speedScale * (regroupActive && !waitingForCallWave ? 1.12 : 1);
       if (blob.waterReaction === "bank_wait") {
         recruitedMoveStrength *= 0.82;
       } else if (blob.waterReaction === "float") {
         recruitedMoveStrength *= 0.9;
+      }
+      if (listeningForCall) {
+        recruitedMoveStrength = 0;
+        blob.velocity.multiplyScalar(0.78);
+      } else if (waitingForCallWave) {
+        recruitedMoveStrength *= 0.28;
       }
       if (followDistance < 1.2 && ambientSeparation.lengthSq() < 0.001) {
         recruitedMoveStrength = 0;
@@ -937,9 +963,17 @@ export function updateAmbientBlobs(
     blob.waterReaction === "float" ? (0.1 + Math.sin(elapsed * 3.2 + blob.poseSeed) * 0.06) * scale :
     blob.waterReaction === "bank_wait" ? Math.max(0, Math.sin(elapsed * 8.8 + blob.poseSeed)) * 0.08 * scale :
     0;
+  const callWaveT =
+    blob.recruited && elapsed >= blob.callWaveStartAt && elapsed < blob.callWaveStartAt + 0.62
+      ? Math.sin(MathUtils.clamp((elapsed - blob.callWaveStartAt) / 0.62, 0, 1) * Math.PI)
+      : 0;
+  const callListenT =
+    blob.recruited && elapsed < blob.callRespondUntil
+      ? Math.sin(MathUtils.clamp(1 - (blob.callRespondUntil - elapsed) / FAUNA_CALL_LISTEN_SECONDS, 0, 1) * Math.PI)
+      : 0;
   const groundedBob = Math.max(0, Math.sin(elapsed * 4.2 + blob.bobOffset)) * planarSpeed * 0.08;
   const poseLift =
-      blob.mode === "wander" ? Math.max(wanderHop * 0.2 * scale, idleHop * 0.15 * scale, waterHop) :
+      blob.mode === "wander" ? Math.max(wanderHop * 0.2 * scale, idleHop * 0.15 * scale, waterHop, callWaveT * 0.34 * scale) :
       blob.mode === "shy" ? shyHop * 0.16 * scale :
       idleHop * 0.15 * scale;
     const poseDrop =
@@ -956,6 +990,7 @@ export function updateAmbientBlobs(
     blob.mode === "wander" ? 1 - (wanderHop * 0.06 + idleHopSettle * 0.04 + idleSettle * 0.03 + (blob.waterReaction === "splash" ? 0.035 : 0)) :
     1 - idleHop * 0.04;
     const desiredYaw =
+      callListenT > 0.001 && planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) :
       planarSpeed > 0.05 ? Math.atan2(blob.velocity.x, blob.velocity.z) :
       blob.recruited && planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) :
       blob.mode === "curious" && planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) :
@@ -971,6 +1006,7 @@ export function updateAmbientBlobs(
   blob.group.rotation.y = blob.facingYaw;
   blob.root.position.y = poseLift - poseDrop;
   blob.root.rotation.x =
+    callListenT > 0 ? -0.18 - callListenT * 0.08 :
     blob.mode === "curious" ? -0.12 + curiousSway * 0.03 :
     blob.mode === "shy" ? -0.08 :
     blob.mode === "wander" ? -0.03 + wanderHop * 0.02 - idleSniff * 0.07 - idleSettle * 0.05 :
@@ -986,6 +1022,7 @@ export function updateAmbientBlobs(
     (blob.mode === "rest" ? restPulse * 0.015 * scale : 0) -
     idleSettle * 0.015 * scale;
   blob.face.rotation.y =
+    callListenT > 0 ? Math.sin(elapsed * 9.5 + blob.poseSeed) * 0.06 :
     blob.mode === "curious" ? curiousSway * 0.28 :
     (blob.mode === "rest" ? curiousSway * 0.08 : 0) + idleLookYaw;
   blob.face.position.y =
@@ -999,6 +1036,7 @@ export function updateAmbientBlobs(
     idleSniff * 0.035 * scale;
 
   const eyeSquish =
+    callListenT > 0 ? 0.08 + blink * 0.4 :
     blob.mode === "rest" ? 0.35 + Math.max(0, -restPulse) * 0.22 + idleSettle * 0.16 + blink * 1.35 :
     blob.mode === "shy" ? 0.24 :
     blink * 1.35 + idleSniff * 0.08;
@@ -1043,5 +1081,6 @@ export function updateAmbientBlobs(
     recruitedThisFrame,
     dominantMood: dominantMood(blobs),
     regroupActive: blobs.some((blob) => blob.recruited && elapsed < blob.regroupUntil),
+    callHeardActive: blobs.some((blob) => blob.recruited && elapsed < blob.callRespondUntil),
   };
 }

@@ -250,3 +250,23 @@ Verification:
 - Extracted character-screen view shaping out of `src/simulation/gameState.ts` into `src/simulation/characterScreenData.ts`, so the simulation coordinator no longer owns the full Adventure Card presentation model.
 - Extracted the DOM-heavy HUD, pause menu, Adventure Card, and region-map shell out of `src/render/app/GameApp.ts` into `src/render/app/HudShell.ts`, leaving `GameApp.ts` focused on app flow, view-mode transitions, input gating, and renderer/camera orchestration.
 - `npm run build` passes after the coordinator refactor pass.
+
+Foraging loop pickup pass:
+- Reworked the existing forageable scaffold from auto-gathered fruit/plants into explicit pouch pickups: seeds, shells, moss tufts, berries, smooth stones, and feathers.
+- `E` now gathers the nearest ungathered forageable instead of collecting it automatically just by walking near it.
+- Added a nearby forage prompt, pouch state in `render_game_to_text`, and updated gathered-good binder cards to use the new item kinds.
+- Added distinct in-world pickup visuals for each forage kind, with bob/sway behavior and disappear-on-gather state.
+- `npm run build` passes after this pass.
+
+Pouch HUD pass:
+- Added a compact live pouch strip to the gameplay HUD that shows gathered forage counts by kind.
+- The pouch stays hidden until Mossu is near a forageable or has just gathered one, then lingers briefly after pickup.
+- The strip highlights the nearby forageable category even before the count is nonzero, so the player can read what `E` will add to the pouch.
+- `render_game_to_text` now includes `pouchCounts` under `characterScreen.gatheredGoods` for lightweight verification.
+- `npm run build` and `git diff --check` pass after this pass.
+
+Interactive pouch follow-up:
+- Converted pouch count chips into stable interactive buttons instead of passive rebuilt labels.
+- Hovering, focusing, or clicking a pouch category now selects it and opens a small detail tray.
+- Nearby forageable categories explain the `Press E` action, while gathered categories summarize stored counts and point to the binder.
+- `npm run build` and `git diff --check` pass after this pass.

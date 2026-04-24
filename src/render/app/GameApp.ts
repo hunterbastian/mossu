@@ -147,6 +147,12 @@ export class GameApp {
     const latestGatheredGood = characterData.gatheredGoods.find(
       (entry) => entry.forageableId === characterData.latestGatheredGoodId,
     );
+    const pouchCounts = characterData.gatheredGoods.reduce<Record<string, number>>((counts, entry) => {
+      if (entry.gathered) {
+        counts[entry.kind] = (counts[entry.kind] ?? 0) + 1;
+      }
+      return counts;
+    }, {});
     return JSON.stringify({
       coordinateSystem: "x right, y up, z forward across the island",
       mode: this.viewMode,
@@ -180,6 +186,14 @@ export class GameApp {
           gathered: characterData.gatheredTotals.gathered,
           total: characterData.gatheredTotals.total,
           latestEntry: latestGatheredGood?.title ?? null,
+          pouchCounts,
+          nearby: frame.forageableTarget
+            ? {
+              title: frame.forageableTarget.title,
+              kind: frame.forageableTarget.kind,
+              distance: Number(frame.forageableTarget.distance.toFixed(1)),
+            }
+            : null,
         },
       },
       fauna: {
@@ -192,6 +206,7 @@ export class GameApp {
         recruitedThisFrame: faunaStats.recruitedThisFrame,
         dominantMood: faunaStats.dominantMood,
         regroupActive: faunaStats.regroupActive,
+        callHeardActive: faunaStats.callHeardActive,
       },
       camera: this.followCamera.getDebugState(),
       performance: this.getPerformanceSnapshot(),
@@ -237,7 +252,7 @@ export class GameApp {
         this.openMap();
         this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
       } else {
-        faunaRecruitPressed = input.interactPressed;
+        faunaRecruitPressed = input.interactPressed && !this.state.frame.forageableTarget;
         if (input.interactHeld && input.interactHoldSeconds >= 0.45 && this.faunaRegroupReady) {
           faunaRegroupPressed = true;
           this.faunaRegroupReady = false;
