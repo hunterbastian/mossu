@@ -606,6 +606,13 @@ export class WorldRenderer {
   private readonly waterControllers: Array<WaterSurfaceController> = [];
   private readonly cameraCollisionMeshes: Mesh[] = [];
   private readonly gameplayFog = new FogExp2("#c8d6cf", 0.00112);
+  private readonly lowlandBackground = new Color("#d8f6ff");
+  private readonly highlandBackground = new Color("#cfe7f3");
+  private readonly lowlandFogColor = new Color("#c9ded0");
+  private readonly highlandFogColor = new Color("#c8d8dd");
+  private readonly lowlandSunColor = new Color("#fff0cf");
+  private readonly highlandSunColor = new Color("#e8f2ff");
+  private elevationMood = 0;
 
   private readonly shrine = buildShrine();
   private readonly riverSystem = buildRiverSystem();
@@ -664,7 +671,7 @@ export class WorldRenderer {
 
   constructor(private readonly scene: Scene, options: WorldRendererOptions = {}) {
     this.ambientBlobs = buildAmbientBlobs(options);
-    scene.background = new Color("#d8f6ff");
+    scene.background = this.lowlandBackground.clone();
     scene.fog = this.gameplayFog;
 
     const ambient = new AmbientLight("#f4fff9", 0.84);
@@ -711,17 +718,17 @@ export class WorldRenderer {
     scene.add(this.mapMarkerGroup);
 
     const meadowNearGrass = createGrassMesh(
-      Math.round(GRASS_COUNT * 0.37),
+      Math.round(GRASS_COUNT * 0.42),
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#3f7a34"),
-      new Color("#c5ea68"),
+      new Color("#347f36"),
+      new Color("#d6f478"),
       {
         crossPlanes: 2,
         bladeWidth: 0.72,
-        bladeHeight: 3.6,
-        placementMultiplier: 0.72,
-        scaleMultiplier: 1.14,
-        widthMultiplier: 0.94,
+        bladeHeight: 3.85,
+        placementMultiplier: 0.82,
+        scaleMultiplier: 1.2,
+        widthMultiplier: 0.98,
         fadeInStart: 5,
         fadeInEnd: 12,
         fadeOutStart: 34,
@@ -731,14 +738,14 @@ export class WorldRenderer {
         distanceCompressionBoost: 0.04,
         playerPushRadius: 11.4,
         playerPushStrength: 1.42,
-        windExaggeration: 1.2,
+        windExaggeration: 1.22,
       },
     );
     const meadowMidGrass = createGrassMesh(
-      Math.round(GRASS_COUNT * 0.56),
+      Math.round(GRASS_COUNT * 0.52),
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#427333"),
-      new Color("#b9df65"),
+      new Color("#43743a"),
+      new Color("#b7df6a"),
       {
         crossPlanes: 1,
         bladeWidth: 0.94,
@@ -759,16 +766,16 @@ export class WorldRenderer {
       },
     );
     const meadowFarGrass = createGrassMesh(
-      GRASS_COUNT - 260,
+      GRASS_COUNT - 860,
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#496f35"),
-      new Color("#aacf63"),
+      new Color("#536b42"),
+      new Color("#9fbd70"),
       {
         crossPlanes: 1,
         bladeWidth: 1.1,
-        bladeHeight: 2.7,
-        placementMultiplier: 1.02,
-        scaleMultiplier: 0.98,
+        bladeHeight: 2.45,
+        placementMultiplier: 0.9,
+        scaleMultiplier: 0.88,
         widthMultiplier: 1.24,
         fadeInStart: 84,
         fadeInEnd: 118,
@@ -779,18 +786,22 @@ export class WorldRenderer {
         distanceCompressionBoost: 0.26,
         playerPushRadius: 9.8,
         playerPushStrength: 0.92,
-        windExaggeration: 1.08,
+        windExaggeration: 1.02,
       },
     );
     const alpineGrass = createGrassMesh(
       ALPINE_GRASS_COUNT,
       (zone) => zone === "alpine" || zone === "ridge",
-      new Color("#64785a"),
-      new Color("#c5d8a0"),
+      new Color("#6d7567"),
+      new Color("#bec9a4"),
       {
         crossPlanes: 1,
+        bladeHeight: 2.35,
+        placementMultiplier: 0.78,
+        scaleMultiplier: 0.86,
         selfShadowStrength: 0.42,
-        windExaggeration: 1.06,
+        distanceCompressionBoost: 0.24,
+        windExaggeration: 1.16,
       },
     );
     this.windMeshes.push(meadowNearGrass, meadowMidGrass, meadowFarGrass, alpineGrass);
@@ -934,6 +945,7 @@ export class WorldRenderer {
     }
     this.mossu.update(frame.player, dt);
     this.skyDome.position.copy(frame.player.position);
+    this.updateSceneMood(frame, dt);
     this.scene.fog = mapLookdown ? null : this.gameplayFog;
     if (!mapLookdown) {
       this.updateWind(frame, elapsed);
@@ -1073,6 +1085,27 @@ export class WorldRenderer {
         shader.uniforms.uTime.value = elapsed;
       }
     });
+  }
+
+  private updateSceneMood(frame: FrameState, dt: number) {
+    const playerHeight = sampleTerrainHeight(frame.player.position.x, frame.player.position.z);
+    const heightMood = MathUtils.smoothstep(playerHeight, 34, 128);
+    const routeMood = MathUtils.smoothstep(frame.player.position.z, 64, 202);
+    const targetMood = MathUtils.clamp(heightMood * 0.72 + routeMood * 0.4, 0, 1);
+    const blend = 1 - Math.exp(-dt * 1.8);
+    this.elevationMood = MathUtils.lerp(this.elevationMood, targetMood, blend);
+
+    const background = this.scene.background;
+    if (background instanceof Color) {
+      background.copy(this.lowlandBackground).lerp(this.highlandBackground, this.elevationMood);
+    }
+
+    this.gameplayFog.color.copy(this.lowlandFogColor).lerp(this.highlandFogColor, this.elevationMood);
+    this.gameplayFog.density = MathUtils.lerp(0.00098, 0.00134, this.elevationMood);
+    this.sun.color.copy(this.lowlandSunColor).lerp(this.highlandSunColor, this.elevationMood);
+    this.sun.intensity = MathUtils.lerp(3.18, 2.74, this.elevationMood);
+    this.meadowGlow.intensity = MathUtils.lerp(0.52, 0.24, this.elevationMood);
+    this.alpineGlow.intensity = MathUtils.lerp(0.38, 0.72, this.elevationMood);
   }
 
   private updateValleyMist(elapsed: number) {
