@@ -40,7 +40,13 @@ import {
 import { MossuAvatar } from "../objects/MossuAvatar";
 import { createGrassMesh, GrassShader, sampleOpeningMeadowMask } from "./grassSystem";
 import { buildClouds, buildMountainAtmosphere, buildSkyDome } from "./atmosphereSystem";
-import { AmbientBlob, AmbientBlobUpdateStats, buildAmbientBlobs, updateAmbientBlobs } from "./ambientBlobs";
+import {
+  AMBIENT_BLOB_SPECIES_NAME,
+  AmbientBlob,
+  AmbientBlobUpdateStats,
+  buildAmbientBlobs,
+  updateAmbientBlobs,
+} from "./ambientBlobs";
 import {
   buildGroundLayer,
   buildHighlandAccents,
@@ -59,8 +65,8 @@ import {
 
 const WORLD_SIZE = 560;
 const TERRAIN_SEGMENTS = 240;
-const GRASS_COUNT = 7600;
-const ALPINE_GRASS_COUNT = 2400;
+const GRASS_COUNT = 6400;
+const ALPINE_GRASS_COUNT = 1700;
 const LANDING_SPLASH_PARTICLES = 18;
 const SNOW_TRAIL_PARTICLES = 20;
 
@@ -508,6 +514,7 @@ export class WorldRenderer {
   private readonly ambientBlobs: AmbientBlob[];
   private readonly ambientBlobGroup = new Group();
   private faunaStats: AmbientBlobUpdateStats = {
+    speciesName: AMBIENT_BLOB_SPECIES_NAME,
     recruitedCount: 0,
     nearestRecruitableDistance: null,
     recruitedThisFrame: 0,
@@ -586,15 +593,15 @@ export class WorldRenderer {
     const meadowNearGrass = createGrassMesh(
       Math.round(GRASS_COUNT * 0.37),
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#4e6540"),
-      new Color("#d4e492"),
+      new Color("#3f7a34"),
+      new Color("#c5ea68"),
       {
-        crossPlanes: 3,
+        crossPlanes: 2,
         bladeWidth: 0.72,
         bladeHeight: 3.6,
         placementMultiplier: 0.72,
-        scaleMultiplier: 1.1,
-        widthMultiplier: 0.92,
+        scaleMultiplier: 1.14,
+        widthMultiplier: 0.94,
         fadeInStart: -1,
         fadeInEnd: 0,
         fadeOutStart: 34,
@@ -602,20 +609,23 @@ export class WorldRenderer {
         rootFillBoost: 0.08,
         selfShadowStrength: 0.92,
         distanceCompressionBoost: 0.04,
+        playerPushRadius: 10.6,
+        playerPushStrength: 1.34,
+        windExaggeration: 1.2,
       },
     );
     const meadowMidGrass = createGrassMesh(
       Math.round(GRASS_COUNT * 0.56),
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#4a623c"),
-      new Color("#c7d987"),
+      new Color("#427333"),
+      new Color("#b9df65"),
       {
-        crossPlanes: 2,
-        bladeWidth: 0.86,
+        crossPlanes: 1,
+        bladeWidth: 0.94,
         bladeHeight: 3.1,
-        placementMultiplier: 0.94,
-        scaleMultiplier: 1.04,
-        widthMultiplier: 1.06,
+        placementMultiplier: 0.92,
+        scaleMultiplier: 1.06,
+        widthMultiplier: 1.12,
         fadeInStart: 24,
         fadeInEnd: 44,
         fadeOutStart: 96,
@@ -623,20 +633,23 @@ export class WorldRenderer {
         rootFillBoost: 0.18,
         selfShadowStrength: 0.72,
         distanceCompressionBoost: 0.14,
+        playerPushRadius: 11.8,
+        playerPushStrength: 1.22,
+        windExaggeration: 1.15,
       },
     );
     const meadowFarGrass = createGrassMesh(
       GRASS_COUNT - 260,
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#49603a"),
-      new Color("#b7c777"),
+      new Color("#496f35"),
+      new Color("#aacf63"),
       {
         crossPlanes: 1,
-        bladeWidth: 1.02,
+        bladeWidth: 1.1,
         bladeHeight: 2.7,
-        placementMultiplier: 1.1,
+        placementMultiplier: 1.02,
         scaleMultiplier: 0.98,
-        widthMultiplier: 1.18,
+        widthMultiplier: 1.24,
         fadeInStart: 84,
         fadeInEnd: 118,
         fadeOutStart: 220,
@@ -644,6 +657,9 @@ export class WorldRenderer {
         rootFillBoost: 0.28,
         selfShadowStrength: 0.6,
         distanceCompressionBoost: 0.26,
+        playerPushRadius: 9.8,
+        playerPushStrength: 0.92,
+        windExaggeration: 1.08,
       },
     );
     const alpineGrass = createGrassMesh(
@@ -654,6 +670,7 @@ export class WorldRenderer {
       {
         crossPlanes: 1,
         selfShadowStrength: 0.42,
+        windExaggeration: 1.06,
       },
     );
     this.windMeshes.push(meadowNearGrass, meadowMidGrass, meadowFarGrass, alpineGrass);

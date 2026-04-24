@@ -102,9 +102,9 @@ const riverCenter = (z: number) => (
   Math.exp(-(((z + 112) / 44) ** 2)) * 28
 );
 export const RIVER_BRANCH_SEGMENTS: readonly RiverBranchSegment[] = [
-  { id: "meadow-braid", startZ: -74, endZ: 18, offset: 58, width: 22, depthScale: 0.66, flowStrength: 0.34 },
-  { id: "fir-gate-braid", startZ: 52, endZ: 132, offset: -62, width: 24, depthScale: 0.72, flowStrength: 0.46 },
-  { id: "alpine-braid", startZ: 134, endZ: 214, offset: 54, width: 19, depthScale: 0.64, flowStrength: 0.54 },
+  { id: "meadow-braid", startZ: -74, endZ: 18, offset: 64, width: 24, depthScale: 0.66, flowStrength: 0.34 },
+  { id: "fir-gate-braid", startZ: 52, endZ: 132, offset: -78, width: 26, depthScale: 0.72, flowStrength: 0.46 },
+  { id: "alpine-braid", startZ: 134, endZ: 214, offset: 68, width: 21, depthScale: 0.64, flowStrength: 0.54 },
 ] as const;
 export const MAIN_RIVER_SURFACE_OFFSET = 4.1;
 export const FOOTHILL_CREEK_SURFACE_OFFSET = 1.5;
@@ -644,7 +644,7 @@ export function sampleGrassDensity(x: number, z: number) {
 
   const riverGap = sampleRiverWetness(x, z);
   const riverNook = sampleRiverNookMask(x, z);
-  const riverBank = sampleRiverBankMask(x, z);
+  const riverBank = sampleRiverBankMask(x, z) * (1 - riverGap);
   const lakeGap = Math.exp(-(((x - OPENING_LAKE_CENTER_X) / (OPENING_LAKE_RADIUS * 0.95)) ** 2) - (((z - OPENING_LAKE_CENTER_Z) / (OPENING_LAKE_RADIUS * 0.85)) ** 2));
   const base =
     zone === "plains" ? 1 :
@@ -656,7 +656,22 @@ export function sampleGrassDensity(x: number, z: number) {
 
   const startClear = Math.exp(-(((x + 58) / 32) ** 2) - (((z + 150) / 24) ** 2)) * 0.34;
   const passClear = Math.exp(-(((x - 18) / 26) ** 2) - (((z - 106) / 28) ** 2)) * 0.18;
-  return Math.max(0, base + riverNook * 0.42 + riverBank * 0.14 - riverGap * 1.05 - lakeGap * 0.98 - slope * 0.75 - startClear - passClear);
+  const meadowLushness =
+    zone === "plains" ? 1 :
+    zone === "hills" ? 0.9 :
+    zone === "foothills" ? 0.64 :
+    0.3;
+  return Math.max(
+    0,
+    base +
+    riverNook * (0.48 + meadowLushness * 0.16) +
+    riverBank * (0.16 + riverNook * 0.18) -
+    riverGap * 1.18 -
+    lakeGap * 1.04 -
+    slope * 0.72 -
+    startClear -
+    passClear,
+  );
 }
 
 export const worldLandmarks: WorldLandmark[] = [

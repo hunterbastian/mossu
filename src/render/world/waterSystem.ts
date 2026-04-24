@@ -704,7 +704,7 @@ function makeCreekSurface(
   return createWaterSurface(points, {
     profile,
     width: radius * 2.35,
-    segments: 52,
+    segments: 42,
     opacity,
   });
 }
@@ -729,7 +729,7 @@ function makeRiverSurface(
   return createWaterSurface(points, {
     profile: WATER_PROFILES.mainRiver,
     width: (point: Vector3) => sampleRiverChannelAt(channelId, point.z).width * widthScale,
-    segments: Math.max(72, sampleCount * 2),
+    segments: Math.max(56, Math.round(sampleCount * 1.45)),
     opacity,
   });
 }

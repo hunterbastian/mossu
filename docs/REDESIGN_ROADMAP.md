@@ -1,6 +1,6 @@
 # Redesign Roadmap
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 This roadmap turns the current full-redesign direction into controlled passes. The goal is to redesign the whole game feel and presentation without breaking the existing playable slice.
 
@@ -12,7 +12,7 @@ Every pass should keep the game playable. Avoid rewrites that leave terrain, mov
 
 ## Phase 1: Preserve The Baseline
 
-Status: in progress
+Status: stable baseline preserved
 
 - Keep Journey-like camera and camera-relative controls.
 - Keep the current route from Burrow Hollow to Moss Crown Shrine.
@@ -26,20 +26,28 @@ Done recently:
 - Terrain noise and height/slope coloring pass.
 - Exponential fog and valley mist pass.
 - Instanced forest with Poisson-style placement and canopy wind.
+- `?perfDebug=1` renderer/world stats panel.
+- Wider river foundation with cleaner braids and grassy nook masks.
+- Karu recruitment/follow behavior.
+- Premium grass wind and Mossu push shader pass.
 
 ## Phase 2: River And Water Redesign
 
 Goal: make water read like broad natural rivers across the map instead of overlapping ribbons.
 
+Status: foundation landed; needs full gameplay route review and tuning.
+
 Tasks:
 
-- Audit all river and branch channel positions.
-- Remove or merge awkward overlaps.
-- Broaden the main channel.
-- Shape grassy nooks between main river and braids.
-- Ensure water visuals and `sampleWaterState()` agree.
-- Add better shoreline readability around banks and swimming areas.
-- Keep opening lake readable from the start camera.
+- [x] Audit river and branch channel positions.
+- [x] Remove/merge the most awkward overlap cases.
+- [x] Broaden the main channel.
+- [x] Shape grassy nooks between main river and braids.
+- [x] Keep opening lake readable from the start camera.
+- [ ] Walk the full river route in Chrome from meadow to shrine.
+- [ ] Check swimming/readability around wider banks.
+- [ ] Tune any sections that still feel too thin, too thick, or visually overlapped.
+- [ ] Confirm water visuals and `sampleWaterState()` agree at banks.
 
 Acceptance:
 
@@ -51,6 +59,8 @@ Acceptance:
 ## Phase 3: Inventory / Collectible UI Redesign
 
 Goal: turn inventory/profile into a collectible card-style interface.
+
+Status: next major feature pass.
 
 References:
 
@@ -76,18 +86,24 @@ Acceptance:
 
 Goal: let Mossu recruit small fauna and have them follow naturally.
 
+Status: first implementation landed; needs route playtest and naming polish pass.
+
+Creature name: Karu.
+
 Tasks:
 
-- Add recruitable state for ambient fauna.
-- Press `E` near fauna to recruit.
-- Keep `E` landmark interaction working.
-- Add boids behavior:
+- [x] Add recruitable state for ambient fauna.
+- [x] Press `E` near fauna to recruit.
+- [x] Keep `E` landmark interaction working in normal gameplay.
+- [x] Add boids behavior:
   - separation
   - alignment
   - cohesion
   - follow leader
-- Add soft idle and catch-up behavior.
-- Prevent followers from crowding Mossu.
+- [x] Add soft catch-up behavior with leader slots.
+- [x] Prevent followers from crowding Mossu.
+- [ ] Playtest followers across slopes, banks, and water edges.
+- [ ] Decide whether Karu should be recruitable one-by-one or by small cluster long-term.
 
 Acceptance:
 
@@ -100,14 +116,18 @@ Acceptance:
 
 Goal: make grass feel alive and reactive.
 
+Status: first premium pass landed; needs visual tuning in real play.
+
 Tasks:
 
-- Layer wind into slow global sway, medium gust fronts, fast per-blade flutter.
-- Add breathing envelope modulation.
-- Add Mossu push interaction using player position/velocity uniforms.
-- Tune opening meadow colors toward saturated cozy green with brighter tips.
-- Keep alpine grass distinct and lighter.
-- Monitor alpha overdraw and frame rate.
+- [x] Layer wind into slow global sway, medium gust fronts, fast per-blade flutter.
+- [x] Add breathing envelope modulation.
+- [x] Add stronger Mossu push interaction using player position/velocity uniforms.
+- [x] Tune opening meadow colors toward saturated cozy green with brighter tips.
+- [x] Bias grass density toward dry river nooks while clearing wet edges.
+- [x] Keep alpine grass distinct and lighter.
+- [ ] Visual-tune wind strength and push strength in Chrome.
+- [ ] Monitor alpha overdraw and frame rate after the shader pass.
 
 Acceptance:
 
@@ -119,6 +139,8 @@ Acceptance:
 ## Phase 6: Terrain / Forest Polish
 
 Goal: make the world composition feel intentional from meadow to shrine.
+
+Status: upcoming after inventory or river QA, depending on whether we want UI or world polish next.
 
 Tasks:
 
@@ -140,14 +162,23 @@ Acceptance:
 
 Goal: keep the redesigned world smooth.
 
+Status: instrumentation and first count-tuning pass landed.
+
 Tasks:
 
-- Inspect draw calls.
-- Profile grass and water shader cost.
-- Tune `InstancedMesh` counts.
-- Check dynamic pixel ratio behavior.
-- Add lightweight debug stats if useful.
+- [x] Add `?perfDebug=1` lightweight debug stats.
+- [x] Inspect draw calls, triangles, grass, forest, and water counts.
+- [x] Check dynamic pixel ratio behavior.
+- [x] Profile grass and water shader cost after the premium grass pass.
+- [x] Tune grass, water, and decoration counts before adding chunking/culling.
 - Consider chunking/frustum culling for grass only if needed.
+
+Latest Chrome snapshot on `?perfDebug=1`:
+
+- Pixel ratio settled at `0.78` inside the tuned `0.78-1.55` range.
+- Renderer showed about `1007` calls and `1.78M` triangles from the starting view.
+- Grass showed `4` meshes, `13,792` instances, and about `775,680` estimated triangles.
+- Water showed `6` surfaces, `5,126` vertices, and `8,968` triangles.
 
 Acceptance:
 
@@ -171,3 +202,18 @@ Acceptance:
 
 - New work has a clear place in docs.
 - A future agent can understand game direction in under 10 minutes.
+
+## Current Next Priorities
+
+1. Inventory holo-card binder pass:
+   Make the `Tab` inventory feel like a collectible card binder using the existing `inventory-holo-card` DOM/CSS foundation.
+2. River route QA and tuning:
+   Walk the route in Chrome, check swimming and bank readability, then tune any remaining overlap/thickness problems.
+3. Grass visual QA:
+   Play with the premium wind/push pass in Chrome and tune strength if motion is too busy or too subtle.
+4. Terrain/forest composition polish:
+   Improve mountain silhouettes, high rock/snow transitions, route overlooks, and biome-specific forest density.
+5. Performance tuning:
+   Use `?perfDebug=1` after grass/water/world changes before adding chunking or culling.
+6. Repo cleanup/push:
+   Add a Git remote, push the commits, and delete ignored local artifacts once approved.

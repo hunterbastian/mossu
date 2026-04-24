@@ -15,10 +15,10 @@ import { WorldRenderer } from "../world/WorldRenderer";
 
 const QUALITY_SAMPLE_SECONDS = 0.9;
 const QUALITY_MIN_SAMPLE_FRAMES = 18;
-const PIXEL_RATIO_DOWNSHIFT_FRAME_SECONDS = 1 / 55;
-const PIXEL_RATIO_UPSHIFT_FRAME_SECONDS = 1 / 68;
-const PIXEL_RATIO_STEP_DOWN = 0.16;
-const PIXEL_RATIO_STEP_UP = 0.04;
+const PIXEL_RATIO_DOWNSHIFT_FRAME_SECONDS = 1 / 58;
+const PIXEL_RATIO_UPSHIFT_FRAME_SECONDS = 1 / 74;
+const PIXEL_RATIO_STEP_DOWN = 0.2;
+const PIXEL_RATIO_STEP_UP = 0.035;
 
 const PAUSED_INPUT: InputSnapshot = {
   moveX: 0,
@@ -49,9 +49,9 @@ export class GameApp {
   private focusedCollectionId: string | null = null;
   private suppressPauseOnPointerUnlock = false;
   private suppressPointerUnlockPauseUntil = 0;
-  private readonly maxPixelRatio = Math.min(window.devicePixelRatio, 1.75);
-  private readonly minPixelRatio = Math.min(this.maxPixelRatio, 0.9);
-  private activePixelRatio = this.maxPixelRatio;
+  private readonly maxPixelRatio = Math.min(window.devicePixelRatio, 1.55);
+  private readonly minPixelRatio = Math.min(this.maxPixelRatio, 0.78);
+  private activePixelRatio = Math.min(this.maxPixelRatio, 1.25);
   private frameTimeAccumulator = 0;
   private frameSampleAccumulator = 0;
   private latestFrameMs = 1000 / 60;
@@ -180,6 +180,7 @@ export class GameApp {
         },
       },
       fauna: {
+        name: faunaStats.speciesName,
         recruited: faunaStats.recruitedCount,
         nearestRecruitableDistance:
           faunaStats.nearestRecruitableDistance === null

@@ -1,4 +1,14 @@
-import { Group, MathUtils, Mesh, MeshStandardMaterial, SphereGeometry, Vector3 } from "three";
+import {
+  CanvasTexture,
+  Group,
+  MathUtils,
+  Mesh,
+  MeshStandardMaterial,
+  RepeatWrapping,
+  SphereGeometry,
+  SRGBColorSpace,
+  Vector3,
+} from "three";
 import { FrameState } from "../../simulation/gameState";
 import { sampleTerrainHeight, scenicPockets, startingLookTarget, startingPosition } from "../../simulation/world";
 import { scatterAroundPocket } from "./sceneHelpers";
@@ -44,11 +54,13 @@ export interface AmbientBlobBuildOptions {
 }
 
 export interface AmbientBlobUpdateStats {
+  speciesName: string;
   recruitedCount: number;
   nearestRecruitableDistance: number | null;
   recruitedThisFrame: number;
 }
 
+export const AMBIENT_BLOB_SPECIES_NAME = "Karu";
 const FAUNA_RECRUIT_RADIUS = 14.5;
 const FAUNA_CLUSTER_RECRUIT_RADIUS = 16;
 const FAUNA_CLUSTER_PLAYER_RADIUS = 19;
@@ -72,6 +84,7 @@ const ambientAlignment = new Vector3();
 const ambientFollowSteer = new Vector3();
 const ambientPlayerSpace = new Vector3();
 const ambientBoidSteer = new Vector3();
+let karuTexture: CanvasTexture | null = null;
 
 function planarDistance(a: Vector3, b: Vector3) {
   return Math.hypot(a.x - b.x, a.z - b.z);
@@ -128,19 +141,92 @@ function recruitNearbyBlobs(blobs: AmbientBlob[], sourceBlob: AmbientBlob, playe
   return recruitedCount;
 }
 
+function getKaruTexture() {
+  if (karuTexture) {
+    return karuTexture;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Unable to create Karu texture");
+  }
+
+  const baseGradient = context.createRadialGradient(42, 32, 4, 64, 68, 92);
+  baseGradient.addColorStop(0, "#e4fbff");
+  baseGradient.addColorStop(0.42, "#aedff4");
+  baseGradient.addColorStop(1, "#7dbbdc");
+  context.fillStyle = baseGradient;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let i = 0; i < 190; i += 1) {
+    const x = (i * 47) % canvas.width;
+    const y = (i * 83 + Math.floor(i / 5) * 17) % canvas.height;
+    const radius = 0.7 + ((i * 19) % 10) * 0.14;
+    const alpha = 0.08 + ((i * 23) % 8) * 0.012;
+    context.beginPath();
+    context.fillStyle = i % 4 === 0
+      ? `rgba(255, 255, 255, ${alpha + 0.05})`
+      : `rgba(75, 145, 188, ${alpha})`;
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  context.globalAlpha = 0.12;
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = 1;
+  for (let y = -8; y < canvas.height + 16; y += 12) {
+    context.beginPath();
+    context.moveTo(0, y);
+    for (let x = 0; x <= canvas.width; x += 12) {
+      context.lineTo(x, y + Math.sin(x * 0.08 + y * 0.15) * 2.2);
+    }
+    context.stroke();
+  }
+  context.globalAlpha = 1;
+
+  karuTexture = new CanvasTexture(canvas);
+  karuTexture.colorSpace = SRGBColorSpace;
+  karuTexture.wrapS = RepeatWrapping;
+  karuTexture.wrapT = RepeatWrapping;
+  karuTexture.repeat.set(1.85, 1.45);
+  karuTexture.needsUpdate = true;
+  return karuTexture;
+}
+
 function makeAmbientBlob(scale: number) {
   const group = new Group();
   const root = new Group();
+  const furTexture = getKaruTexture();
   const bodyMaterial = new MeshStandardMaterial({
-    color: "#effbff",
-    emissive: "#dff2ff",
-    emissiveIntensity: 0.06,
+    color: "#a8ddf3",
+    map: furTexture,
+    bumpMap: furTexture,
+    bumpScale: 0.025,
+    emissive: "#dff7ff",
+    emissiveIntensity: 0.09,
     roughness: 0.98,
     metalness: 0,
   });
-  const fluffMaterial = new MeshStandardMaterial({ color: "#d9f2ff", roughness: 1, metalness: 0 });
-  const deepFluffMaterial = new MeshStandardMaterial({ color: "#b9ddf5", roughness: 1, metalness: 0 });
-  const footMaterial = new MeshStandardMaterial({ color: "#f3fbff", roughness: 1, metalness: 0 });
+  const fluffMaterial = new MeshStandardMaterial({
+    color: "#c8eefb",
+    map: furTexture,
+    bumpMap: furTexture,
+    bumpScale: 0.018,
+    roughness: 1,
+    metalness: 0,
+  });
+  const deepFluffMaterial = new MeshStandardMaterial({
+    color: "#86c7e7",
+    map: furTexture,
+    bumpMap: furTexture,
+    bumpScale: 0.022,
+    roughness: 1,
+    metalness: 0,
+  });
+  const footMaterial = new MeshStandardMaterial({ color: "#dff7ff", roughness: 1, metalness: 0 });
   const eyeMaterial = new MeshStandardMaterial({ color: "#121b24", roughness: 0.08, metalness: 0.02 });
   const eyeHighlightMaterial = new MeshStandardMaterial({
     color: "#ffffff",
@@ -291,7 +377,7 @@ export function buildAmbientBlobs(options: AmbientBlobBuildOptions = {}) {
       rig.group.rotation.y = facingYaw;
       return {
         ...rig,
-        id: `fauna-${pocketIndex}-${index}`,
+        id: `karu-${pocketIndex}-${index}`,
         herdId: pocketIndex,
         herdCenter,
         home: new Vector3(x, y, z),
@@ -335,6 +421,7 @@ export function updateAmbientBlobs(
   ambientBlobGroup.visible = !mapLookdown;
   if (mapLookdown) {
     return {
+      speciesName: AMBIENT_BLOB_SPECIES_NAME,
       recruitedCount: blobs.filter((blob) => blob.recruited).length,
       nearestRecruitableDistance: null,
       recruitedThisFrame: 0,
@@ -819,6 +906,7 @@ export function updateAmbientBlobs(
 
   const nearestAfterRecruit = findNearestRecruitable(blobs, playerPosition);
   return {
+    speciesName: AMBIENT_BLOB_SPECIES_NAME,
     recruitedCount: blobs.filter((blob) => blob.recruited).length,
     nearestRecruitableDistance: nearestAfterRecruit.distance,
     recruitedThisFrame,

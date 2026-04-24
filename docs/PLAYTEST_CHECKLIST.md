@@ -1,6 +1,6 @@
 # Playtest Checklist
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 Use this after major game changes. Start with `npm run build`, then run the game in Chrome or another real browser.
 
@@ -71,7 +71,8 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Trees do not block the main route too aggressively.
 - Grass density feels lush but Mossu remains visible.
 - Grass wind is not synchronized like one sine wave.
-- Mossu push interaction works when implemented.
+- Mossu push interaction visibly bends grass outward without hiding Mossu.
+- Premium grass does not make Chrome frame pacing noticeably worse.
 
 ## UI
 
@@ -83,11 +84,12 @@ Use this after major game changes. Start with `npm run build`, then run the game
 
 ## Fauna
 
-- Ambient fauna are visible near intended pockets.
+- Karu are visible near intended pockets.
 - Idle/wander motion is soft, not jittery.
-- `E` recruitment works when near fauna.
+- `E` recruitment works when near Karu.
 - Followers use separation, alignment, cohesion, and leader follow.
 - Followers do not crowd, clip badly, or vanish.
+- Followers remain readable across slopes, banks, and shallow water edges.
 
 ## Performance
 
@@ -110,5 +112,5 @@ Record any bug with:
 Useful debug URL:
 
 ```text
-http://127.0.0.1:4191/?cameraDebug=1
+http://127.0.0.1:4193/?cameraDebug=1&perfDebug=1
 ```

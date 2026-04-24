@@ -11,7 +11,15 @@ import {
   PlaneGeometry,
   Vector3,
 } from "three";
-import { BiomeZone, sampleBiomeZone, sampleGrassDensity, sampleTerrainHeight, sampleTerrainNormal } from "../../simulation/world";
+import {
+  BiomeZone,
+  sampleBiomeZone,
+  sampleGrassDensity,
+  sampleRiverNookMask,
+  sampleRiverWetness,
+  sampleTerrainHeight,
+  sampleTerrainNormal,
+} from "../../simulation/world";
 
 const WORLD_SIZE = 560;
 
@@ -35,6 +43,9 @@ export interface GrassOptions {
   rootFillBoost?: number;
   selfShadowStrength?: number;
   distanceCompressionBoost?: number;
+  playerPushRadius?: number;
+  playerPushStrength?: number;
+  windExaggeration?: number;
 }
 
 export function mergeBufferGeometries(geometries: BufferGeometry[]) {
@@ -139,12 +150,14 @@ export function createGrassMesh(
 
     const density = sampleGrassDensity(x, z);
     const openingMask = sampleOpeningMeadowMask(x, z);
+    const riverNookMask = sampleRiverNookMask(x, z);
+    const riverWetness = sampleRiverWetness(x, z);
     const fieldCluster = Math.sin(x * 0.016 + z * 0.009 - 0.8) * 0.5 + 0.5;
     const placementBias =
       zone === "plains" || zone === "hills"
-        ? 0.58 + openingMask * 0.78 + fieldCluster * 0.14
+        ? 0.58 + openingMask * 0.74 + riverNookMask * 0.32 + fieldCluster * 0.14
         : zone === "foothills"
-          ? 0.82 + openingMask * 0.1
+          ? 0.78 + openingMask * 0.1 + riverNookMask * 0.22
           : 1;
     if (Math.random() > MathUtils.clamp(density * placementBias * (options.placementMultiplier ?? 1), 0, 1)) {
       continue;
@@ -168,13 +181,14 @@ export function createGrassMesh(
       ? 0.64 + Math.random() * 0.22
       : 0.72 + Math.random() * 0.24;
     const heroBoost = isMeadow ? openingMask : 0;
+    const riverNookBoost = MathUtils.clamp(riverNookMask * (1 - riverWetness), 0, 1);
     const adjustedScale =
       scale
-      * (zone === "alpine" || zone === "ridge" ? 1.04 : 1.04 + heroBoost * 0.3)
+      * (zone === "alpine" || zone === "ridge" ? 1.04 : 1.04 + heroBoost * 0.28 + riverNookBoost * 0.18)
       * (options.scaleMultiplier ?? 1);
     const adjustedWidth =
       width
-      * (zone === "alpine" || zone === "ridge" ? 0.96 : 0.9 + heroBoost * 0.08)
+      * (zone === "alpine" || zone === "ridge" ? 0.96 : 0.9 + heroBoost * 0.08 + riverNookBoost * 0.06)
       * (options.widthMultiplier ?? 1);
     dummy.scale.set(adjustedWidth, adjustedScale, adjustedWidth);
     dummy.updateMatrix();
@@ -182,8 +196,19 @@ export function createGrassMesh(
 
     const sunPatch = Math.sin(x * 0.022 + z * 0.017) * 0.5 + 0.5;
     const coolPatch = Math.cos(x * 0.018 - z * 0.013) * 0.5 + 0.5;
-    const patchMix = MathUtils.clamp(sunPatch * 0.68 + coolPatch * 0.18 + fieldCluster * 0.14 + heroBoost * 0.12, 0, 1);
-    const color = tintBottom.clone().lerp(tintTop, MathUtils.clamp(0.12 + patchMix * 0.7 + Math.random() * 0.05, 0, 1));
+    const patchMix = MathUtils.clamp(
+      sunPatch * 0.62 +
+      coolPatch * 0.15 +
+      fieldCluster * 0.12 +
+      heroBoost * 0.14 +
+      riverNookBoost * 0.2,
+      0,
+      1,
+    );
+    const color = tintBottom.clone().lerp(
+      tintTop,
+      MathUtils.clamp(0.14 + patchMix * 0.72 + Math.random() * 0.05, 0, 1),
+    );
     tints[placed * 3] = color.r;
     tints[placed * 3 + 1] = color.g;
     tints[placed * 3 + 2] = color.b;
@@ -214,6 +239,9 @@ export function createGrassMesh(
     shader.uniforms.uRootFillBoost = { value: options.rootFillBoost ?? 0 };
     shader.uniforms.uSelfShadowStrength = { value: options.selfShadowStrength ?? 0.5 };
     shader.uniforms.uDistanceCompressionBoost = { value: options.distanceCompressionBoost ?? 0 };
+    shader.uniforms.uPlayerPushRadius = { value: options.playerPushRadius ?? 8.8 };
+    shader.uniforms.uPlayerPushStrength = { value: options.playerPushStrength ?? 1.15 };
+    shader.uniforms.uWindExaggeration = { value: options.windExaggeration ?? 1 };
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
@@ -243,6 +271,9 @@ export function createGrassMesh(
         uniform float uRootFillBoost;
         uniform float uSelfShadowStrength;
         uniform float uDistanceCompressionBoost;
+        uniform float uPlayerPushRadius;
+        uniform float uPlayerPushStrength;
+        uniform float uWindExaggeration;
       `,
       )
       .replace(
@@ -264,32 +295,49 @@ export function createGrassMesh(
         vec2 playerOffset = instanceRoot.xz - uPlayerPosition.xz;
         float playerDistance = length(playerOffset);
         vec2 playerAway = playerDistance > 0.001 ? normalize(playerOffset) : vec2(0.0, 0.0);
-        float playerReadMask = 1.0 - smoothstep(4.6, 10.8, playerDistance);
-        float playerMask = playerReadMask * uPlayerPush;
+        float playerReadMask = 1.0 - smoothstep(uPlayerPushRadius * 0.56, uPlayerPushRadius * 1.42, playerDistance);
+        float playerMask = playerReadMask * uPlayerPush * uPlayerPushStrength;
+        float playerSpeed = length(uPlayerVelocity.xz);
+        vec2 wakeDirection = playerSpeed > 0.01 ? normalize(-uPlayerVelocity.xz) : playerAway;
+        vec2 pushDirection = normalize(playerAway * 1.35 + wakeDirection * smoothstep(1.0, 17.0, playerSpeed) * 0.6 + vec2(0.001, 0.0));
         float cameraDistance = length(cameraPosition.xz - instanceRoot.xz);
         vDistanceBlend = smoothstep(20.0, 146.0, cameraDistance);
         float fadeIn = uFadeInEnd <= uFadeInStart ? 1.0 : smoothstep(uFadeInStart, uFadeInEnd, cameraDistance);
         float fadeOut = uFadeOutEnd <= uFadeOutStart ? 0.0 : smoothstep(uFadeOutStart, uFadeOutEnd, cameraDistance);
         vDistanceBand = clamp(fadeIn * (1.0 - fadeOut), 0.0, 1.0);
-        float macroWind = sin(instanceRoot.x * 0.011 + uTime * 0.38 + instanceRoot.z * 0.008)
-          + cos(instanceRoot.z * 0.012 - uTime * 0.28 + instanceRoot.x * 0.004);
-        float microWind = sin(instanceRoot.x * 0.058 + uTime * 1.1 + instancePhase * 1.1) * 0.38
-          + cos(instanceRoot.z * 0.05 + uTime * 0.92 + instancePhase * 0.68) * 0.24;
-        float windLane = sin(instanceRoot.x * 0.007 + instanceRoot.z * 0.004 - uTime * 0.14) * 0.5 + 0.5;
-        float patchWind = macroWind * 0.62 + microWind * 0.12 + windLane * (0.2 + vHeroField * 0.18);
-        vec2 windDirection = normalize(vec2(0.92, 0.39));
-        float tuftWeight = pow(uv.y, 1.25);
-        float sweep = (0.16 + vHeroField * 0.1 + patchWind * 0.11) * tuftWeight * instanceScale;
-        float bend = (0.04 + patchWind * 0.045) * tuftWeight * instanceScale;
+        vec2 baseWindDirection = normalize(vec2(0.92, 0.39));
+        float breath = 0.84 + sin(uTime * 0.18 + sin(uTime * 0.041) * 1.7) * 0.16;
+        float slowSway = (
+          sin(instanceRoot.x * 0.008 + instanceRoot.z * 0.006 + uTime * 0.28 + instancePhase * 0.18) +
+          cos(instanceRoot.x * -0.004 + instanceRoot.z * 0.009 - uTime * 0.22)
+        ) * 0.5;
+        float gustFrontA = sin(dot(instanceRoot.xz, baseWindDirection) * 0.045 - uTime * 1.18 + instancePhase * 0.24);
+        float gustFrontB = sin(instanceRoot.x * 0.018 - instanceRoot.z * 0.026 - uTime * 0.86);
+        float mediumGust = smoothstep(-0.58, 0.98, gustFrontA + gustFrontB * 0.34) * 2.0 - 1.0;
+        float fastFlutter = sin(instanceRoot.x * 0.12 + uTime * 4.9 + instancePhase * 2.8)
+          * cos(instanceRoot.z * 0.086 - uTime * 3.7 + instancePhase);
+        float windLane = sin(instanceRoot.x * 0.007 + instanceRoot.z * 0.004 - uTime * 0.18) * 0.5 + 0.5;
+        float patchWind = (
+          slowSway * 0.58 +
+          mediumGust * (0.34 + windLane * 0.2) +
+          fastFlutter * 0.11
+        ) * breath * uWindExaggeration;
+        vec2 windDirection = normalize(baseWindDirection + vec2(slowSway * 0.16, mediumGust * 0.1));
+        float tuftWeight = pow(uv.y, 1.24);
+        float tipWeight = pow(uv.y, 1.78);
+        float sweep = (0.18 + vHeroField * 0.14 + patchWind * 0.14) * tuftWeight * instanceScale;
+        float bend = (0.045 + patchWind * 0.054 + mediumGust * 0.018) * tuftWeight * instanceScale;
+        float flutter = fastFlutter * tipWeight * instanceScale * (0.032 + vHeroField * 0.018) * uWindExaggeration;
         float baseLean = (0.11 + vHeroField * 0.1) * tuftWeight;
-        float playerDisplace = playerMask * (0.2 + tuftWeight * 0.72);
+        float playerDisplace = playerMask * (0.14 + tipWeight * 1.48);
         transformed.x *= mix(0.84, 0.98, instanceWidth - 0.64);
-        transformed.x += windDirection.x * (sweep + baseLean) + bend * sin(instancePhase);
-        transformed.z += windDirection.y * (sweep + baseLean) + bend * cos(instancePhase);
+        transformed.x += windDirection.x * (sweep + baseLean) + bend * sin(instancePhase) + flutter;
+        transformed.z += windDirection.y * (sweep + baseLean) + bend * cos(instancePhase) - flutter * 0.42;
         transformed.z += (0.06 - bladeSide * 0.026) * sin(instancePhase * 0.8) * tuftWeight * instanceScale;
-        transformed.x += playerAway.x * playerDisplace;
-        transformed.z += playerAway.y * playerDisplace;
-        vPlayerFade = 1.0 - playerReadMask * 0.42;
+        transformed.x += pushDirection.x * playerDisplace;
+        transformed.z += pushDirection.y * playerDisplace;
+        transformed.y -= playerMask * tipWeight * 0.16 * instanceScale;
+        vPlayerFade = 1.0 - playerReadMask * (0.34 + uPlayerPush * 0.18);
       `,
       );
 
@@ -321,11 +369,13 @@ export function createGrassMesh(
         float sunStripe = smoothstep(0.32, 0.98, vBladeMix) * smoothstep(1.0, 0.14, vSoftEdge) * (0.44 + stroke * 0.56) * (0.62 + vHeroField * 0.38);
         float warmTip = smoothstep(0.46, 1.0, vBladeMix) * (0.28 + vPatchLight * 0.72);
         float rootFill = smoothstep(0.42, 0.0, vBladeMix) * (0.1 + uRootFillBoost + vDistanceBlend * 0.28 + vHeroField * 0.08);
-        vec3 rooted = vTint * vec3(0.42, 0.58, 0.36);
-        vec3 midBlade = mix(rooted, vTint * vec3(0.84, 0.94, 0.66), pow(vBladeMix, 0.58));
-        vec3 sunlit = vTint * vec3(1.1, 1.08, 0.74) + vec3(0.18, 0.14, 0.05) * vPatchLight;
+        vec3 rooted = vTint * vec3(0.36, 0.64, 0.32);
+        vec3 midBlade = mix(rooted, vTint * vec3(0.78, 1.03, 0.54), pow(vBladeMix, 0.58));
+        vec3 sunlit = vTint * vec3(1.0, 1.18, 0.62) + vec3(0.12, 0.18, 0.03) * vPatchLight;
         vec3 meadowColor = mix(midBlade, sunlit, sunStripe * (0.6 + nearDetail * 0.14) + warmTip * 0.18);
-        vec3 distantMass = mix(vTint * vec3(0.62, 0.76, 0.5), vTint * vec3(0.84, 0.94, 0.66), vPatchLight * 0.42 + vHeroField * 0.1);
+        float tipGlow = smoothstep(0.62, 1.0, vBladeMix) * smoothstep(1.0, 0.12, vSoftEdge) * (0.04 + vHeroField * 0.08 + vPatchLight * 0.04);
+        meadowColor += vec3(0.07, 0.12, 0.025) * tipGlow;
+        vec3 distantMass = mix(vTint * vec3(0.56, 0.8, 0.42), vTint * vec3(0.78, 1.0, 0.58), vPatchLight * 0.42 + vHeroField * 0.1);
         float distanceCompression = clamp(vDistanceBlend + uDistanceCompressionBoost, 0.0, 1.0);
         meadowColor = mix(meadowColor, distantMass, distanceCompression * 0.7);
         float rootShadow = smoothstep(1.0, 0.08, vBladeMix) * (0.16 + uSelfShadowStrength * 0.22);

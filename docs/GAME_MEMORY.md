@@ -1,6 +1,6 @@
 # Mossu Game Memory
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 This file is the durable project memory for Mossu. It captures the game we are making, the current design direction, and the decisions that should guide future implementation.
 
@@ -62,16 +62,19 @@ Mossu should read as cute without becoming too plastic or mascot-like. Motion sh
 - Inventory/profile screen
 - Region map
 - Pause menu
-- Ambient fauna wandering around the world
+- Karu fauna wandering around the world
+- `E` recruitment for nearby Karu
+- Boids-style Karu follow behavior
+- Premium instanced grass wind and Mossu push interaction
+- `?perfDebug=1` performance panel
 
 ## Desired Near-Term Mechanics
 
 Herd AI:
 
-- When playing as Mossu, the player should be able to approach small fauna and press `E`.
-- Recruited fauna should follow Mossu.
-- Herd behavior should use boids ideas: separation, alignment, cohesion, plus a follow-leader weight.
-- Followers should remain cute and blob-like, not robotic.
+- Recruited Karu should remain cute and blob-like, not robotic.
+- Followers should be playtested across slopes, banks, and shallow water edges.
+- Decide later whether Karu recruitment should persist in save state.
 
 Inventory:
 
@@ -98,9 +101,9 @@ Rivers:
 Grass:
 
 - Premium feel path is instanced grass with layered wind.
-- Wind should use 3 frequency layers: slow global sway, medium gust waves, fast per-blade flutter.
-- Add a slow breathing envelope so the field does not look like a single sine wave.
-- Mossu should push grass outward as it moves through it.
+- Wind uses 3 frequency layers: slow global sway, medium gust waves, fast per-blade flutter.
+- A slow breathing envelope keeps the field from looking like a single sine wave.
+- Mossu pushes grass outward as it moves through it.
 - Color direction: saturated cozy greens, brighter tips, soft bloom/highlights.
 
 Forest:
@@ -150,8 +153,9 @@ Avoid visible tutorial prose that explains implementation. Keep copy in-world an
 
 ## Current Next Priorities
 
-1. Fix and redesign rivers: broader channels, less overlap, better grassy nooks.
-2. Build the holographic collectible inventory/profile treatment.
-3. Implement fauna recruitment and boids-style follow behavior.
-4. Add Mossu grass push interaction and deepen layered wind.
-5. Do a performance pass on draw calls, shader cost, culling, and runtime quality.
+1. Build the holographic collectible inventory/profile treatment.
+2. Playtest and tune river banks/swimming across the full route in Chrome.
+3. Playtest premium grass wind/push strength and tune if it is too busy or too subtle.
+4. Polish terrain/forest composition: mountain silhouettes, route overlooks, snow/rock/grass transitions.
+5. Use `?perfDebug=1` for focused performance tuning before adding culling/chunking.
+6. Add a Git remote, push the repo, and delete ignored local artifacts after approval.

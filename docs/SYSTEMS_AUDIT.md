@@ -1,6 +1,6 @@
 # Systems Audit
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 This audit covers the current state of the full redesign targets: terrain, rivers/water, inventory cards, grass, fauna herd AI, and performance. It is meant to guide implementation order without changing the core way the game works.
 
@@ -13,19 +13,18 @@ Yes, the full redesign direction is feasible in the current Three.js codebase. T
 - instanced grass with shader wind hooks
 - stylized water surfaces with shader profiles
 - DOM inventory/profile UI with early holo-card styling
-- ambient fauna with herd-ish idle/wander behavior
+- Karu fauna with recruitable boids follow behavior
 - dynamic pixel ratio and mostly instanced world rendering
 
-The main risk is not missing technology. The risk is changing systems in the wrong order. Rivers and terrain should come first because they affect water visuals, swimming, grass density, forest placement, route landmarks, and map readability.
+The main risk is not missing technology. The risk is letting visual passes drift away from gameplay contracts. Rivers, terrain, swimming, grass density, forest placement, route landmarks, and map readability all still depend on the same shared samplers.
 
 ## Recommended Order
 
-1. River and terrain contract cleanup
-2. Inventory holo-card UI polish
-3. Fauna recruitment and boids follow behavior
-4. Premium grass wind and Mossu push pass
-5. Performance instrumentation and tuning
-6. Final terrain/forest composition polish
+1. Inventory holo-card UI polish
+2. River route QA and bank/swim tuning
+3. Grass visual QA and performance tuning
+4. Final terrain/forest composition polish
+5. Repo cleanup, remote, and push
 
 ## Terrain
 
@@ -45,7 +44,7 @@ Keep:
 
 Change next:
 
-- Tune river cuts before broad terrain changes.
+- Playtest river cuts before broad terrain changes.
 - Improve visible mountain silhouettes after river layout is stable.
 - Refine snow/rock/grass slope transitions where high terrain currently reads too evenly.
 - Use terrain nooks and banks to make the river feel like it belongs in the valley.
@@ -61,18 +60,19 @@ Files:
 Current state:
 
 - River gameplay is sampled in `world.ts` through `sampleRiverChannels()`, `sampleWaterState()`, `sampleRiverWetness()`, and `sampleRiverNookMask()`.
-- Main river width is roughly 27-40 world units depending on `z`.
-- Four braided branch segments are active: meadow, silver, fir gate, and alpine.
+- Main river width is now broad enough to read as a central valley river across the map.
+- Three braided branch segments are active: meadow, fir gate, and alpine.
 - Rendered water is built in `waterSystem.ts` as water ribbons over those channels.
 - The opening lake is separate and readable.
 - Highland creeks are currently muted.
+- Grass density now favors dry river nooks and clears wet river/lake edges more aggressively.
 
-Problems:
+Remaining checks:
 
-- Branches are close enough to the main channel that water can read like overlapping strips.
-- Rendered river width and gameplay active width are not easy to reason about at a glance.
-- Nooks exist mathematically, but they need stronger bank shaping and grass readability.
-- The main river is split around the opening lake, which is okay, but the transition needs cleaner composition.
+- Walk the full route in Chrome and confirm branch/main separation from gameplay camera height.
+- Check bank readability and swimming transitions around wider water.
+- Tune any channel that still feels too thin, too thick, or overlapped.
+- Confirm rendered river width and gameplay active width agree at the places players enter/exit water.
 
 Target:
 
@@ -83,8 +83,8 @@ Target:
 
 Implementation notes:
 
-- Start in `world.ts`: adjust `RIVER_BRANCH_SEGMENTS`, `sampleRiverWidth()`, `sampleRiverWetness()`, and `sampleRiverNookMask()`.
-- Then update `waterSystem.ts` only after the channel contract reads correctly.
+- Continue in `world.ts` for sampler changes: `RIVER_BRANCH_SEGMENTS`, `sampleRiverWidth()`, `sampleRiverWetness()`, and `sampleRiverNookMask()`.
+- Update `waterSystem.ts` only when rendered width or segment density needs visual correction.
 - Prefer fewer, wider, cleaner channels over many thin decorative ribbons.
 - Keep the opening lake as a start-area feature.
 - Leave highland creeks muted until the main valley river reads well.
@@ -130,25 +130,21 @@ Current state:
 - Grass is already instanced.
 - There are near, mid, far, and alpine grass groups.
 - The shader already receives `uPlayerPosition`, `uPlayerVelocity`, and `uPlayerPush`.
-- The shader already has macro wind, micro wind, a wind lane, distance fading, and some player push.
+- The shader now has slow global sway, medium gust fronts, fast flutter, and a breathing envelope.
+- Mossu push now uses wider player radius, velocity wake, and stronger tip-heavy bending.
+- Meadow colors are more saturated, and dry river nooks get extra density/brightness.
 
-Target:
+Remaining target:
 
-- Make the wind explicitly layered:
-  - slow global field sway
-  - medium gust fronts
-  - fast per-blade flutter
-  - slow breathing envelope over all layers
-- Make Mossu push grass outward with stronger root-to-tip falloff.
-- Keep the meadow saturated and cozy with brighter tips.
-- Avoid alpha overdraw spikes.
+- Tune wind/push strength in a real Chrome playtest.
+- Keep Mossu visible in dense near grass.
+- Avoid alpha overdraw spikes after the shader became more expressive.
 
 Implementation notes:
 
-- This is an enhancement, not a rewrite.
-- Rename/tune shader math so the three wind layers are clear and controllable.
-- Use player velocity to shape push direction and recovery.
-- Tune grass density after river banks are cleaner, since river wetness and nooks affect placement.
+- This remains an enhancement, not a rewrite.
+- Use the existing `GrassOptions` knobs before changing instance counts.
+- Tune grass density through `sampleGrassDensity()` because river wetness and nooks affect placement.
 
 Files:
 
@@ -160,26 +156,22 @@ Files:
 
 Current state:
 
-- Ambient fauna live in `ambientBlobs.ts`.
-- They already have herd IDs, homes, targets, velocity, rest/wander/curious/shy modes, separation, and group-center pull.
-- They are currently render-side ambient actors, not player-recruitable simulation actors.
-- `E` is already the interaction key.
+- Karu live in `ambientBlobs.ts`.
+- They have herd IDs, homes, targets, velocity, rest/wander/curious/shy modes, separation, and group-center pull.
+- Recruited Karu use boids-style separation, alignment, cohesion, and leader-follow slots.
+- `E` recruits nearby Karu in gameplay mode.
+- The state is still render-side and intentionally not saved yet.
 
-Target:
+Remaining target:
 
-- Press `E` near fauna to recruit them.
-- Recruited fauna follow Mossu using boids rules:
-  - separation
-  - alignment
-  - cohesion
-  - follow leader
-- Followers should stay visible, avoid stacking, and not block traversal.
+- Playtest recruited Karu across slopes, river banks, and shallow water edges.
+- Decide whether long-term recruitment should stay cluster-based or become one-by-one.
+- Decide if recruited Karu should persist in save state later.
 
 Implementation notes:
 
-- Add explicit recruited state to fauna instead of treating all fauna as purely ambient.
-- Keep landmark/forageable interaction working; decide `E` priority as nearby fauna first only when a fauna is clearly in range, otherwise preserve current interact behavior.
-- Add leader slots around/behind Mossu so the herd has a soft formation target.
+- Keep landmark/forageable interaction working; Karu recruitment should only take priority when a Karu is clearly in range.
+- Keep leader slots around/behind Mossu so the herd has a soft formation target.
 - Let unrecruited fauna keep the existing shy/curious ambient behavior.
 
 Files:
@@ -198,8 +190,10 @@ Current state:
 - Forest fill is two instanced draw calls for generated forest trees.
 - Grass is instanced, split into near/mid/far/alpine groups.
 - Grass is hidden during map lookdown.
-- `GameApp.ts` has dynamic pixel ratio adjustment between 1 and device pixel ratio capped at 1.75.
-- Camera debug exists, but renderer stats are not exposed yet.
+- `GameApp.ts` has dynamic pixel ratio adjustment with min/max pixel ratio bounds.
+- `?cameraDebug=1` exposes camera state.
+- `?perfDebug=1` exposes FPS, frame time, pixel ratio, renderer calls, triangles, memory, grass, forest, water, and shader counts.
+- First Chrome tuning snapshot after the premium grass/water pass: about `1007` renderer calls, `1.78M` triangles, `13,792` grass instances, `8,968` water triangles, and pixel ratio downshifted to `0.78`.
 
 Targets:
 
@@ -209,14 +203,7 @@ Targets:
 
 Implementation notes:
 
-- Add a lightweight `?perfDebug=1` panel or extend debug output with:
-  - pixel ratio
-  - frame average
-  - renderer draw calls
-  - triangle count
-  - geometries/textures
-  - grass/forest instance counts
-- Tune grass counts, water segment counts, and shader complexity based on the debug readout.
+- Tune grass counts, water segment counts, decoration counts, and shader complexity based on the debug readout.
 - Consider grass chunk culling only if debug numbers show it is needed.
 
 Files:
@@ -229,12 +216,19 @@ Files:
 
 ## Next Code Pass
 
-Start with rivers and terrain together:
+Best next implementation pass: inventory holo-card binder polish.
 
-1. Simplify and widen the river channel plan in `world.ts`.
-2. Make branches fewer, cleaner, and more separated from the main river.
-3. Strengthen grassy nook masks and bank clearing.
-4. Align `sampleWaterState()` and rendered water width.
-5. Verify movement, swimming, grass placement, map readability, and Chrome frame feel.
+Why:
+
+- Rivers, Karu, performance instrumentation, and grass all have first implementations now.
+- Inventory is still the largest visible redesign item that has not received its full pass.
+- The existing DOM/CSS foundation already has `inventory-holo-card` classes, so this is likely a controlled UI polish pass rather than a risky systems rewrite.
+
+Parallel/secondary follow-up:
+
+1. River route QA in Chrome.
+2. Grass wind/push visual tuning.
+3. Terrain/forest composition polish.
+4. Performance tuning based on `?perfDebug=1`.
 
 This gives the rest of the redesign a cleaner world foundation.

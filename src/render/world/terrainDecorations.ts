@@ -601,16 +601,16 @@ export function buildGroundLayer() {
     const isStartPocket = pocket.id === "start-meadow";
     const isUpperRoutePocket = pocket.id === "mistfall-basin" || pocket.id === "windstep-shelf" || pocket.id === "ridge-crossing";
     const clusterCount =
-      isStartPocket ? 4 :
-      pocket.zone === "plains" ? 8 :
-      pocket.zone === "hills" ? 5 :
-      pocket.zone === "foothills" ? (pocket.id === "fir-gate-entry" ? 4 : 3) :
-      pocket.zone === "alpine" ? (pocket.kind === "stream_bend" || isUpperRoutePocket ? 2 : 0) :
+      isStartPocket ? 3 :
+      pocket.zone === "plains" ? 5 :
+      pocket.zone === "hills" ? 4 :
+      pocket.zone === "foothills" ? (pocket.id === "fir-gate-entry" ? 3 : 2) :
+      pocket.zone === "alpine" ? (pocket.kind === "stream_bend" || isUpperRoutePocket ? 1 : 0) :
       pocket.zone === "ridge" ? (isUpperRoutePocket ? 1 : 0) :
       0;
     const cloverCount =
       isStartPocket ? 2 :
-      pocket.zone === "plains" ? 5 :
+      pocket.zone === "plains" ? 3 :
       pocket.zone === "hills" ? 2 :
       0;
 
@@ -619,10 +619,10 @@ export function buildGroundLayer() {
       const y = sampleTerrainHeight(x, z);
       const flowerGroup = new Group();
       const bloomCount =
-        pocket.zone === "plains" ? 10 :
-        pocket.zone === "hills" ? 7 :
-        pocket.zone === "foothills" ? 4 :
-        pocket.zone === "alpine" ? 3 :
+        pocket.zone === "plains" ? 6 :
+        pocket.zone === "hills" ? 5 :
+        pocket.zone === "foothills" ? 3 :
+        pocket.zone === "alpine" ? 2 :
         2;
       for (let j = 0; j < bloomCount; j += 1) {
         const localAngle = (j / Math.max(1, bloomCount)) * Math.PI * 2;
@@ -649,11 +649,11 @@ export function buildGroundLayer() {
     }
 
     const grassPatchCount =
-      isStartPocket ? 3 :
-      pocket.zone === "foothills" ? 5 :
-      pocket.zone === "alpine" ? 3 :
+      isStartPocket ? 2 :
+      pocket.zone === "foothills" ? 3 :
+      pocket.zone === "alpine" ? 2 :
       pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? 2 :
-      4;
+      3;
     for (let i = 0; i < grassPatchCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, 50 + i, 0.82);
       const y = sampleTerrainHeight(x, z);
@@ -728,7 +728,7 @@ export function buildMidLayer() {
     }
 
     if (pocket.zone === "plains" || pocket.zone === "hills" || pocket.zone === "foothills") {
-      const mushroomCount = isStartPocket ? 1 : pocket.zone === "plains" ? 3 : 2;
+      const mushroomCount = isStartPocket ? 1 : pocket.zone === "plains" ? 2 : 2;
       for (let i = 0; i < mushroomCount; i += 1) {
         const { x, z } = scatterAroundPocket(pocket, 120 + i, 0.7);
         const y = sampleTerrainHeight(x, z);
@@ -740,8 +740,8 @@ export function buildMidLayer() {
 
     if (pocket.zone !== "peak_shrine") {
       const saplingCount =
-        pocket.zone === "foothills" ? 3 :
-        pocket.zone === "alpine" || pocket.zone === "ridge" ? 4 :
+        pocket.zone === "foothills" ? 2 :
+        pocket.zone === "alpine" || pocket.zone === "ridge" ? 3 :
         2;
       for (let i = 0; i < saplingCount; i += 1) {
         const { x, z } = scatterAroundPocket(pocket, 140 + i, 0.9);

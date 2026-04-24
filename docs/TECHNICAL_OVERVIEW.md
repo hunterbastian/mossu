@@ -1,6 +1,6 @@
 # Technical Overview
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 ## Stack
 
@@ -65,7 +65,7 @@ Do not change these casually. Terrain, water, grass, collectibles, character sta
 - `grassSystem.ts`: instanced grass geometry/shader.
 - `waterSystem.ts`: stylized water ribbons, lake surface, water controllers.
 - `terrainDecorations.ts`: trees, rocks, flowers, bushes, forest fill.
-- `ambientBlobs.ts`: fauna visuals and ambient behavior.
+- `ambientBlobs.ts`: Karu fauna visuals, ambient behavior, and recruited follow behavior.
 - `atmosphereSystem.ts`: sky, clouds, mountain haze.
 - `sceneHelpers.ts`: shared renderer helpers.
 
@@ -142,16 +142,30 @@ Current performance strategies:
 - use `InstancedMesh` for grass and forest fill
 - keep shadows disabled
 - dynamic pixel ratio adjustment in `GameApp`
+- `?perfDebug=1` panel for FPS, frame time, pixel ratio, draw calls, triangles, memory, and world counts
 - hide heavy world grass during map lookdown
 - bounded world, no LOD yet
 
-Future performance pass should inspect:
+Future performance tuning should inspect:
 
 - draw calls and shader cost
 - grass count and alpha overdraw
 - water shader complexity
 - DOM overlay cost
 - culling bounds for instanced meshes
+
+## Karu
+
+The small recruitable fauna are named Karu. They are currently render-side actors in `ambientBlobs.ts`.
+
+Current behavior:
+
+- unrecruited Karu keep ambient rest/wander/curious/shy behavior
+- pressing `E` near Karu recruits a nearby cluster
+- recruited Karu use boids-style separation, alignment, cohesion, and leader-follow slots
+- recruitment is not currently saved
+
+Keep this render-side until persistence, collision, or quest logic needs them in the simulation layer.
 
 ## Verification
 

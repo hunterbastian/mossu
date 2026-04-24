@@ -26,6 +26,7 @@ export interface HudShellUpdate {
   pointerLocked: boolean;
   focusedCollectionId: string | null;
   fauna: {
+    speciesName: string;
     recruitedCount: number;
     nearestRecruitableDistance: number | null;
     recruitedThisFrame: number;
@@ -108,6 +109,7 @@ export class HudShell {
     const latestGatheredGood = characterData.gatheredGoods.find(
       (entry) => entry.forageableId === characterData.latestGatheredGoodId,
     );
+    const faunaName = fauna.speciesName;
     const nearbyRecruitableFauna =
       fauna.nearestRecruitableDistance !== null &&
       fauna.nearestRecruitableDistance <= 14.5;
@@ -161,21 +163,21 @@ export class HudShell {
     this.statusValues.ability.textContent = "Ability ready: Breeze Float lets Mossu drift across ravines by holding Space in the air.";
 
     if (characterScreenOpen) {
-      this.statusValues.prompt.innerHTML = "<strong>Inventory</strong> Tab or Esc closes Mossu's profile.";
+      this.statusValues.prompt.innerHTML = "<strong>Inventory</strong> Tab or Esc closes Mossu's holo binder.";
     } else if (latestGatheredGood) {
       this.statusValues.prompt.innerHTML = `<strong>Foraged</strong> ${latestGatheredGood.title} was tucked into Mossu's gather pouch.`;
     } else if (latestCollection) {
       this.statusValues.prompt.innerHTML = `<strong>New Entry</strong> ${latestCollection.keepsakeTitle} was registered in Mossu's field log.`;
     } else if (fauna.recruitedThisFrame > 0) {
-      this.statusValues.prompt.innerHTML = `<strong>Fauna</strong> ${fauna.recruitedThisFrame} little friend${fauna.recruitedThisFrame === 1 ? "" : "s"} joined Mossu's trail.`;
+      this.statusValues.prompt.innerHTML = `<strong>${faunaName}</strong> ${fauna.recruitedThisFrame} ${faunaName} joined Mossu's trail.`;
     } else if (nearbyRecruitableFauna) {
-      this.statusValues.prompt.innerHTML = "<strong>Fauna</strong> Press E to have them follow Mossu.";
+      this.statusValues.prompt.innerHTML = `<strong>${faunaName}</strong> Press E to have them follow Mossu.`;
     } else if (fauna.recruitedCount > 0) {
-      this.statusValues.prompt.innerHTML = `<strong>Fauna</strong> ${fauna.recruitedCount} little friend${fauna.recruitedCount === 1 ? "" : "s"} following Mossu.`;
+      this.statusValues.prompt.innerHTML = `<strong>${faunaName}</strong> ${fauna.recruitedCount} ${faunaName} following Mossu.`;
     } else if (nearbyCollection) {
       this.statusValues.prompt.innerHTML = `<strong>Nearby Landmark</strong> ${nearbyCollection.landmarkTitle} will register automatically when Mossu reaches it.`;
     } else {
-      this.statusValues.prompt.innerHTML = "<strong>Inventory</strong> Press Tab to open Mossu's profile. Press E to interact when something is nearby.";
+      this.statusValues.prompt.innerHTML = "<strong>Inventory</strong> Press Tab to open Mossu's holo binder. Press E to interact when something is nearby.";
     }
 
     if (characterScreenOpen) {
@@ -232,8 +234,8 @@ export class HudShell {
       (entry) => entry.forageableId === characterData.latestGatheredGoodId,
     );
 
-    this.characterSummary.textContent = `Mossu's field data is still growing. ${characterData.totals.discovered} of ${characterData.totals.total} landmark entries have been registered, and ${characterData.gatheredTotals.gathered} of ${characterData.gatheredTotals.total} wild goods have been gathered so far.`;
-    this.characterStamp.textContent = `${characterData.totals.discovered}/${characterData.totals.total} notes · ${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total} goods`;
+    this.characterSummary.textContent = `Mossu's holo-card binder is still growing. ${characterData.totals.discovered} of ${characterData.totals.total} landmark cards have been registered, and ${characterData.gatheredTotals.gathered} of ${characterData.gatheredTotals.total} wild goods have been gathered so far.`;
+    this.characterStamp.textContent = `${characterData.totals.discovered}/${characterData.totals.total} cards · ${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total} goods`;
     this.collectionsSectionBadge.textContent = `${characterData.totals.discovered}/${characterData.totals.total}`;
     this.gatheredGoodsSectionBadge.textContent = `${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total}`;
 
@@ -321,6 +323,26 @@ export class HudShell {
         const content = document.createElement("div");
         content.className = "inventory-holo-card__content";
 
+        const header = document.createElement("div");
+        header.className = "inventory-holo-card__header";
+
+        const number = document.createElement("p");
+        number.className = "inventory-holo-card__index";
+        number.textContent = `No. ${String(index + 1).padStart(2, "0")}`;
+
+        const status = document.createElement("p");
+        status.className = "inventory-holo-card__status";
+        status.textContent = entry.discovered ? "Logged" : "Hidden";
+
+        header.append(number, status);
+
+        const art = document.createElement("div");
+        art.className = "inventory-holo-card__art inventory-holo-card__art--keepsake";
+        const artLabel = document.createElement("span");
+        artLabel.className = "inventory-holo-card__symbol";
+        artLabel.textContent = entry.discovered ? this.binderZoneCode(entry.zone) : "???";
+        art.append(artLabel);
+
         const zone = document.createElement("p");
         zone.className = "collection-entry__zone";
         zone.textContent = this.prettyZone(entry.zone);
@@ -333,13 +355,17 @@ export class HudShell {
         landmark.className = "collection-entry__landmark";
         landmark.textContent = entry.landmarkTitle;
 
+        const meta = document.createElement("div");
+        meta.className = "inventory-holo-card__meta";
+        meta.append(zone, landmark);
+
         const body = document.createElement("p");
         body.className = "collection-entry__body";
         body.textContent = entry.discovered
           ? entry.keepsakeSummary
           : `A keepsake silhouette remains at ${entry.landmarkTitle}, waiting for Mossu to wander close enough to log it.`;
 
-        content.append(zone, title, landmark, body);
+        content.append(header, art, title, meta, body);
         article.append(foil, sheen, content);
         return article;
       }),
@@ -368,6 +394,26 @@ export class HudShell {
         const content = document.createElement("div");
         content.className = "inventory-holo-card__content";
 
+        const header = document.createElement("div");
+        header.className = "inventory-holo-card__header";
+
+        const number = document.createElement("p");
+        number.className = "inventory-holo-card__index";
+        number.textContent = `No. ${String(index + 1).padStart(2, "0")}`;
+
+        const status = document.createElement("p");
+        status.className = "inventory-holo-card__status";
+        status.textContent = entry.gathered ? "Gathered" : "Trace";
+
+        header.append(number, status);
+
+        const art = document.createElement("div");
+        art.className = `inventory-holo-card__art inventory-holo-card__art--good inventory-holo-card__art--${entry.kind}`;
+        const artLabel = document.createElement("span");
+        artLabel.className = "inventory-holo-card__symbol";
+        artLabel.textContent = entry.gathered ? (entry.kind === "fruit" ? "FRUIT" : "PLANT") : "???";
+        art.append(artLabel);
+
         const zone = document.createElement("p");
         zone.className = "gathered-good__zone";
         zone.textContent = this.prettyZone(entry.zone);
@@ -380,13 +426,17 @@ export class HudShell {
         kind.className = "gathered-good__kind";
         kind.textContent = entry.gathered ? (entry.kind === "fruit" ? "Fruit" : "Plant") : "Uncollected";
 
+        const meta = document.createElement("div");
+        meta.className = "inventory-holo-card__meta";
+        meta.append(zone, kind);
+
         const body = document.createElement("p");
         body.className = "gathered-good__body";
         body.textContent = entry.gathered
           ? entry.summary
           : "Something small grows here, waiting for Mossu to wander close enough to gather it.";
 
-        content.append(zone, title, kind, body);
+        content.append(header, art, title, meta, body);
         article.append(foil, sheen, content);
         return article;
       }),
@@ -526,10 +576,10 @@ export class HudShell {
     aside.className = "character-screen__aside";
     const eyebrow = document.createElement("p");
     eyebrow.className = "character-screen__eyebrow";
-    eyebrow.textContent = "Inventory";
+    eyebrow.textContent = "Field Binder";
     const title = document.createElement("h2");
     title.className = "character-screen__title";
-    title.textContent = "Mossu";
+    title.textContent = "Mossu Holo Binder";
     this.characterSummary.className = "character-screen__summary";
     this.characterStamp.className = "character-screen__stamp";
     const previewCard = document.createElement("div");
@@ -554,10 +604,12 @@ export class HudShell {
     upgradesSection.append(this.upgradesGrid);
 
     const collectionsSection = this.buildCharacterSection("Field Dex", "Registered landmarks", this.collectionsSectionBadge);
+    collectionsSection.classList.add("character-section--binder");
     this.collectionsList.className = "collection-list";
     collectionsSection.append(this.collectionsList);
 
     const gatheredGoodsSection = this.buildCharacterSection("Gathered Goods", "Foraged plants and fruit", this.gatheredGoodsSectionBadge);
+    gatheredGoodsSection.classList.add("character-section--binder");
     this.gatheredGoodsList.className = "gathered-goods-list";
     gatheredGoodsSection.append(this.gatheredGoodsList);
 
@@ -593,7 +645,7 @@ export class HudShell {
     actions.className = "pause-menu__actions";
     actions.append(
       this.buildPauseAction("Esc", "Resume", "Drop back into the trail and reacquire the camera when you click the world."),
-      this.buildPauseAction("Tab", "Inventory", "Open Mossu's glossy profile with stats, upgrades, and collections."),
+      this.buildPauseAction("Tab", "Inventory", "Open Mossu's holo-card binder with stats, upgrades, and collections."),
       this.buildPauseAction("M", "Region Map", "Swing out to the high route map without stacking extra HUD on top."),
     );
 
@@ -1065,6 +1117,15 @@ export class HudShell {
 
   private prettyZone(zone: string) {
     return zone.replace("_", " ");
+  }
+
+  private binderZoneCode(zone: string) {
+    return this.prettyZone(zone)
+      .split(" ")
+      .map((word) => word.charAt(0))
+      .join("")
+      .slice(0, 3)
+      .toUpperCase();
   }
 
   private renderQuickActions(actions: Array<[string, string]>) {
