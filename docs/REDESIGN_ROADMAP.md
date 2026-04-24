@@ -126,8 +126,14 @@ Tasks:
 - [x] Tune opening meadow colors toward saturated cozy green with brighter tips.
 - [x] Bias grass density toward dry river nooks while clearing wet edges.
 - [x] Keep alpine grass distinct and lighter.
-- [ ] Visual-tune wind strength and push strength in Chrome.
-- [ ] Monitor alpha overdraw and frame rate after the shader pass.
+- [x] Visual-tune wind strength and push strength in Chrome.
+- [x] Monitor alpha overdraw and frame rate after the shader pass.
+
+Latest Chrome QA note:
+
+- Near-camera grass now fades in after the camera clears it, avoiding oversized foreground blades across Mossu.
+- Mossu push radius/strength was nudged up on the near grass pass so the immediate wake reads better.
+- Perf stayed in the tuned range during movement, with the debug panel around `790-830` calls and `1.76M` triangles from the tested meadow view.
 
 Acceptance:
 
