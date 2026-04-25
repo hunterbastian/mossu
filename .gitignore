@@ -10,3 +10,4 @@ dist/
 output/
 mossu-*.png
 .vercel
+.env*.local
