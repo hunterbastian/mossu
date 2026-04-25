@@ -118,8 +118,9 @@ canvas.is-pointer-locked {
   inset: 0;
   z-index: 45;
   display: grid;
-  place-items: end center;
-  padding: clamp(1rem, 4vw, 3rem) clamp(1rem, 5vw, 4.4rem) clamp(1.15rem, 5vh, 3.8rem);
+  place-items: center;
+  box-sizing: border-box;
+  padding: clamp(1.4rem, 5vh, 4rem) clamp(1.25rem, 6vw, 5rem);
   overflow: hidden;
   color: #fff9df;
   background:
@@ -198,10 +199,11 @@ canvas.is-pointer-locked {
   position: relative;
   z-index: 1;
   display: flex;
-  width: min(41rem, calc(100vw - 2rem));
+  width: min(39rem, calc(100vw - 3rem));
   align-items: center;
   flex-direction: column;
   gap: clamp(0.55rem, 1.3vw, 0.92rem);
+  transform: translateY(clamp(0.8rem, 5vh, 3rem));
   text-align: center;
   filter: drop-shadow(0 0.95rem 1.4rem rgba(8, 32, 24, 0.34));
 }
@@ -246,7 +248,7 @@ canvas.is-pointer-locked {
 .title-screen__logo {
   margin: 0;
   font-family: "Trebuchet MS", "Segoe UI Rounded", var(--ui-sans);
-  font-size: clamp(4.7rem, 15vw, 10.6rem);
+  font-size: clamp(4.2rem, 13vw, 9.8rem);
   font-weight: 900;
   line-height: 0.82;
   color: #fff0a4;
@@ -1446,7 +1448,8 @@ canvas.is-pointer-locked {
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 1.1rem;
+  box-sizing: border-box;
+  padding: clamp(1rem, 3vw, 2rem);
   background:
     linear-gradient(180deg, rgba(255, 249, 213, 0.08), rgba(35, 78, 58, 0.18)),
     rgba(20, 54, 49, 0.22);
@@ -1463,7 +1466,8 @@ canvas.is-pointer-locked {
 
 .pause-menu__shell {
   position: relative;
-  width: min(52rem, calc(100vw - 2rem));
+  width: min(52rem, calc(100vw - 3rem));
+  max-height: calc(100vh - 3rem);
   display: grid;
   grid-template-columns: minmax(16rem, 0.78fr) minmax(0, 1fr);
   gap: 0.82rem;
@@ -1476,7 +1480,7 @@ canvas.is-pointer-locked {
   box-shadow:
     0 0.48rem 0 rgba(76, 105, 61, 0.24),
     0 1.4rem 3rem rgba(23, 66, 58, 0.22);
-  overflow: hidden;
+  overflow: auto;
   animation: ui-shell-rise 240ms cubic-bezier(0.2, 0.9, 0.22, 1.1);
 }
 

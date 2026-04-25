@@ -88,7 +88,7 @@ export interface WaterRippleSource {
 
 export interface WaterSurfaceController {
   mesh: Mesh;
-  update: (elapsed: number, ripples?: readonly WaterRippleSource[]) => void;
+  update: (elapsed: number, ripples?: readonly WaterRippleSource[], mapLookdown?: boolean) => void;
   dispose?: () => void;
 }
 
@@ -102,7 +102,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     key: "mainRiver",
     widthScale: 1.02,
     levelOffset: MAIN_RIVER_SURFACE_OFFSET,
-    opacity: 0.84,
+    opacity: 0.74,
     flowSpeed: 0.82,
     roughness: 0.16,
     metalness: 0.03,
@@ -114,21 +114,21 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     deepColor: "#2f6f86",
     foamColor: "#f3f3df",
     shorelineMilkColor: "#f3f0d7",
-    highlightColor: "#edd89f",
-    sparkleColor: "#f8f1cf",
+    highlightColor: "#d7dfb2",
+    sparkleColor: "#e4ecc5",
     reflectionColor: "#a9c9c9",
     sedimentColor: "#a0a981",
     bedColor: "#4f675d",
     causticColor: "#e9ecc3",
-    shorelineFoamStrength: 0.42,
-    shorelineMilkStrength: 0.3,
-    slopeFoamStrength: 0.14,
-    highlightStrength: 0.18,
+    shorelineFoamStrength: 0.28,
+    shorelineMilkStrength: 0.16,
+    slopeFoamStrength: 0.09,
+    highlightStrength: 0.1,
     clarity: 0.9,
     rippleContrast: 0.92,
     depthShadowStrength: 0.44,
-    causticStrength: 0.2,
-    sparkleStrength: 0.2,
+    causticStrength: 0.08,
+    sparkleStrength: 0.07,
   },
   stillPool: {
     key: "stillPool",
@@ -261,7 +261,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
 };
 
 const WATER_RIBBON_COLUMNS = [-1, -0.8, -0.54, -0.22, 0.22, 0.54, 0.8, 1];
-const WATER_RIPPLE_LIMIT = 8;
+const WATER_RIPPLE_LIMIT = 4;
 
 function getWaterWidth(options: WaterSurfaceOptions, point: Vector3, t: number) {
   const baseWidth = typeof options.width === "function" ? options.width(point, t) : options.width;
@@ -493,6 +493,7 @@ function createWebGLWaterController(
     side: DoubleSide,
     dithering: true,
   });
+  const baseOpacity = material.opacity;
   let shaderRef: GrassShader | undefined;
 
   material.onBeforeCompile = (shader: GrassShader) => {
@@ -500,6 +501,7 @@ function createWebGLWaterController(
     shader.uniforms.uRippleTime = { value: 0 };
     shader.uniforms.uRippleCount = { value: 0 };
     shader.uniforms.uRippleSources = { value: rippleUniforms };
+    shader.uniforms.uMapLookdown = { value: 0 };
     shader.uniforms.uFlowSpeed = { value: options.flowSpeed ?? profile.flowSpeed };
     shader.uniforms.uFlowDirection = { value: flowDirection };
     shader.uniforms.uWaterShallow = { value: shallowColor };
@@ -534,6 +536,7 @@ function createWebGLWaterController(
         uniform float uRippleTime;
         uniform int uRippleCount;
         uniform vec4 uRippleSources[${WATER_RIPPLE_LIMIT}];
+        uniform float uMapLookdown;
         uniform float uFlowSpeed;
         uniform float uFlowDirection;
         uniform float uBaseWaveAmplitude;
@@ -594,10 +597,11 @@ function createWebGLWaterController(
         float detailFlow = cos((aFlowT + uv.x * 0.18 + flowCurl * 0.035) * uDetailFrequency - uTime * uFlowSpeed * 2.25 * uFlowDirection + position.z * 0.04 + flowWarp * 0.7);
         float crossRipple = sin(uv.x * 18.0 + uTime * 1.4 + aFlowT * 22.0 + flowWarp * 0.6 + flowCurl * 3.0);
         float localRipple = waterRippleRing(position.xz, (0.28 + aChannel * 0.72) * (1.0 - aBank * 0.2));
-        transformed.y += broadFlow * uBaseWaveAmplitude * (0.4 + channelMask * 0.6) * slopeBoost;
-        transformed.y += detailFlow * uDetailWaveAmplitude * (0.35 + aSlope * 0.85);
-        transformed.y += crossRipple * uDetailWaveAmplitude * 0.45 * (0.3 + aBank * 0.7);
-        transformed.y += localRipple * 0.22;`,
+        float waveVisibility = mix(1.0, 0.08, uMapLookdown);
+        transformed.y += broadFlow * uBaseWaveAmplitude * (0.4 + channelMask * 0.6) * slopeBoost * waveVisibility;
+        transformed.y += detailFlow * uDetailWaveAmplitude * (0.35 + aSlope * 0.85) * waveVisibility;
+        transformed.y += crossRipple * uDetailWaveAmplitude * 0.45 * (0.3 + aBank * 0.7) * waveVisibility;
+        transformed.y += localRipple * 0.22 * waveVisibility;`,
       )
       .replace(
         "#include <project_vertex>",
@@ -615,6 +619,7 @@ function createWebGLWaterController(
         uniform float uRippleTime;
         uniform int uRippleCount;
         uniform vec4 uRippleSources[${WATER_RIPPLE_LIMIT}];
+        uniform float uMapLookdown;
         uniform float uFlowSpeed;
         uniform float uFlowDirection;
         uniform vec3 uWaterShallow;
@@ -787,12 +792,26 @@ function createWebGLWaterController(
         finalWater = mix(finalWater, uHighlightColor, shallowShelfLine * 0.08);
         finalWater = mix(finalWater, reflectionTint, highlightMask * (0.22 + shallowMask * 0.12 + channelDepth * 0.12));
         finalWater = mix(finalWater, uWaterFoam, actorRipple * 0.22);
-        finalWater += uHighlightColor * glintMask * 0.28;
+        finalWater += uHighlightColor * glintMask * uHighlightStrength * 0.8;
         finalWater += uSparkleColor * sparkleMask;
         finalWater += reflectionTint * fresnel * (0.025 + channelDepth * 0.045) * (0.28 + uClarity * 0.45);
         vec3 waterCeiling = mix(vec3(0.78, 0.9, 0.92), vec3(0.94, 0.96, 0.92), clamp(foamMask * 0.7 + sparkleMask * 0.8, 0.0, 1.0));
         finalWater = min(finalWater, waterCeiling);
         float alphaMask = clamp(0.52 + channelDepth * 0.16 + foamMask * 0.06 + fresnel * 0.025 - bankMask * 0.18 + shorelineMilkMask * 0.025, 0.34, 0.82);
+        float mapDepthBand =
+          channelDepth > 0.68 ? 0.86 :
+          channelDepth > 0.34 ? 0.48 :
+          0.14;
+        vec3 mapShallow = vec3(0.50, 0.76, 0.74);
+        vec3 mapDeep = vec3(0.17, 0.47, 0.62);
+        vec3 mapBank = vec3(0.64, 0.75, 0.61);
+        vec3 mapLine = vec3(0.86, 0.91, 0.78);
+        vec3 mapWater = mix(mapShallow, mapDeep, mapDepthBand);
+        mapWater = mix(mapWater, mapBank, bankMask * 0.16);
+        mapWater = mix(mapWater, mapLine, graphicShoreLine * 0.2 + shallowShelfLine * 0.08);
+        mapWater = mix(mapWater, vec3(0.08, 0.34, 0.5), deepCoreLine * 0.18);
+        finalWater = mix(finalWater, mapWater, uMapLookdown);
+        alphaMask = mix(alphaMask, clamp(0.78 + channelDepth * 0.12 - bankMask * 0.06, 0.7, 0.94), uMapLookdown);
         vec4 diffuseColor = vec4(finalWater, opacity * alphaMask);`,
       );
 
@@ -803,11 +822,13 @@ function createWebGLWaterController(
   mesh.renderOrder = 2;
   return {
     mesh,
-    update(elapsed: number, ripples: readonly WaterRippleSource[] = []) {
+    update(elapsed: number, ripples: readonly WaterRippleSource[] = [], mapLookdown = false) {
+      material.opacity = mapLookdown ? 0.98 : baseOpacity;
       if (shaderRef) {
         shaderRef.uniforms.uTime.value = elapsed + phaseOffset;
         shaderRef.uniforms.uRippleTime.value = elapsed;
         shaderRef.uniforms.uRippleCount.value = Math.min(WATER_RIPPLE_LIMIT, ripples.length);
+        shaderRef.uniforms.uMapLookdown.value = mapLookdown ? 1 : 0;
         const sources = shaderRef.uniforms.uRippleSources.value as Vector4[];
         for (let i = 0; i < WATER_RIPPLE_LIMIT; i += 1) {
           const ripple = ripples[i];
@@ -990,7 +1011,6 @@ export function buildRiverSystem(): WaterSurfaceGroup {
     sampleRiverRenderWidthScale(channelId) / WATER_PROFILES.mainRiver.widthScale;
 
   group.name = "braided-river-system";
-  addRiver("main", -214, -146, 46, renderPathWidthScale("main"));
   addRiver("main", -80, 236, 168, renderPathWidthScale("main"));
   RIVER_BRANCH_SEGMENTS.forEach((segment) => {
     const sampleCount = Math.max(42, Math.round((segment.endZ - segment.startZ) * 0.68));

@@ -33,6 +33,15 @@ export class MossuAvatar {
   private stepCycle = 0;
   private rollBlend = 0;
   private callPulse = 0;
+  private movePulse = 0;
+  private rollPulse = 0;
+  private jumpPulse = 0;
+  private landPulse = 0;
+  private swimPulse = 0;
+  private previousPlanarSpeed = 0;
+  private previousGrounded = true;
+  private previousRolling = false;
+  private previousSwimming = false;
   private readonly radius = 2.2;
 
   constructor() {
@@ -176,13 +185,45 @@ export class MossuAvatar {
 
   update(player: PlayerState, dt: number) {
     this.callPulse = Math.max(0, this.callPulse - dt);
+    this.movePulse = Math.max(0, this.movePulse - dt);
+    this.rollPulse = Math.max(0, this.rollPulse - dt);
+    this.jumpPulse = Math.max(0, this.jumpPulse - dt);
+    this.landPulse = Math.max(0, this.landPulse - dt);
+    this.swimPulse = Math.max(0, this.swimPulse - dt);
     this.group.position.copy(player.position);
 
     const planarVelocity = this.localVelocity.set(player.velocity.x, 0, player.velocity.z);
     const planarSpeed = planarVelocity.length();
+    const startedMoving = player.grounded && !player.swimming && planarSpeed > 2.2 && this.previousPlanarSpeed < 0.55;
+    const startedRolling = player.rolling && !this.previousRolling;
+    const jumped = !player.grounded && this.previousGrounded && player.velocity.y > 2;
+    const landed = player.justLanded || (player.grounded && !this.previousGrounded);
+    const enteredWater = player.swimming && !this.previousSwimming;
+
+    if (startedMoving) {
+      this.movePulse = 0.18;
+    }
+    if (startedRolling) {
+      this.rollPulse = 0.24;
+    }
+    if (jumped) {
+      this.jumpPulse = 0.22;
+    }
+    if (landed) {
+      this.landPulse = Math.max(this.landPulse, 0.26 + MathUtils.clamp(player.landingImpact * 0.02, 0, 0.08));
+    }
+    if (enteredWater) {
+      this.swimPulse = 0.24;
+    }
+
+    const moveT = this.movePulse / 0.18;
+    const rollT = this.rollPulse / 0.24;
+    const jumpT = this.jumpPulse / 0.22;
+    const landT = this.landPulse / 0.34;
+    const swimT = this.swimPulse / 0.24;
     const bobStrength = player.swimming ? 1.35 : player.grounded ? 1 : 0.35;
     this.bob += dt * MathUtils.clamp(planarSpeed * 0.09, 0.3, 3);
-    this.group.position.y += Math.sin(this.bob * 2.7) * 0.06 * bobStrength;
+    this.group.position.y += Math.sin(this.bob * 2.7) * 0.06 * bobStrength + jumpT * 0.12 - landT * 0.16 + swimT * 0.08;
     this.rollBlend = MathUtils.damp(this.rollBlend, player.rolling ? 1 : 0, 9, dt);
     this.stepCycle += dt * MathUtils.clamp(planarSpeed * 0.42, 0, 9);
 
@@ -195,14 +236,16 @@ export class MossuAvatar {
 
     const callT = this.callPulse > 0 ? Math.sin((this.callPulse / 0.72) * Math.PI) : 0;
     const squashStretch = player.swimming
-      ? 1 + Math.sin(this.bob * 2.2) * 0.04
+      ? 1 + Math.sin(this.bob * 2.2) * 0.04 - swimT * 0.08
       : player.grounded
       ? 1 - Math.min(0.12, planarSpeed * 0.0022)
       : 1 + MathUtils.clamp(player.velocity.y * 0.012, -0.08, 0.16);
+    const responsiveWide = moveT * 0.035 + rollT * 0.08 + landT * 0.15 + swimT * 0.08 - jumpT * 0.045;
+    const responsiveTall = jumpT * 0.11 - landT * 0.18 - rollT * 0.07 - swimT * 0.1;
     this.locomotionRoot.scale.set(
-      MathUtils.lerp(this.locomotionRoot.scale.x, 1.02 - (squashStretch - 1) * 0.4 + callT * 0.035, 1 - Math.exp(-dt * 8)),
-      MathUtils.lerp(this.locomotionRoot.scale.y, squashStretch + callT * 0.08, 1 - Math.exp(-dt * 8)),
-      MathUtils.lerp(this.locomotionRoot.scale.z, 1.02 - (squashStretch - 1) * 0.4 + callT * 0.035, 1 - Math.exp(-dt * 8)),
+      MathUtils.lerp(this.locomotionRoot.scale.x, 1.02 - (squashStretch - 1) * 0.4 + callT * 0.035 + responsiveWide, 1 - Math.exp(-dt * 11)),
+      MathUtils.lerp(this.locomotionRoot.scale.y, squashStretch + callT * 0.08 + responsiveTall, 1 - Math.exp(-dt * 11)),
+      MathUtils.lerp(this.locomotionRoot.scale.z, 1.02 - (squashStretch - 1) * 0.4 + callT * 0.035 + responsiveWide * 0.72, 1 - Math.exp(-dt * 11)),
     );
 
     if (player.rolling && planarSpeed > 0.001) {
@@ -220,33 +263,43 @@ export class MossuAvatar {
 
     this.locomotionRoot.rotation.z = MathUtils.lerp(
       this.locomotionRoot.rotation.z,
-      -MathUtils.clamp(player.velocity.x * 0.015, -0.2, 0.2),
-      1 - Math.exp(-dt * 4.5),
+      -MathUtils.clamp(player.velocity.x * 0.018, -0.24, 0.24) - rollT * 0.06,
+      1 - Math.exp(-dt * 7),
     );
     this.locomotionRoot.rotation.x = MathUtils.lerp(
       this.locomotionRoot.rotation.x,
-      MathUtils.clamp(planarSpeed * 0.012, -0.12, 0.18) + (player.grounded ? 0 : MathUtils.clamp(player.velocity.y * -0.01, -0.2, 0.2)),
-      1 - Math.exp(-dt * 4.5),
+      MathUtils.clamp(planarSpeed * 0.014, -0.12, 0.22) + moveT * 0.04 + rollT * 0.08 + (player.grounded ? -landT * 0.05 : MathUtils.clamp(player.velocity.y * -0.012, -0.22, 0.22)),
+      1 - Math.exp(-dt * 7),
     );
 
-    this.faceAnchor.position.y = 0.04 + Math.sin(this.bob * 2.1) * 0.028 + callT * 0.06;
-    this.faceAnchor.scale.set(1 + callT * 0.035, 1 - callT * 0.05, 1 + callT * 0.04);
+    this.faceAnchor.position.y = 0.04 + Math.sin(this.bob * 2.1) * 0.028 + callT * 0.06 + jumpT * 0.04 - landT * 0.05;
+    this.faceAnchor.scale.set(1 + callT * 0.035 + landT * 0.04, 1 - callT * 0.05 - landT * 0.08 + jumpT * 0.04, 1 + callT * 0.04);
     this.rollingRoot.position.y = MathUtils.lerp(0.18, 0, this.rollBlend);
     this.legRoot.position.y = MathUtils.lerp(0, 0.42, this.rollBlend);
     this.legRoot.scale.setScalar(1 - this.rollBlend * 0.82);
 
     this.fluff.forEach((puff, index) => {
       const baseScale = index < 5 ? 1 : 0.72;
-      puff.scale.setScalar(baseScale + Math.sin(this.bob * 2 + index * 0.7) * 0.035);
+      const pulseOffset = moveT * 0.02 + rollT * 0.04 + landT * 0.06 + swimT * 0.035;
+      puff.scale.setScalar(baseScale + Math.sin(this.bob * 2 + index * 0.7) * 0.035 + pulseOffset);
     });
 
     this.topTufts.forEach((tuft, index) => {
-      tuft.rotation.x = Math.sin(this.bob * 1.6 + index) * 0.08 - callT * (0.18 + index * 0.025);
-      tuft.rotation.z = Math.cos(this.bob * 1.35 + index * 0.7) * 0.08 + callT * Math.sin(index * 1.4) * 0.12;
+      tuft.rotation.x = Math.sin(this.bob * 1.6 + index) * 0.08 - callT * (0.18 + index * 0.025) - jumpT * 0.1 + landT * 0.12;
+      tuft.rotation.z = Math.cos(this.bob * 1.35 + index * 0.7) * 0.08 + callT * Math.sin(index * 1.4) * 0.12 + rollT * Math.sin(index * 1.2) * 0.08;
     });
 
     const snowTint = player.swimming ? "#e4f1f7" : player.grounded ? "#f4f8fb" : "#eef5ff";
     this.bodyMaterial.color.set(snowTint);
+
+    this.eyeMeshes.forEach((eye) => {
+      eye.scale.y = 1.28 - landT * 0.36 - rollT * 0.1 + jumpT * 0.08;
+      eye.scale.x = 0.82 + landT * 0.08;
+    });
+    this.cheekMeshes.forEach((cheek) => {
+      cheek.scale.x = 1.8 + callT * 0.12 + landT * 0.18 + moveT * 0.06;
+      cheek.scale.y = 1 - landT * 0.08;
+    });
 
     this.legs.forEach((leg, index) => {
       const phase = this.stepCycle * (player.rolling ? 0.4 : 1.9) + (index === 0 ? 0 : Math.PI);
@@ -254,10 +307,15 @@ export class MossuAvatar {
       const stepSwing = Math.sin(phase) * 0.18 * (1 - this.rollBlend);
       const baseY = -1.88;
       const baseZ = 0.64;
-      leg.position.y = baseY + stepLift;
-      leg.position.z = baseZ + stepSwing;
-      leg.rotation.x = stepSwing * 1.25;
+      leg.position.y = baseY + stepLift - landT * 0.1 + moveT * 0.05;
+      leg.position.z = baseZ + stepSwing + moveT * 0.08;
+      leg.rotation.x = stepSwing * 1.25 + moveT * 0.2;
       leg.visible = this.rollBlend < 0.98 && !player.swimming;
     });
+
+    this.previousPlanarSpeed = planarSpeed;
+    this.previousGrounded = player.grounded;
+    this.previousRolling = player.rolling;
+    this.previousSwimming = player.swimming;
   }
 }

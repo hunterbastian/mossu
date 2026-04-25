@@ -218,6 +218,23 @@ Map readability pass:
 Verification:
 - `npm run build` passes after the map overlay work.
 - Live headless Playwright state check against `http://127.0.0.1:4178/` confirmed `mode` switches from `third_person` to `map_lookdown` after pressing `M`.
+
+Performance responsiveness follow-up:
+
+- Reduced normal gameplay DOM churn by throttling HUD refreshes to 12 Hz unless an overlay, stamina, pickup, landmark, forage, or Karu prompt needs immediate feedback.
+- Made adaptive render quality react sooner to slow frames, with a slightly lower minimum pixel ratio for temporary lag recovery.
+- Stopped grass LOD from rebuilding instance buffers just because a timer elapsed; it now waits for player movement plus the existing frame cadence after the initial build.
+- Reduced live water ripple shader budget from 8 ripple sources to 4, which keeps player/Karu ripples but halves the fixed ripple loop work in the water shader.
+- Verification: `npm run test:contracts`, `git diff --check`, and `npm run build` pass.
+- Browser smoke note: the bundled `develop-web-game` Playwright client still cannot resolve its own `playwright` import from the skill path. A direct local Playwright probe could reach the page with `waitUntil: "commit"`, but the deterministic `advanceTime` loop hung in this environment and was killed; real Chrome was opened at the fresh Vite URL instead.
+
+Subtle bloom pass:
+
+- Added a lightweight Three.js `EffectComposer` path with `RenderPass` + `UnrealBloomPass` in `src/render/app/GameApp.ts`.
+- Bloom is intentionally restrained (`0.14` strength, `0.48` radius, `0.82` threshold) and turns off automatically in map lookdown or when adaptive quality drops pixel ratio below `0.74`.
+- Perf debug now reports whether bloom is currently on or off.
+- Verification: `npm run test:contracts`, `git diff --check`, and `npm run build` pass.
+- Browser smoke note: the page booted with `render_game_to_text` available and two canvases present on `http://127.0.0.1:4192/`; headless screenshot capture still timed out on WebGL readback, so final visual judgment should be from real Chrome.
 - Full-page screenshots remain unreliable because the WebGL canvas can hang the capture, but a targeted element screenshot of `.world-map__shell` succeeded and was visually inspected at `/tmp/mossu-map-overlay-panel.png`.
 - Green-grass-v3 comparison pass:
 - Used Computer Use to inspect `https://green-grass-v3.vercel.app/` directly and translated the strongest traits into `mossu`: cleaner blue sky, lower warmer sun, narrower taller meadow blades, stronger shared blade lean, and more aggressive near-to-far field compression.

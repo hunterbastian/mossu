@@ -2,8 +2,12 @@ import {
   Clock,
   Scene,
   SRGBColorSpace,
+  Vector2,
   WebGLRenderer,
 } from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { GameState } from "../../simulation/gameState";
 import { InputController, InputSnapshot } from "../../simulation/input";
 import { sampleRiverEdgeState, sampleWindStrength } from "../../simulation/world";
@@ -13,12 +17,17 @@ import { FollowCamera } from "./FollowCamera";
 import { HudShell } from "./HudShell";
 import { WorldRenderer } from "../world/WorldRenderer";
 
-const QUALITY_SAMPLE_SECONDS = 0.9;
-const QUALITY_MIN_SAMPLE_FRAMES = 18;
-const PIXEL_RATIO_DOWNSHIFT_FRAME_SECONDS = 1 / 58;
-const PIXEL_RATIO_UPSHIFT_FRAME_SECONDS = 1 / 74;
-const PIXEL_RATIO_STEP_DOWN = 0.24;
-const PIXEL_RATIO_STEP_UP = 0.025;
+const QUALITY_SAMPLE_SECONDS = 0.55;
+const QUALITY_MIN_SAMPLE_FRAMES = 12;
+const PIXEL_RATIO_DOWNSHIFT_FRAME_SECONDS = 1 / 60;
+const PIXEL_RATIO_UPSHIFT_FRAME_SECONDS = 1 / 76;
+const PIXEL_RATIO_STEP_DOWN = 0.18;
+const PIXEL_RATIO_STEP_UP = 0.02;
+const NORMAL_HUD_UPDATE_INTERVAL = 1 / 12;
+const BLOOM_STRENGTH = 0.14;
+const BLOOM_RADIUS = 0.48;
+const BLOOM_THRESHOLD = 0.82;
+const BLOOM_MIN_PIXEL_RATIO = 0.74;
 
 const PAUSED_INPUT: InputSnapshot = {
   moveX: 0,
@@ -36,6 +45,8 @@ const PAUSED_INPUT: InputSnapshot = {
 
 export class GameApp {
   private readonly renderer: WebGLRenderer;
+  private readonly composer: EffectComposer;
+  private readonly bloomPass: UnrealBloomPass;
   private readonly scene = new Scene();
   private readonly state = new GameState();
   private readonly input = new InputController(window);
@@ -54,10 +65,11 @@ export class GameApp {
   private suppressPauseOnPointerUnlock = false;
   private suppressPointerUnlockPauseUntil = 0;
   private readonly maxPixelRatio = Math.min(window.devicePixelRatio, 1.1);
-  private readonly minPixelRatio = Math.min(this.maxPixelRatio, 0.68);
+  private readonly minPixelRatio = Math.min(this.maxPixelRatio, 0.6);
   private activePixelRatio = Math.min(this.maxPixelRatio, 1);
   private frameTimeAccumulator = 0;
   private frameSampleAccumulator = 0;
+  private hudUpdateAccumulator = 0;
   private latestFrameMs = 1000 / 60;
   private smoothedFrameMs = 1000 / 60;
   private qualitySampleFrameMs = 1000 / 60;
@@ -84,6 +96,17 @@ export class GameApp {
     this.followCamera = new FollowCamera(this.renderer.domElement);
     this.world = new WorldRenderer(this.scene, { debugSpiritCloseup });
     this.followCamera.setCollisionMeshes(this.world.getCameraCollisionMeshes());
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.setPixelRatio(this.activePixelRatio);
+    this.composer.setSize(window.innerWidth, window.innerHeight);
+    this.composer.addPass(new RenderPass(this.scene, this.followCamera.camera));
+    this.bloomPass = new UnrealBloomPass(
+      new Vector2(window.innerWidth, window.innerHeight),
+      BLOOM_STRENGTH,
+      BLOOM_RADIUS,
+      BLOOM_THRESHOLD,
+    );
+    this.composer.addPass(this.bloomPass);
     this.hud = new HudShell(this.characterPreview.element);
     this.container.appendChild(this.hud.element);
     this.hud.element.classList.add("hud--title-hidden");
@@ -131,6 +154,7 @@ export class GameApp {
     this.input.dispose();
     this.followCamera.dispose();
     this.characterPreview.dispose();
+    this.composer.dispose();
     this.cameraDebugPanel?.remove();
     this.perfDebugPanel?.remove();
     this.titleScreen.remove();
@@ -220,6 +244,7 @@ export class GameApp {
       },
       camera: this.followCamera.getDebugState(),
       performance: this.getPerformanceSnapshot(),
+      qa: this.world.getQaStats(),
     });
   }
 
@@ -292,9 +317,52 @@ export class GameApp {
       faunaRegroupPressed,
     );
     this.characterPreview.update(dt, this.characterScreenOpen);
-    this.syncHud();
-    this.renderer.render(this.scene, this.followCamera.camera);
+    this.syncHudForFrame(dt);
+    this.renderScene();
     this.updateDebugPanels();
+  }
+
+  private renderScene() {
+    const bloomEnabled = this.shouldUseBloom();
+    this.bloomPass.enabled = bloomEnabled;
+    if (bloomEnabled) {
+      this.composer.render();
+      return;
+    }
+
+    this.renderer.render(this.scene, this.followCamera.camera);
+  }
+
+  private shouldUseBloom() {
+    return this.viewMode !== "map_lookdown" && this.activePixelRatio >= BLOOM_MIN_PIXEL_RATIO;
+  }
+
+  private syncHudForFrame(dt: number) {
+    const frame = this.state.frame;
+    const faunaStats = this.world.getFaunaStats();
+    const overlayActive =
+      this.titleScreenOpen ||
+      this.pauseMenuOpen ||
+      this.characterScreenOpen ||
+      this.viewMode === "map_lookdown";
+    const contextualFeedbackActive =
+      frame.player.staminaVisible ||
+      frame.forageableTarget !== null ||
+      frame.interactionTarget !== null ||
+      frame.lastCatalogedLandmarkId !== null ||
+      frame.lastGatheredForageableId !== null ||
+      faunaStats.recruitedThisFrame > 0 ||
+      faunaStats.regroupActive ||
+      faunaStats.callHeardActive ||
+      (faunaStats.nearestRecruitableDistance !== null && faunaStats.nearestRecruitableDistance <= 14.5);
+
+    this.hudUpdateAccumulator += dt;
+    if (!overlayActive && !contextualFeedbackActive && this.hudUpdateAccumulator < NORMAL_HUD_UPDATE_INTERVAL) {
+      return;
+    }
+
+    this.hudUpdateAccumulator = 0;
+    this.syncHud();
   }
 
   private syncHud() {
@@ -342,6 +410,7 @@ export class GameApp {
 
     this.activePixelRatio = nextPixelRatio;
     this.renderer.setPixelRatio(this.activePixelRatio);
+    this.composer.setPixelRatio(this.activePixelRatio);
   }
 
   private trackFrameTiming(rawDt: number) {
@@ -383,6 +452,7 @@ export class GameApp {
       pixelRatio: Number(this.activePixelRatio.toFixed(2)),
       maxPixelRatio: Number(this.maxPixelRatio.toFixed(2)),
       minPixelRatio: Number(this.minPixelRatio.toFixed(2)),
+      bloomEnabled: this.shouldUseBloom(),
       renderer: {
         calls: rendererInfo.render.calls,
         triangles: rendererInfo.render.triangles,
@@ -405,12 +475,13 @@ export class GameApp {
     const perf = this.getPerformanceSnapshot();
     this.perfDebugPanel.textContent = [
       `perf ${perf.fps}fps  avg ${perf.frameMs}ms  raw ${perf.latestFrameMs}ms`,
-      `quality avg ${perf.qualitySampleFrameMs}ms  pixelRatio ${perf.pixelRatio} (${perf.minPixelRatio}-${perf.maxPixelRatio})`,
+      `quality avg ${perf.qualitySampleFrameMs}ms  pixelRatio ${perf.pixelRatio} (${perf.minPixelRatio}-${perf.maxPixelRatio})  bloom ${perf.bloomEnabled ? "on" : "off"}`,
       `renderer calls ${perf.renderer.calls}  tris ${perf.renderer.triangles}  lines ${perf.renderer.lines}  points ${perf.renderer.points}`,
       `memory geometries ${perf.memory.geometries}  textures ${perf.memory.textures}`,
       `terrain ${perf.world.terrainVertices}v / ${perf.world.terrainTriangles}t`,
       `grass ${perf.world.grassMeshes} meshes / ${perf.world.grassInstances} inst / est ${perf.world.grassEstimatedTriangles}t`,
       `forest ${perf.world.forestMeshes} meshes / ${perf.world.forestInstances} inst / est ${perf.world.forestEstimatedTriangles}t`,
+      `small props ${perf.world.smallPropMeshes} meshes / ${perf.world.smallPropInstances} inst / est ${perf.world.smallPropEstimatedTriangles}t`,
       `water ${perf.world.waterSurfaces} surfaces / ${perf.world.waterVertices}v / ${perf.world.waterTriangles}t`,
       `animated shaders ${perf.world.animatedShaderMeshes}  grass ${perf.world.grassShaderMeshes}  trees ${perf.world.treeShaderMeshes}  water ${perf.world.waterShaderSurfaces}`,
     ].join("\n");
@@ -418,6 +489,7 @@ export class GameApp {
 
   private handleResize = () => {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.composer.setSize(window.innerWidth, window.innerHeight);
     this.followCamera.resize(window.innerWidth, window.innerHeight);
   };
 

@@ -52,6 +52,8 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Opening lake is not filled with grass.
 - Mossu swims in deep water.
 - Mossu exits water cleanly at banks.
+- Shoreline reeds, sedges, pebbles, damp rims, and visible swim state agree at every major bank entry.
+- Highland creek ribbons, pools, runoffs, and waterfalls read as intentional water features instead of pale slabs.
 - Water flow direction appears downhill or route-consistent.
 
 ## Terrain
@@ -69,10 +71,18 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Instanced forest does not show black or broken canopies.
 - Trees are naturally spaced, not grid-like.
 - Trees do not block the main route too aggressively.
+- Real trees frame spaces; saplings, shrubs, and shoreline understory do not scatter evenly everywhere.
 - Grass density feels lush but Mossu remains visible.
 - Grass wind is not synchronized like one sine wave.
 - Mossu push interaction visibly bends grass outward without hiding Mossu.
 - Premium grass does not make Chrome frame pacing noticeably worse.
+
+## Full Route
+
+- Start at Burrow Hollow and reach Moss Crown Shrine in Chrome without teleporting.
+- Record every stuck spot, confusing side bank, unreadable creek crossing, camera collision, and Karu-following failure.
+- At each landmark, check that the next intended route still reads from the terrain shape, water edge, tree framing, and HUD/map language.
+- Capture at least one screenshot from the opening meadow, opening lake shore, river bend/creek shore, forest edge, highland creek/waterfall, and shrine approach.
 
 ## UI
 
@@ -98,6 +108,7 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Opening map/inventory/pause does not hitch heavily.
 - Dynamic pixel ratio does not visibly blur the game too much.
 - No runaway memory or repeated console warnings after a few minutes.
+- With `?perfDebug=1`, track renderer calls, triangles, active grass instances, water surfaces, and small-prop meshes/instances after any world-density pass.
 
 ## Regression Notes
 

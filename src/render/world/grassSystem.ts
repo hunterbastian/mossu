@@ -513,7 +513,8 @@ export function updateGrassMeshLod(mesh: InstancedMesh, origin: Vector3, frameIn
   const dz = origin.z - lod.lastOriginZ;
   const movedEnough = dx * dx + dz * dz >= lod.options.movementThreshold ** 2;
   const frameDue = frameIndex - lod.lastFrame >= lod.options.updateEveryFrames;
-  if (!movedEnough && !frameDue) {
+  const initialized = lod.lastFrame >= 0;
+  if (initialized && (!movedEnough || !frameDue)) {
     return;
   }
 

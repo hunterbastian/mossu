@@ -18,7 +18,11 @@ import {
   worldLandmarks,
 } from "../../simulation/world";
 import { ViewMode } from "../../simulation/viewMode";
-import { movementYawToTrailingCameraYaw } from "./cameraYaw";
+import {
+  cameraPositionYawToLookYaw,
+  movementYawToTrailingCameraYaw,
+  shouldAutoRecenterForMovement,
+} from "./cameraYaw";
 
 CameraControls.install({ THREE });
 (BufferGeometry.prototype as BufferGeometry & { computeBoundsTree?: typeof computeBoundsTree }).computeBoundsTree =
@@ -28,17 +32,17 @@ CameraControls.install({ THREE });
 (Mesh.prototype as Mesh).raycast = acceleratedRaycast;
 (Raycaster.prototype as Raycaster & { firstHitOnly?: boolean }).firstHitOnly = true;
 
-const GAMEPLAY_FOV = 50;
+const GAMEPLAY_FOV = 52;
 const MAP_FOV = 24;
-const MIN_DISTANCE = 22;
-const MAX_DISTANCE = 52;
-const DEFAULT_DISTANCE = 34;
+const MIN_DISTANCE = 24;
+const MAX_DISTANCE = 60;
+const DEFAULT_DISTANCE = 37;
 const MAP_MARGIN = 84;
-const DEFAULT_FOCUS_HEIGHT = 6.3;
-const START_DISTANCE = 36.5;
-const START_FOCUS_HEIGHT = 4.4;
-const START_CAMERA_LIFT = 9.8;
-const START_SHOULDER = -4.2;
+const DEFAULT_FOCUS_HEIGHT = 6.8;
+const START_DISTANCE = 43;
+const START_FOCUS_HEIGHT = 5.35;
+const START_CAMERA_LIFT = 12.4;
+const START_SHOULDER = -2.8;
 const MIN_POLAR_ANGLE = 0.58;
 const MAX_POLAR_ANGLE = 2.28;
 const MANUAL_LOOK_COOLDOWN_SECONDS = 3.4;
@@ -70,17 +74,17 @@ interface CameraProfile {
 const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
   walk: {
     name: "walk",
-    distance: 34.5,
+    distance: 38,
     speedDistanceBoost: 0.9,
-    terrainDistanceBoost: 2.1,
-    focusHeight: 5.45,
+    terrainDistanceBoost: 2.4,
+    focusHeight: 6.05,
     terrainFocusLift: 1.15,
     lookAheadBase: 0.07,
     lookAheadSpeed: 0.1,
-    polar: 1.31,
+    polar: 1.35,
     terrainPolarLift: 0.08,
     speedPolarLift: 0.01,
-    fov: 48.5,
+    fov: 51,
     shoulder: 0.28,
     yawResponsiveness: 0.62,
     focusDamping: 4.4,
@@ -91,38 +95,38 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
   },
   roll: {
     name: "roll",
-    distance: 38,
-    speedDistanceBoost: 2.1,
-    terrainDistanceBoost: 1.5,
-    focusHeight: 5.85,
-    terrainFocusLift: 0.95,
-    lookAheadBase: 0.12,
-    lookAheadSpeed: 0.16,
-    polar: 1.38,
+    distance: 43.5,
+    speedDistanceBoost: 6.1,
+    terrainDistanceBoost: 1.2,
+    focusHeight: 5.9,
+    terrainFocusLift: 0.78,
+    lookAheadBase: 0.18,
+    lookAheadSpeed: 0.34,
+    polar: 1.47,
     terrainPolarLift: 0.06,
-    speedPolarLift: 0.03,
-    fov: 50.5,
-    shoulder: 0.45,
-    yawResponsiveness: 1.1,
-    focusDamping: 5.2,
-    distanceDamping: 4.6,
-    profileDamping: 3.8,
-    positionDamping: 6.8,
-    targetDamping: 5.5,
+    speedPolarLift: 0.025,
+    fov: 56,
+    shoulder: 0.22,
+    yawResponsiveness: 0.74,
+    focusDamping: 4.7,
+    distanceDamping: 3.9,
+    profileDamping: 3.4,
+    positionDamping: 5.9,
+    targetDamping: 4.8,
   },
   air: {
     name: "air",
-    distance: 36.5,
+    distance: 39,
     speedDistanceBoost: 1.1,
     terrainDistanceBoost: 1.7,
-    focusHeight: 6.65,
+    focusHeight: 7.15,
     terrainFocusLift: 1.15,
     lookAheadBase: 0.13,
     lookAheadSpeed: 0.14,
     polar: 1.24,
     terrainPolarLift: 0.05,
     speedPolarLift: 0,
-    fov: 50.5,
+    fov: 52,
     shoulder: 0.18,
     yawResponsiveness: 0.42,
     focusDamping: 4,
@@ -133,7 +137,7 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
   },
   swim: {
     name: "swim",
-    distance: 31,
+    distance: 34,
     speedDistanceBoost: 0.55,
     terrainDistanceBoost: 0.7,
     focusHeight: 4.75,
@@ -143,7 +147,7 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
     polar: 1.42,
     terrainPolarLift: 0,
     speedPolarLift: 0.02,
-    fov: 48,
+    fov: 50,
     shoulder: 0.1,
     yawResponsiveness: 0.52,
     focusDamping: 3.8,
@@ -154,17 +158,17 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
   },
   ridge: {
     name: "ridge",
-    distance: 41,
+    distance: 45,
     speedDistanceBoost: 0.9,
     terrainDistanceBoost: 3,
-    focusHeight: 7.1,
+    focusHeight: 7.7,
     terrainFocusLift: 1.35,
     lookAheadBase: 0.095,
     lookAheadSpeed: 0.11,
     polar: 1.46,
     terrainPolarLift: 0.09,
     speedPolarLift: 0.01,
-    fov: 49.5,
+    fov: 52,
     shoulder: 0.35,
     yawResponsiveness: 0.48,
     focusDamping: 3.9,
@@ -175,17 +179,17 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
   },
   summit: {
     name: "summit",
-    distance: 44,
+    distance: 48,
     speedDistanceBoost: 0.65,
     terrainDistanceBoost: 2.1,
-    focusHeight: 8.3,
+    focusHeight: 8.9,
     terrainFocusLift: 1.05,
     lookAheadBase: 0.085,
     lookAheadSpeed: 0.1,
     polar: 1.52,
     terrainPolarLift: 0.08,
     speedPolarLift: 0,
-    fov: 50.5,
+    fov: 52,
     shoulder: 0.28,
     yawResponsiveness: 0.38,
     focusDamping: 3.4,
@@ -272,6 +276,7 @@ export class FollowCamera {
   private manualLookCooldown = 0;
   private distanceBias = 0;
   private activeProfileName: CameraProfileName = "walk";
+  private autoRecenterEligible = false;
   private currentDistance = DEFAULT_DISTANCE;
   private currentFocusHeight = DEFAULT_FOCUS_HEIGHT;
   private currentLookAhead = 0.08;
@@ -359,8 +364,8 @@ export class FollowCamera {
     this.currentFov = MathUtils.damp(this.currentFov, profile.fov, profile.profileDamping, dt);
 
     this.playerVelocity.set(player.velocity.x, 0, player.velocity.z);
-    const cameraYaw = this.controls.azimuthAngle;
-    this.shoulderRight.set(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
+    const cameraLookYaw = cameraPositionYawToLookYaw(this.controls.azimuthAngle);
+    this.shoulderRight.set(Math.cos(cameraLookYaw), 0, -Math.sin(cameraLookYaw));
     this.desiredFocus
       .copy(player.position)
       .addScalar(0)
@@ -406,8 +411,14 @@ export class FollowCamera {
         this.currentPolar = controls._sphericalEnd.phi;
       }
 
+      this.autoRecenterEligible = shouldAutoRecenterForMovement(
+        cameraPositionYawToLookYaw(controls._sphericalEnd.theta),
+        player.velocity.x,
+        player.velocity.z,
+      );
+
       if (this.manualLookCooldown <= 0 && !player.fallingToVoid) {
-        if (player.grounded && speed > 1.2 && profile.yawResponsiveness > 0) {
+        if (player.grounded && this.autoRecenterEligible && profile.yawResponsiveness > 0) {
           const desiredYaw = Math.atan2(player.velocity.x, player.velocity.z);
           const desiredCameraYaw = movementYawToTrailingCameraYaw(desiredYaw);
           const currentYaw = controls._sphericalEnd.theta;
@@ -494,6 +505,7 @@ export class FollowCamera {
       shoulder: Number(this.currentShoulder.toFixed(2)),
       manualLookCooldown: Number(this.manualLookCooldown.toFixed(2)),
       recenterCooldown: Number(this.manualLookCooldown.toFixed(2)),
+      autoRecenterEligible: this.autoRecenterEligible,
       yawResponsiveness: Number(profile.yawResponsiveness.toFixed(2)),
       minPolar: MIN_POLAR_ANGLE,
       maxPolar: MAX_POLAR_ANGLE,

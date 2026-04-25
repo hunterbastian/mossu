@@ -33,6 +33,7 @@ import {
   sampleBaseTerrainHeight,
   sampleBiomeZone,
   sampleHabitatLayer,
+  sampleIslandEdgeFactor,
   sampleIslandBoundaryPoint,
   samplePaintedGroundMask,
   sampleRiverDampBankMask,
@@ -81,7 +82,7 @@ const GRASS_COUNT = 5600;
 const ALPINE_GRASS_COUNT = 1000;
 const LANDING_SPLASH_PARTICLES = 18;
 const SNOW_TRAIL_PARTICLES = 20;
-const WATER_RIPPLE_LIMIT = 8;
+const WATER_RIPPLE_LIMIT = 4;
 const WATER_RIPPLE_LIFETIME = 1.45;
 const WATER_RIPPLE_MIN_DEPTH = 0.16;
 
@@ -141,6 +142,9 @@ export interface WorldPerfStats {
   forestMeshes: number;
   forestInstances: number;
   forestEstimatedTriangles: number;
+  smallPropMeshes: number;
+  smallPropInstances: number;
+  smallPropEstimatedTriangles: number;
   waterSurfaces: number;
   waterVertices: number;
   waterTriangles: number;
@@ -150,9 +154,18 @@ export interface WorldPerfStats {
   waterShaderSurfaces: number;
 }
 
+export interface WorldQaStats {
+  smallPropMeshes: number;
+  smallPropInstances: number;
+  smallPropMeshesUsingGeometryVertexColors: number;
+  smallPropMeshesMissingInstanceColors: number;
+  emptySmallPropMeshes: number;
+}
+
 function colorForTerrain(x: number, y: number, z: number) {
   const zone = sampleBiomeZone(x, z, y);
   const habitat = sampleHabitatLayer(x, z, y);
+  const islandEdge = sampleIslandEdgeFactor(x, z);
   const normal = sampleTerrainNormal(x, z);
   const slope = 1 - normal.y;
   const painterlyNoise = Math.sin(x * 0.07) * 0.04 + Math.cos(z * 0.05) * 0.03 + Math.sin((x - z) * 0.03) * 0.05;
@@ -209,7 +222,7 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color("#d8c989"), MathUtils.clamp(0.24 + sunWash * 0.22 + pathBands * 0.14, 0, 1))
     .lerp(new Color("#a1a988"), foothillTint * 0.16 + alpineTint * 0.22);
 
-  return grass
+  const terrainColor = grass
     .lerp(new Color("#a6c86f"), habitat.meadow * (0.12 + openingMask * 0.08))
     .lerp(new Color("#4f6b45"), habitat.forest * 0.16)
     .lerp(new Color("#71866f"), habitat.shore * 0.18)
@@ -222,6 +235,7 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color("#d6c57d"), meadowBloom * (0.28 + openingMask * 0.16))
     .lerp(rock, rockMask * (1 - snowMask * 0.46))
     .lerp(snow, snowMask);
+  return terrainColor.lerp(new Color("#cdeef4"), MathUtils.smoothstep(islandEdge, 0.74, 1) * 0.74);
 }
 
 function makeTerrainMesh() {
@@ -230,15 +244,31 @@ function makeTerrainMesh() {
 
   const positions = geometry.attributes.position as BufferAttribute;
   const colors = new Float32Array(positions.count * 3);
+  const edgeFactors = new Float32Array(positions.count);
   for (let i = 0; i < positions.count; i += 1) {
     const x = positions.getX(i);
     const z = positions.getZ(i);
     const y = sampleTerrainHeight(x, z);
     positions.setY(i, y);
+    edgeFactors[i] = sampleIslandEdgeFactor(x, z);
     const color = colorForTerrain(x, y, z);
     colors[i * 3] = color.r;
     colors[i * 3 + 1] = color.g;
     colors[i * 3 + 2] = color.b;
+  }
+
+  const index = geometry.getIndex();
+  if (index) {
+    const trimmedIndices: number[] = [];
+    for (let i = 0; i < index.count; i += 3) {
+      const a = index.getX(i);
+      const b = index.getX(i + 1);
+      const c = index.getX(i + 2);
+      if (Math.min(edgeFactors[a], edgeFactors[b], edgeFactors[c]) < 0.998) {
+        trimmedIndices.push(a, b, c);
+      }
+    }
+    geometry.setIndex(trimmedIndices);
   }
 
   geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
@@ -297,11 +327,11 @@ function buildShadowPockets() {
 function buildValleyMist() {
   const group = new Group();
   const patches = [
-    [-54, -126, 92, 34, 5.2, 0.18, -0.08],
-    [-8, -28, 138, 42, 7.8, 0.13, 0.04],
-    [26, 72, 92, 26, 10.2, 0.065, -0.14],
-    [18, 134, 84, 28, 13.4, 0.055, 0.1],
-    [-18, 190, 146, 44, 17, 0.1, -0.02],
+    [-54, -118, 54, 20, 3.6, 0.045, -0.08],
+    [-8, -28, 112, 34, 7.2, 0.07, 0.04],
+    [26, 72, 92, 26, 10.2, 0.055, -0.14],
+    [18, 134, 84, 28, 13.4, 0.045, 0.1],
+    [-18, 190, 134, 40, 17, 0.07, -0.02],
   ] as const;
 
   patches.forEach(([x, z, width, depth, lift, opacity, rotation], index) => {
@@ -732,6 +762,7 @@ export class WorldRenderer {
   readonly clouds = buildClouds();
   readonly windMeshes: Array<InstancedMesh> = [];
   private readonly treeWindMeshes: Array<InstancedMesh> = [];
+  private readonly smallPropMeshes: Array<InstancedMesh> = [];
   private readonly waterControllers: Array<WaterSurfaceController> = [];
   private readonly waterRipples: WaterRippleSource[] = [];
   private readonly waterRippleActorStates = new Map<string, WaterRippleActorState>();
@@ -1000,11 +1031,11 @@ export class WorldRenderer {
     }
     scene.add(this.mountainSilhouettes);
 
-    const splashGeometry = new PlaneGeometry(0.42, 1.7, 1, 5);
-    splashGeometry.translate(0, 0.85, 0);
+    const splashGeometry = new PlaneGeometry(0.3, 1.15, 1, 5);
+    splashGeometry.translate(0, 0.58, 0);
     for (let i = 0; i < LANDING_SPLASH_PARTICLES; i += 1) {
       const material = new MeshLambertMaterial({
-        color: i % 4 === 0 ? "#cfe8a8" : i % 3 === 0 ? "#a9d27c" : "#7fb863",
+        color: i % 4 === 0 ? "#a7d17e" : i % 3 === 0 ? "#89bd68" : "#6da357",
         side: DoubleSide,
         transparent: true,
         opacity: 0,
@@ -1082,6 +1113,14 @@ export class WorldRenderer {
     this.collectCameraColliders(this.landmarkTrees);
     this.collectTreeWindMeshes(this.treeClusters);
     [
+      this.groundLayer,
+      this.midLayer,
+      this.treeClusters,
+      this.biomeTransitionAccents,
+      this.waterBankAccents,
+      this.highlandAccents,
+    ].forEach((object) => this.collectSmallPropMeshes(object));
+    [
       this.terrain,
       this.islandShell,
       this.riverSystem.group,
@@ -1106,6 +1145,19 @@ export class WorldRenderer {
 
   getPerfStats() {
     return this.createPerfStats();
+  }
+
+  getQaStats(): WorldQaStats {
+    return {
+      smallPropMeshes: this.smallPropMeshes.length,
+      smallPropInstances: this.smallPropMeshes.reduce((sum, mesh) => sum + mesh.count, 0),
+      smallPropMeshesUsingGeometryVertexColors: this.smallPropMeshes.filter((mesh) => {
+        const material = mesh.material as Material & { vertexColors?: boolean };
+        return material.vertexColors === true;
+      }).length,
+      smallPropMeshesMissingInstanceColors: this.smallPropMeshes.filter((mesh) => !mesh.instanceColor).length,
+      emptySmallPropMeshes: this.smallPropMeshes.filter((mesh) => mesh.count <= 0).length,
+    };
   }
 
   getFaunaStats() {
@@ -1143,7 +1195,7 @@ export class WorldRenderer {
       regroupPressed,
     );
     this.updateWaterInteractions(frame, elapsed, mapLookdown);
-    this.updateWater(elapsed);
+    this.updateWater(elapsed, mapLookdown);
     this.updateLandingSplash(frame, dt);
     this.updateSnowTrail(frame, dt);
     this.updateForageables(frame, elapsed, mapLookdown);
@@ -1158,6 +1210,7 @@ export class WorldRenderer {
     this.mountainSilhouettes.visible = !mapLookdown;
     this.mountainAtmosphere.visible = !mapLookdown;
     this.valleyMist.visible = !mapLookdown;
+    this.shadowVolumes.visible = !mapLookdown;
   }
 
   private updateForageables(frame: FrameState, elapsed: number, mapLookdown: boolean) {
@@ -1216,6 +1269,7 @@ export class WorldRenderer {
     );
     const grassInstances = this.windMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
     const forestInstances = this.treeWindMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
+    const smallPropInstances = this.smallPropMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
 
     return {
       terrainVertices: countGeometryVertices(this.terrain.geometry),
@@ -1226,6 +1280,9 @@ export class WorldRenderer {
       forestMeshes: this.treeWindMeshes.length,
       forestInstances,
       forestEstimatedTriangles: countInstancedTriangles(this.treeWindMeshes),
+      smallPropMeshes: this.smallPropMeshes.length,
+      smallPropInstances,
+      smallPropEstimatedTriangles: countInstancedTriangles(this.smallPropMeshes),
       waterSurfaces: this.waterControllers.length,
       waterVertices: waterGeometryStats.vertices,
       waterTriangles: waterGeometryStats.triangles,
@@ -1241,6 +1298,15 @@ export class WorldRenderer {
       const mesh = node as InstancedMesh;
       if (mesh.isInstancedMesh && mesh.userData.canopyWind) {
         this.treeWindMeshes.push(mesh);
+      }
+    });
+  }
+
+  private collectSmallPropMeshes(root: Object3D) {
+    root.traverse((node) => {
+      const mesh = node as InstancedMesh;
+      if (mesh.isInstancedMesh && mesh.userData.smallPropBatch) {
+        this.smallPropMeshes.push(mesh);
       }
     });
   }
@@ -1388,9 +1454,9 @@ export class WorldRenderer {
     });
   }
 
-  private updateWater(elapsed: number) {
+  private updateWater(elapsed: number, mapLookdown: boolean) {
     this.waterControllers.forEach((controller) => {
-      controller.update(elapsed, this.waterRipples);
+      controller.update(elapsed, this.waterRipples, mapLookdown);
     });
   }
 
@@ -1443,12 +1509,12 @@ export class WorldRenderer {
       particle.mesh.rotateX(-0.28 - (1 - lifeT) * 0.42);
       particle.mesh.rotateZ((Math.sin(lifeT * Math.PI * 1.2) * 0.16 + 0.06) * (particle.twist > 0 ? 1 : -1));
 
-      const width = particle.width * (0.45 + easeOut * 0.85);
-      const height = particle.height * (0.2 + easeOut * 0.95) * (1 - lifeT * 0.32);
+      const width = particle.width * (0.36 + easeOut * 0.64);
+      const height = particle.height * (0.16 + easeOut * 0.72) * (1 - lifeT * 0.42);
       particle.mesh.scale.set(width, height, 1);
       particle.mesh.visible = true;
       const material = particle.mesh.material as MeshLambertMaterial;
-      material.opacity = Math.max(0, (1 - lifeT) * 0.88);
+      material.opacity = Math.max(0, (1 - lifeT) * 0.48);
       if (lifeT >= 1) {
         particle.mesh.visible = false;
       }
@@ -1477,15 +1543,15 @@ export class WorldRenderer {
 
       particle.age = 0;
       particle.life = 0.26 + Math.random() * 0.14;
-      particle.height = (0.9 + Math.random() * 1.2) * (0.85 + impact * 0.35);
-      particle.width = 0.65 + Math.random() * 0.38;
-      particle.bend = (0.45 + Math.random() * 0.9) * impact;
+      particle.height = (0.54 + Math.random() * 0.74) * (0.78 + impact * 0.18);
+      particle.width = 0.42 + Math.random() * 0.22;
+      particle.bend = (0.32 + Math.random() * 0.58) * impact;
       particle.twist = (Math.random() - 0.5) * 1.4;
       particle.mesh.position.copy(particle.origin);
       particle.mesh.scale.set(0.2, 0.12, 1);
       particle.mesh.visible = true;
       const material = particle.mesh.material as MeshLambertMaterial;
-      material.opacity = 0.88;
+      material.opacity = 0.48;
     });
   }
 

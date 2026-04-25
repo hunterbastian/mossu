@@ -7,6 +7,7 @@ import {
   Float32BufferAttribute,
   Group,
   InstancedMesh,
+  Matrix4,
   MathUtils,
   Mesh,
   MeshBasicMaterial,
@@ -544,6 +545,295 @@ function makePineSapling(scale: number, tone = "#668a55") {
   return group;
 }
 
+type SmallPropGeometryKind =
+  | "cone-5"
+  | "flower-stem"
+  | "mushroom-stem"
+  | "sphere-5-4"
+  | "sphere-6-5";
+
+interface SmallPropBucket {
+  geometry: BufferGeometry;
+  material: MeshLambertMaterial;
+  matrices: Matrix4[];
+  colors: Color[];
+}
+
+class SmallPropInstancer {
+  private readonly buckets = new Map<string, SmallPropBucket>();
+  private readonly dummy = new Object3D();
+
+  constructor(private readonly name: string) {}
+
+  addFlower(x: number, y: number, z: number, yaw: number, color: string, scale: number, stemHeight: number) {
+    const height = stemHeight * scale;
+    this.addPrimitive("flower-stem", "#699953", x, y + height * 0.5, z, yaw, 0.05 * scale, height, 0.05 * scale);
+    this.addPrimitive("sphere-5-4", "#f6d888", x, y + height, z, yaw, 0.12 * scale, 0.12 * scale, 0.12 * scale);
+
+    for (let i = 0; i < 5; i += 1) {
+      const angle = (i / 5) * Math.PI * 2;
+      const local = this.transformLocal(Math.cos(angle) * 0.18 * scale, Math.sin(angle) * 0.18 * scale, yaw);
+      this.addPrimitive(
+        "sphere-5-4",
+        color,
+        x + local.x,
+        y + height,
+        z + local.z,
+        yaw,
+        0.14 * scale * 1.2,
+        0.14 * scale * 0.72,
+        0.14 * scale * 1.05,
+      );
+    }
+  }
+
+  addCloverPatch(x: number, y: number, z: number, yaw: number, radius: number, color: string) {
+    for (const [lx, lz, s] of [
+      [0, 0, 1],
+      [0.24, 0.08, 0.82],
+      [-0.22, -0.1, 0.88],
+      [0.04, -0.22, 0.76],
+    ] as const) {
+      const local = this.transformLocal(lx * radius * 2.4, lz * radius * 2.4, yaw);
+      this.addPrimitive(
+        "sphere-5-4",
+        color,
+        x + local.x,
+        y + 0.05,
+        z + local.z,
+        yaw,
+        radius * s * 1.2,
+        radius * s * 0.18,
+        radius * s * 1.2,
+      );
+    }
+  }
+
+  addGrassClump(x: number, y: number, z: number, yaw: number, scale: number, color: string) {
+    for (const [lx, rotZ, h] of [
+      [-0.16, -0.28, 0.7],
+      [0, 0, 0.84],
+      [0.16, 0.26, 0.72],
+    ] as const) {
+      const local = this.transformLocal(lx * scale, 0, yaw);
+      this.addPrimitive(
+        "cone-5",
+        color,
+        x + local.x,
+        y + h * scale * 0.5,
+        z + local.z,
+        yaw,
+        0.1 * scale,
+        h * scale,
+        0.1 * scale,
+        0,
+        rotZ,
+      );
+    }
+  }
+
+  addReedCluster(x: number, y: number, z: number, yaw: number, scale: number, color: string) {
+    for (const [lx, lz, rotZ, h] of [
+      [-0.24, -0.08, -0.18, 1],
+      [-0.08, 0.12, 0.06, 1.18],
+      [0.12, -0.02, 0.2, 1.08],
+      [0.28, 0.14, 0.34, 0.86],
+    ] as const) {
+      const local = this.transformLocal(lx * scale, lz * scale, yaw);
+      this.addPrimitive(
+        "cone-5",
+        color,
+        x + local.x,
+        y + h * scale * 0.5,
+        z + local.z,
+        yaw,
+        0.055 * scale,
+        h * scale,
+        0.055 * scale,
+        0,
+        rotZ,
+      );
+    }
+  }
+
+  addTinyRock(x: number, y: number, z: number, yaw: number, rotZ: number, scale: number, color: string) {
+    const radius = 0.28 * scale;
+    this.addPrimitive("sphere-6-5", color, x, y, z, yaw, radius * 1.15, radius * 0.72, radius, 0, rotZ);
+  }
+
+  addBankPebbleCluster(x: number, y: number, z: number, yaw: number, scale: number, color: string) {
+    for (const [lx, lz, sx, sy, sz] of [
+      [0, 0, 1.28, 0.28, 0.86],
+      [0.46, -0.16, 0.78, 0.22, 0.56],
+      [-0.42, 0.18, 0.92, 0.24, 0.64],
+    ] as const) {
+      const local = this.transformLocal(lx * scale, lz * scale, yaw);
+      const radius = 0.34 * scale;
+      this.addPrimitive(
+        "sphere-5-4",
+        color,
+        x + local.x,
+        y + 0.08 * scale,
+        z + local.z,
+        yaw,
+        radius * sx * scale,
+        radius * sy * scale,
+        radius * sz * scale,
+      );
+    }
+  }
+
+  addBankLipPebbleTrail(x: number, y: number, z: number, yaw: number, scale: number, color: string) {
+    for (const [lx, lz, width, depth, localYaw] of [
+      [-1.16, -0.08, 0.78, 0.36, -0.18],
+      [-0.46, 0.12, 0.54, 0.28, 0.28],
+      [0.18, -0.02, 0.66, 0.32, -0.08],
+      [0.86, 0.1, 0.5, 0.26, 0.2],
+    ] as const) {
+      const local = this.transformLocal(lx * scale, lz * scale, yaw);
+      const radius = 0.28 * scale;
+      this.addPrimitive(
+        "sphere-5-4",
+        color,
+        x + local.x,
+        y + 0.07 * scale,
+        z + local.z,
+        yaw + localYaw,
+        radius * width * scale,
+        radius * 0.18 * scale,
+        radius * depth * scale,
+      );
+    }
+  }
+
+  addBush(x: number, y: number, z: number, yaw: number, scale: number, color: string) {
+    for (const [lx, ly, lz, s] of [
+      [0, 0.5, 0, 1],
+      [0.34, 0.42, 0.08, 0.72],
+      [-0.32, 0.38, -0.04, 0.68],
+    ] as const) {
+      const local = this.transformLocal(lx * scale, lz * scale, yaw);
+      const radius = 0.6 * scale * s;
+      this.addPrimitive("sphere-6-5", color, x + local.x, y + ly * scale, z + local.z, yaw, radius, radius, radius);
+    }
+  }
+
+  addMossPatch(x: number, y: number, z: number, yaw: number, scale: number, color: string) {
+    for (const [lx, lz, radius] of [
+      [0, 0, 0.72],
+      [0.34, -0.12, 0.46],
+      [-0.28, 0.16, 0.42],
+    ] as const) {
+      const local = this.transformLocal(lx * scale, lz * scale, yaw);
+      this.addPrimitive(
+        "sphere-6-5",
+        color,
+        x + local.x,
+        y + 0.06 * scale,
+        z + local.z,
+        yaw,
+        radius * scale * 1.35,
+        radius * scale * 0.24,
+        radius * scale * 1.18,
+      );
+    }
+  }
+
+  addMushroom(x: number, y: number, z: number, yaw: number, scale: number, capColor: string) {
+    this.addPrimitive("mushroom-stem", "#f3ead5", x, y + 0.28 * scale, z, yaw, 0.08 * scale, 0.55 * scale, 0.08 * scale);
+    this.addPrimitive(
+      "sphere-6-5",
+      capColor,
+      x,
+      y + 0.56 * scale,
+      z,
+      yaw,
+      0.2 * scale * 1.4,
+      0.2 * scale * 0.72,
+      0.2 * scale * 1.4,
+    );
+  }
+
+  buildGroup() {
+    const group = new Group();
+    group.name = this.name;
+    this.buckets.forEach((bucket, key) => {
+      const mesh = new InstancedMesh(bucket.geometry, bucket.material, bucket.matrices.length);
+      mesh.name = `${this.name}-${key}`;
+      mesh.userData.smallPropBatch = true;
+      mesh.userData.smallPropInstances = bucket.matrices.length;
+      bucket.matrices.forEach((matrix, index) => {
+        mesh.setMatrixAt(index, matrix);
+        mesh.setColorAt(index, bucket.colors[index]);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) {
+        mesh.instanceColor.needsUpdate = true;
+      }
+      group.add(mesh);
+    });
+    return group;
+  }
+
+  private addPrimitive(
+    kind: SmallPropGeometryKind,
+    color: string,
+    x: number,
+    y: number,
+    z: number,
+    yaw: number,
+    scaleX: number,
+    scaleY: number,
+    scaleZ: number,
+    pitch = 0,
+    roll = 0,
+  ) {
+    const key = kind;
+    let bucket = this.buckets.get(key);
+    if (!bucket) {
+      bucket = {
+        geometry: this.createGeometry(kind),
+        material: new MeshLambertMaterial({ color: "#ffffff" }),
+        matrices: [],
+        colors: [],
+      };
+      this.buckets.set(key, bucket);
+    }
+
+    this.dummy.position.set(x, y, z);
+    this.dummy.rotation.set(pitch, yaw, roll);
+    this.dummy.scale.set(scaleX, scaleY, scaleZ);
+    this.dummy.updateMatrix();
+    bucket.matrices.push(this.dummy.matrix.clone());
+    bucket.colors.push(new Color(color));
+  }
+
+  transformLocal(x: number, z: number, yaw: number) {
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    return {
+      x: x * cos + z * sin,
+      z: -x * sin + z * cos,
+    };
+  }
+
+  private createGeometry(kind: SmallPropGeometryKind) {
+    switch (kind) {
+      case "cone-5":
+        return new ConeGeometry(1, 1, 5);
+      case "flower-stem":
+        return new CylinderGeometry(0.6, 1, 1, 5);
+      case "mushroom-stem":
+        return new CylinderGeometry(0.75, 1, 1, 6);
+      case "sphere-6-5":
+        return new SphereGeometry(1, 6, 5);
+      case "sphere-5-4":
+      default:
+        return new SphereGeometry(1, 5, 4);
+    }
+  }
+}
+
 function makeFlower(color: string, scale: number, stemHeight: number) {
   const group = new Group();
   const stem = new Mesh(
@@ -868,7 +1158,7 @@ function makeMushroom(scale: number, capColor: string) {
   return group;
 }
 
-function addForestUnderstoryPatch(group: Group, x: number, z: number, scale: number, seed: number, tone: "lowland" | "foothill") {
+function addForestUnderstoryPatch(group: Group, x: number, z: number, scale: number, seed: number, tone: "lowland" | "foothill", props?: SmallPropInstancer) {
   const y = sampleTerrainHeight(x, z);
   const habitat = sampleHabitatLayer(x, z, y);
   if (habitat.meadow > 0.82 && habitat.forest < 0.28 && habitat.edge < 0.22) {
@@ -879,6 +1169,21 @@ function addForestUnderstoryPatch(group: Group, x: number, z: number, scale: num
   const mossColor = habitat.shore > 0.36 ? "#76956d" : tone === "lowland" ? "#86a965" : "#748760";
   const bushColor = habitat.edge > 0.28 ? (tone === "lowland" ? "#94c978" : "#789b65") : tone === "lowland" ? "#88bd68" : "#6f8b5d";
   const grassColor = habitat.shore > 0.32 ? "#6f9461" : tone === "lowland" ? "#83aa5c" : "#71865d";
+  const yaw = forestHash(x, z, seed) * Math.PI * 2;
+
+  if (props) {
+    const moss = props.transformLocal(-0.62 * scale, -0.18 * scale, yaw);
+    props.addMossPatch(x + moss.x, y, z + moss.z, yaw, 0.9 * scale, mossColor);
+    const bush = props.transformLocal(0.42 * scale, 0.2 * scale, yaw);
+    props.addBush(x + bush.x, y, z + bush.z, yaw, 0.74 * scale, bushColor);
+    const grass = props.transformLocal(0.02 * scale, -0.76 * scale, yaw);
+    props.addGrassClump(x + grass.x, y, z + grass.z, yaw, 0.82 * scale, grassColor);
+    if (habitat.forest > 0.34 && habitat.edge > 0.16) {
+      const secondBush = props.transformLocal(-0.9 * scale, 0.5 * scale, yaw);
+      props.addBush(x + secondBush.x, y, z + secondBush.z, yaw, 0.56 * scale, tone === "lowland" ? "#7fb361" : "#647f55");
+    }
+    return;
+  }
 
   const moss = makeMossPatch(0.9 * scale, mossColor);
   moss.position.set(-0.62 * scale, 0, -0.18 * scale);
@@ -899,12 +1204,13 @@ function addForestUnderstoryPatch(group: Group, x: number, z: number, scale: num
   }
 
   patch.position.set(x, y, z);
-  patch.rotation.y = forestHash(x, z, seed) * Math.PI * 2;
+  patch.rotation.y = yaw;
   group.add(patch);
 }
 
 export function buildGroundLayer() {
   const group = new Group();
+  const props = new SmallPropInstancer("ground-small-props");
   const flowerPalette = ["#fff7f0", "#ffd969", "#f6c6df", "#fdf8b9", "#f7d7ff"];
 
   scenicPockets.forEach((pocket) => {
@@ -927,7 +1233,6 @@ export function buildGroundLayer() {
     for (let i = 0; i < clusterCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, i, pocket.kind === "stream_bend" ? 0.72 : 0.9);
       const y = sampleTerrainHeight(x, z);
-      const flowerGroup = new Group();
       const bloomCount =
         pocket.zone === "plains" ? 6 :
         pocket.zone === "hills" ? 5 :
@@ -937,25 +1242,22 @@ export function buildGroundLayer() {
       for (let j = 0; j < bloomCount; j += 1) {
         const localAngle = (j / Math.max(1, bloomCount)) * Math.PI * 2;
         const localRadius = 0.35 + (j % 3) * 0.16;
-        const flower = makeFlower(
+        props.addFlower(
+          x + Math.cos(localAngle) * localRadius,
+          y,
+          z + Math.sin(localAngle) * localRadius,
+          forestHash(x, z, i * 17 + j) * Math.PI * 2,
           flowerPalette[(i + j) % flowerPalette.length],
           0.66 + ((i + j) % 3) * 0.08,
           pocket.zone === "foothills" ? 0.9 : 0.72 + (j % 2) * 0.08,
         );
-        flower.position.set(Math.cos(localAngle) * localRadius, 0, Math.sin(localAngle) * localRadius);
-        flowerGroup.add(flower);
       }
-
-      flowerGroup.position.set(x, y, z);
-      group.add(flowerGroup);
     }
 
     for (let i = 0; i < cloverCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, 30 + i, 0.78);
       const y = sampleTerrainHeight(x, z);
-      const patch = makeCloverPatch(0.42 + i * 0.05, i % 2 === 0 ? "#7fb765" : "#90c777");
-      patch.position.set(x, y, z);
-      group.add(patch);
+      props.addCloverPatch(x, y, z, forestHash(x, z, 30 + i) * Math.PI * 2, 0.42 + i * 0.05, i % 2 === 0 ? "#7fb765" : "#90c777");
     }
 
     const grassPatchCount =
@@ -967,12 +1269,14 @@ export function buildGroundLayer() {
     for (let i = 0; i < grassPatchCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, 50 + i, 0.82);
       const y = sampleTerrainHeight(x, z);
-      const grass = makeGrassClump(
+      props.addGrassClump(
+        x,
+        y,
+        z,
+        forestHash(x, z, 50 + i) * Math.PI * 2,
         pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? 0.64 + (i % 2) * 0.1 : 0.8 + (i % 2) * 0.18,
         pocket.zone === "plains" ? "#7fb764" : pocket.zone === "alpine" || pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? "#6d8a63" : "#739f5f",
       );
-      grass.position.set(x, y, z);
-      group.add(grass);
     }
 
     const rockCount =
@@ -984,31 +1288,33 @@ export function buildGroundLayer() {
     for (let i = 0; i < rockCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, 70 + i, 0.88);
       const y = sampleTerrainHeight(x, z);
-      const rock = makeTinyRock(
+      props.addTinyRock(
+        x,
+        y + 0.08,
+        z,
+        i * 0.8,
+        0.22 - i * 0.03,
         pocket.zone === "alpine" || pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? 0.78 + (i % 3) * 0.2 : 0.6 + (i % 3) * 0.18,
         pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? "#a7a79d" : pocket.zone === "alpine" ? "#b3b0a2" : "#c5b99d",
       );
-      rock.position.set(x, y + 0.08, z);
-      rock.rotation.set(0, i * 0.8, 0.22 - i * 0.03);
-      group.add(rock);
     }
 
     if (pocket.zone === "alpine" || pocket.zone === "ridge" || pocket.zone === "peak_shrine") {
       for (let i = 0; i < 3; i += 1) {
         const { x, z } = scatterAroundPocket(pocket, 90 + i, 0.72);
         const y = sampleTerrainHeight(x, z);
-        const moss = makeMossPatch(0.9 + i * 0.12, pocket.zone === "peak_shrine" ? "#7b8f76" : "#6e8c67");
-        moss.position.set(x, y, z);
-        group.add(moss);
+        props.addMossPatch(x, y, z, forestHash(x, z, 90 + i) * Math.PI * 2, 0.9 + i * 0.12, pocket.zone === "peak_shrine" ? "#7b8f76" : "#6e8c67");
       }
     }
   });
 
+  group.add(props.buildGroup());
   return group;
 }
 
 export function buildMidLayer() {
   const group = new Group();
+  const props = new SmallPropInstancer("mid-small-props");
 
   scenicPockets.forEach((pocket) => {
     const isStartPocket = pocket.id === "start-meadow";
@@ -1023,7 +1329,11 @@ export function buildMidLayer() {
     for (let i = 0; i < bushCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, 100 + i, 0.82);
       const y = sampleTerrainHeight(x, z);
-      const bush = makeBush(
+      props.addBush(
+        x,
+        y,
+        z,
+        forestHash(x, z, 100 + i) * Math.PI * 2,
         pocket.zone === "foothills" || pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? 1.08 : pocket.zone === "alpine" ? 0.94 : 0.92,
         pocket.zone === "plains"
           ? "#8ec86e"
@@ -1033,8 +1343,6 @@ export function buildMidLayer() {
               ? "#667d60"
               : "#6f895e",
       );
-      bush.position.set(x, y, z);
-      group.add(bush);
     }
 
     if (pocket.zone === "plains" || pocket.zone === "hills" || pocket.zone === "foothills") {
@@ -1042,9 +1350,7 @@ export function buildMidLayer() {
       for (let i = 0; i < mushroomCount; i += 1) {
         const { x, z } = scatterAroundPocket(pocket, 120 + i, 0.7);
         const y = sampleTerrainHeight(x, z);
-        const mushroom = makeMushroom(0.72 + i * 0.08, i % 2 === 0 ? "#d8a476" : "#e4b893");
-        mushroom.position.set(x, y, z);
-        group.add(mushroom);
+        props.addMushroom(x, y, z, forestHash(x, z, 120 + i) * Math.PI * 2, 0.72 + i * 0.08, i % 2 === 0 ? "#d8a476" : "#e4b893");
       }
     }
 
@@ -1070,11 +1376,13 @@ export function buildMidLayer() {
     }
   });
 
+  group.add(props.buildGroup());
   return group;
 }
 
 export function buildTreeClusters() {
   const group = new Group();
+  const props = new SmallPropInstancer("forest-understory-small-props");
   group.name = "forest-composition";
   group.add(buildInstancedForest());
 
@@ -1264,14 +1572,16 @@ export function buildTreeClusters() {
     [-82, 142, 1.2, "foothill"],
   ] as const;
   forestEdgeAnchors.forEach(([x, z, scale, tone], index) => {
-    addForestUnderstoryPatch(group, x, z, scale, 520 + index, tone);
+    addForestUnderstoryPatch(group, x, z, scale, 520 + index, tone, props);
   });
 
+  group.add(props.buildGroup());
   return group;
 }
 
 export function buildBiomeTransitionAccents() {
   const group = new Group();
+  const props = new SmallPropInstancer("biome-transition-small-props");
   group.name = "biome-transition-accents";
 
   const anchors = [
@@ -1294,23 +1604,26 @@ export function buildBiomeTransitionAccents() {
   anchors.forEach(([x, z, scale, tone, treeKind], index) => {
     const y = sampleTerrainHeight(x, z);
     const habitat = sampleHabitatLayer(x, z, y);
-    addForestUnderstoryPatch(group, x, z, scale, 620 + index, tone);
+    addForestUnderstoryPatch(group, x, z, scale, 620 + index, tone, props);
 
-    const rock = makeTinyRock(
+    props.addTinyRock(
+      x + Math.sin(index * 1.7) * 2.2 * scale,
+      y + 0.08,
+      z + Math.cos(index * 1.3) * 1.8 * scale,
+      index * 0.64,
+      0.18,
       0.62 * scale,
       z > 126 ? "#aaa99f" : z > 48 ? "#b9b19e" : "#cabd99",
     );
-    rock.position.set(x + Math.sin(index * 1.7) * 2.2 * scale, y + 0.08, z + Math.cos(index * 1.3) * 1.8 * scale);
-    rock.rotation.set(0.08, index * 0.64, 0.18);
-    group.add(rock);
 
-    const grass = makeGrassClump(
+    props.addGrassClump(
+      x - Math.cos(index * 1.1) * 2.4 * scale,
+      y,
+      z + Math.sin(index * 1.2) * 2 * scale,
+      forestHash(x, z, 690 + index) * Math.PI * 2,
       0.78 * scale,
       z > 126 ? "#6c815f" : z > 48 ? "#738f5e" : "#85ad60",
     );
-    grass.position.set(x - Math.cos(index * 1.1) * 2.4 * scale, y, z + Math.sin(index * 1.2) * 2 * scale);
-    grass.rotation.y = forestHash(x, z, 690 + index) * Math.PI * 2;
-    group.add(grass);
 
     const shadow = makeCanopyShadowPatch(
       0.82 * scale,
@@ -1333,11 +1646,13 @@ export function buildBiomeTransitionAccents() {
     group.add(tree);
   });
 
+  group.add(props.buildGroup());
   return group;
 }
 
 export function buildWaterBankAccents() {
   const group = new Group();
+  const props = new SmallPropInstancer("water-bank-small-props");
   group.name = "water-bank-accents";
 
   const addBankWash = (x: number, z: number, scale: number, yaw: number, seed: number) => {
@@ -1404,12 +1719,26 @@ export function buildWaterBankAccents() {
     const y = sampleTerrainHeight(x, z);
     const zone = sampleBiomeZone(x, z, y);
     const habitat = sampleHabitatLayer(x, z, y);
-    const accent = kind === "reed"
-      ? makeReedCluster(scale * (1 + habitat.shore * 0.16), zone === "plains" || zone === "hills" ? "#759f50" : "#657f53")
-      : makeBankPebbleCluster(scale, zone === "alpine" || zone === "ridge" ? "#aeb0a2" : "#c5ba96");
-    accent.position.set(x, y + 0.04, z);
-    accent.rotation.y = forestHash(x, z, seed) * Math.PI * 2;
-    group.add(accent);
+    const yaw = forestHash(x, z, seed) * Math.PI * 2;
+    if (kind === "reed") {
+      props.addReedCluster(
+        x,
+        y + 0.04,
+        z,
+        yaw,
+        scale * (1 + habitat.shore * 0.16),
+        zone === "plains" || zone === "hills" ? "#759f50" : "#657f53",
+      );
+    } else {
+      props.addBankPebbleCluster(
+        x,
+        y + 0.04,
+        z,
+        yaw,
+        scale,
+        zone === "alpine" || zone === "ridge" ? "#aeb0a2" : "#c5ba96",
+      );
+    }
   };
 
   const addSedgePatch = (x: number, z: number, scale: number, seed: number) => {
@@ -1431,10 +1760,23 @@ export function buildWaterBankAccents() {
       zone === "alpine" || zone === "ridge" || zone === "peak_shrine" ? "alpine" :
       zone === "foothills" ? "foothill" :
       "meadow";
-    const patch = makeBankSedgePatch(scale * (1 + habitat.shore * 0.12), tone);
-    patch.position.set(x, y + 0.052, z);
-    patch.rotation.y = forestHash(x, z, seed) * Math.PI * 2;
-    group.add(patch);
+    const sedgeScale = scale * (1 + habitat.shore * 0.12);
+    const yaw = forestHash(x, z, seed) * Math.PI * 2;
+    const mossColor =
+      tone === "meadow" ? "#8fb66b" :
+      tone === "foothill" ? "#738f61" :
+      "#697d68";
+    const grassColor =
+      tone === "meadow" ? "#7fa958" :
+      tone === "foothill" ? "#6f8b5a" :
+      "#667960";
+    const pebbleColor = tone === "alpine" ? "#aeb0a2" : "#c5bb9a";
+    const moss = props.transformLocal(-0.34 * sedgeScale, -0.1 * sedgeScale, yaw);
+    props.addMossPatch(x + moss.x, y + 0.052, z + moss.z, yaw, 0.62 * sedgeScale, mossColor);
+    const grass = props.transformLocal(0.34 * sedgeScale, 0.18 * sedgeScale, yaw);
+    props.addGrassClump(x + grass.x, y + 0.052, z + grass.z, yaw, 0.62 * sedgeScale, grassColor);
+    const pebble = props.transformLocal(0.05 * sedgeScale, -0.42 * sedgeScale, yaw);
+    props.addBankPebbleCluster(x + pebble.x, y + 0.052 + 0.02 * sedgeScale, z + pebble.z, yaw, 0.44 * sedgeScale, pebbleColor);
   };
 
   const addLipPebbles = (x: number, z: number, scale: number, yaw: number, seed: number) => {
@@ -1451,13 +1793,14 @@ export function buildWaterBankAccents() {
 
     const y = sampleTerrainHeight(x, z);
     const zone = sampleBiomeZone(x, z, y);
-    const pebbles = makeBankLipPebbleTrail(
+    props.addBankLipPebbleTrail(
+      x,
+      y + 0.062,
+      z,
+      yaw + (forestHash(x, z, seed) - 0.5) * 0.32,
       scale,
       zone === "alpine" || zone === "ridge" || zone === "peak_shrine" ? "#b7b7aa" : "#d1c08f",
     );
-    pebbles.position.set(x, y + 0.062, z);
-    pebbles.rotation.y = yaw + (forestHash(x, z, seed) - 0.5) * 0.32;
-    group.add(pebbles);
   };
 
   const addRiparianPocket = (
@@ -1482,6 +1825,7 @@ export function buildWaterBankAccents() {
     const zone = sampleBiomeZone(x, z, y);
     const habitat = sampleHabitatLayer(x, z, y);
     const highland = zone === "foothills" || zone === "alpine" || zone === "ridge" || zone === "peak_shrine";
+    const pocketYaw = forestHash(x, z, seed + 23) * Math.PI * 2;
     const pocket = new Group();
 
     const shadow = makeCanopyShadowPatch(
@@ -1493,19 +1837,28 @@ export function buildWaterBankAccents() {
     shadow.rotation.y = forestHash(x, z, seed) * Math.PI * 2;
     pocket.add(shadow);
 
-    const moss = makeMossPatch(0.72 * scale, highland ? "#71845f" : "#86a865");
-    moss.position.set(-0.7 * scale, 0.02, -0.16 * scale);
-    pocket.add(moss);
+    const moss = props.transformLocal(-0.7 * scale, -0.16 * scale, pocketYaw);
+    props.addMossPatch(x + moss.x, y + 0.036 + 0.02, z + moss.z, pocketYaw, 0.72 * scale, highland ? "#71845f" : "#86a865");
 
-    const grass = makeGrassClump(0.72 * scale, highland ? "#6e805d" : "#82a95f");
-    grass.position.set(0.5 * scale, 0, 0.24 * scale);
-    grass.rotation.y = forestHash(x, z, seed + 7) * Math.PI * 2;
-    pocket.add(grass);
+    const grass = props.transformLocal(0.5 * scale, 0.24 * scale, pocketYaw);
+    props.addGrassClump(
+      x + grass.x,
+      y + 0.036,
+      z + grass.z,
+      pocketYaw + forestHash(x, z, seed + 7) * Math.PI * 2,
+      0.72 * scale,
+      highland ? "#6e805d" : "#82a95f",
+    );
 
-    const pebbles = makeBankLipPebbleTrail(0.48 * scale, highland ? "#b3b3a6" : "#cdbc93");
-    pebbles.position.set(0.12 * scale, 0.044, -0.7 * scale);
-    pebbles.rotation.y = forestHash(x, z, seed + 11) * Math.PI * 2;
-    pocket.add(pebbles);
+    const pebbles = props.transformLocal(0.12 * scale, -0.7 * scale, pocketYaw);
+    props.addBankLipPebbleTrail(
+      x + pebbles.x,
+      y + 0.036 + 0.044,
+      z + pebbles.z,
+      pocketYaw + forestHash(x, z, seed + 11) * Math.PI * 2,
+      0.48 * scale,
+      highland ? "#b3b3a6" : "#cdbc93",
+    );
 
     if (treeKind !== "none" && habitat.edge > 0.08 && habitat.meadow < 0.78) {
       const sapling = treeKind === "round_sapling"
@@ -1517,7 +1870,7 @@ export function buildWaterBankAccents() {
     }
 
     pocket.position.set(x, y + 0.036, z);
-    pocket.rotation.y = forestHash(x, z, seed + 23) * Math.PI * 2;
+    pocket.rotation.y = pocketYaw;
     group.add(pocket);
   };
 
@@ -1675,6 +2028,7 @@ export function buildWaterBankAccents() {
     addRiparianPocket(x, z, scale, tone, treeKind, 540 + index * 13);
   });
 
+  group.add(props.buildGroup());
   return group;
 }
 
