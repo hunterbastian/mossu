@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test:contracts": "tsc -p tsconfig.contracts.json && esbuild tests/contracts/runContracts.ts --bundle --platform=node --format=esm --outfile=.contract-test-build/runContracts.mjs && node .contract-test-build/runContracts.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },

@@ -6,7 +6,7 @@ import {
 } from "three";
 import { GameState } from "../../simulation/gameState";
 import { InputController, InputSnapshot } from "../../simulation/input";
-import { sampleWindStrength } from "../../simulation/world";
+import { sampleRiverEdgeState, sampleWindStrength } from "../../simulation/world";
 import { ViewMode } from "../../simulation/viewMode";
 import { CharacterPreview } from "./CharacterPreview";
 import { FollowCamera } from "./FollowCamera";
@@ -17,8 +17,8 @@ const QUALITY_SAMPLE_SECONDS = 0.9;
 const QUALITY_MIN_SAMPLE_FRAMES = 18;
 const PIXEL_RATIO_DOWNSHIFT_FRAME_SECONDS = 1 / 58;
 const PIXEL_RATIO_UPSHIFT_FRAME_SECONDS = 1 / 74;
-const PIXEL_RATIO_STEP_DOWN = 0.2;
-const PIXEL_RATIO_STEP_UP = 0.035;
+const PIXEL_RATIO_STEP_DOWN = 0.24;
+const PIXEL_RATIO_STEP_UP = 0.025;
 
 const PAUSED_INPUT: InputSnapshot = {
   moveX: 0,
@@ -44,6 +44,8 @@ export class GameApp {
   private readonly characterPreview = new CharacterPreview();
   private readonly clock = new Clock();
   private readonly hud: HudShell;
+  private readonly titleScreen: HTMLDivElement;
+  private titleScreenOpen = true;
   private viewMode: ViewMode = "third_person";
   private pauseMenuOpen = false;
   private characterScreenOpen = false;
@@ -51,9 +53,9 @@ export class GameApp {
   private focusedCollectionId: string | null = null;
   private suppressPauseOnPointerUnlock = false;
   private suppressPointerUnlockPauseUntil = 0;
-  private readonly maxPixelRatio = Math.min(window.devicePixelRatio, 1.55);
-  private readonly minPixelRatio = Math.min(this.maxPixelRatio, 0.78);
-  private activePixelRatio = Math.min(this.maxPixelRatio, 1.25);
+  private readonly maxPixelRatio = Math.min(window.devicePixelRatio, 1.1);
+  private readonly minPixelRatio = Math.min(this.maxPixelRatio, 0.68);
+  private activePixelRatio = Math.min(this.maxPixelRatio, 1);
   private frameTimeAccumulator = 0;
   private frameSampleAccumulator = 0;
   private latestFrameMs = 1000 / 60;
@@ -84,6 +86,10 @@ export class GameApp {
     this.followCamera.setCollisionMeshes(this.world.getCameraCollisionMeshes());
     this.hud = new HudShell(this.characterPreview.element);
     this.container.appendChild(this.hud.element);
+    this.hud.element.classList.add("hud--title-hidden");
+
+    this.titleScreen = this.createTitleScreen();
+    this.container.appendChild(this.titleScreen);
 
     if (this.cameraDebugEnabled) {
       this.cameraDebugPanel = document.createElement("div");
@@ -98,6 +104,7 @@ export class GameApp {
     }
 
     window.addEventListener("resize", this.handleResize);
+    window.addEventListener("keydown", this.handleTitleKeyDown);
     document.addEventListener("pointerlockchange", this.handlePointerLockChange);
     this.handleResize();
   }
@@ -119,12 +126,14 @@ export class GameApp {
   dispose() {
     window.cancelAnimationFrame(this.raf);
     window.removeEventListener("resize", this.handleResize);
+    window.removeEventListener("keydown", this.handleTitleKeyDown);
     document.removeEventListener("pointerlockchange", this.handlePointerLockChange);
     this.input.dispose();
     this.followCamera.dispose();
     this.characterPreview.dispose();
     this.cameraDebugPanel?.remove();
     this.perfDebugPanel?.remove();
+    this.titleScreen.remove();
     this.renderer.dispose();
   }
 
@@ -156,6 +165,7 @@ export class GameApp {
     return JSON.stringify({
       coordinateSystem: "x right, y up, z forward across the island",
       mode: this.viewMode,
+      titleScreenOpen: this.titleScreenOpen,
       pauseMenuOpen: this.pauseMenuOpen,
       characterScreenOpen: this.characterScreenOpen,
       player: {
@@ -218,7 +228,9 @@ export class GameApp {
     let faunaRecruitPressed = false;
     let faunaRegroupPressed = false;
 
-    if (this.pauseMenuOpen) {
+    if (this.titleScreenOpen) {
+      this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
+    } else if (this.pauseMenuOpen) {
       if (input.escapePressed) {
         this.closePauseMenu();
       } else if (input.inventoryTogglePressed) {
@@ -286,6 +298,7 @@ export class GameApp {
   }
 
   private syncHud() {
+    this.hud.element.classList.toggle("hud--title-hidden", this.titleScreenOpen);
     this.hud.update({
       frame: this.state.frame,
       characterData: this.state.getCharacterScreenData(),
@@ -348,12 +361,14 @@ export class GameApp {
 
     const camera = this.followCamera.getDebugState();
     const player = this.state.frame.player;
+    const riverEdge = sampleRiverEdgeState(player.position.x, player.position.z);
     this.cameraDebugPanel.textContent = [
       `camera ${camera.style} / ${camera.profile}`,
       `distance ${camera.distance}  polar ${camera.polar} (${camera.minPolar}-${camera.maxPolar})  up ${camera.upLookLimitDegrees}deg`,
       `fov ${camera.fov}  shoulder ${camera.shoulder}  lookAhead ${camera.lookAhead}`,
       `focusY ${camera.focusHeight}  recenter ${camera.recenterCooldown}s  yaw ${camera.yawResponsiveness}  locked ${camera.pointerLocked}`,
       `player x ${player.position.x.toFixed(1)} y ${player.position.y.toFixed(1)} z ${player.position.z.toFixed(1)}`,
+      `river ${riverEdge.zone}  surface ${riverEdge.surfaceMask.toFixed(2)}  wet ${riverEdge.wetness.toFixed(2)}  damp ${riverEdge.dampBankMask.toFixed(2)}  nook ${riverEdge.nookMask.toFixed(2)}  depth ${riverEdge.waterDepth.toFixed(2)}`,
     ].join("\n");
   }
 
@@ -407,6 +422,10 @@ export class GameApp {
   };
 
   private handlePointerLockChange = () => {
+    if (this.titleScreenOpen) {
+      return;
+    }
+
     if (document.pointerLockElement) {
       return;
     }
@@ -477,4 +496,68 @@ export class GameApp {
     this.suppressPauseOnPointerUnlock = true;
     this.suppressPointerUnlockPauseUntil = this.elapsed + 0.65;
   }
+
+  private createTitleScreen() {
+    const titleScreen = document.createElement("div");
+    titleScreen.className = "title-screen";
+    titleScreen.setAttribute("role", "dialog");
+    titleScreen.setAttribute("aria-label", "Mossu title screen");
+    titleScreen.innerHTML = `
+      <div class="title-screen__sky" aria-hidden="true"></div>
+      <div class="title-screen__shade" aria-hidden="true"></div>
+      <div class="title-screen__hills" aria-hidden="true">
+        <span class="title-screen__hill title-screen__hill--back"></span>
+        <span class="title-screen__hill title-screen__hill--mid"></span>
+        <span class="title-screen__hill title-screen__hill--front"></span>
+      </div>
+      <div class="title-screen__menu">
+        <div class="title-screen__crest" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <p class="title-screen__eyebrow">Mossu Field Journal</p>
+        <h1 class="title-screen__logo">Mossu</h1>
+        <p class="title-screen__splash">a soft little climb to the crown of the island</p>
+        <button class="title-screen__button" type="button">
+          <span>Begin Trail</span>
+          <small>Enter / Space</small>
+        </button>
+        <div class="title-screen__starter-row" aria-hidden="true">
+          <span>collect</span>
+          <span>float</span>
+          <span>map</span>
+        </div>
+        <p class="title-screen__note">Tab opens the field guide · M opens the whole-world view</p>
+      </div>
+    `;
+    titleScreen
+      .querySelector<HTMLButtonElement>(".title-screen__button")
+      ?.addEventListener("click", this.startFromTitle);
+    return titleScreen;
+  }
+
+  private startFromTitle = () => {
+    if (!this.titleScreenOpen) {
+      return;
+    }
+
+    this.titleScreenOpen = false;
+    this.pauseMenuOpen = false;
+    this.characterScreenOpen = false;
+    this.titleScreen.classList.add("title-screen--hidden");
+    this.titleScreen.setAttribute("aria-hidden", "true");
+    this.syncHud();
+  };
+
+  private handleTitleKeyDown = (event: KeyboardEvent) => {
+    if (!this.titleScreenOpen) {
+      return;
+    }
+
+    if (event.code === "Enter" || event.code === "Space") {
+      event.preventDefault();
+      this.startFromTitle();
+    }
+  };
 }

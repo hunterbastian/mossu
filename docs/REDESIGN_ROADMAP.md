@@ -35,7 +35,7 @@ Done recently:
 
 Goal: make water read like broad natural rivers across the map instead of overlapping ribbons.
 
-Status: foundation landed; needs full gameplay route review and tuning.
+Status: water readability pass landed; Chrome bank-entry visual QA remains.
 
 Tasks:
 
@@ -44,10 +44,27 @@ Tasks:
 - [x] Broaden the main channel.
 - [x] Shape grassy nooks between main river and braids.
 - [x] Keep opening lake readable from the start camera.
-- [ ] Walk the full river route in Chrome from meadow to shrine.
-- [ ] Check swimming/readability around wider banks.
-- [ ] Tune any sections that still feel too thin, too thick, or visually overlapped.
-- [ ] Confirm water visuals and `sampleWaterState()` agree at banks.
+- [x] Walk the full river route in Chrome from meadow to shrine.
+- [x] Check swimming/readability around wider banks.
+- [x] First-pass tune sections that looked obstructed or visually unclear.
+- [x] Name the river edge contract in code: visible surface, damp bank, grassy nook, and player-enterable water.
+- [x] Add starting-area water pools with matching basin dips and wet-bank clearing.
+- [x] Tune water shader for darker damp banks, lighter shallow water, deeper swim water, illustrated shoreline milk/foam, and stronger directional ripples.
+- [x] Add flow-map-lite motion from river geometry: bend curl, braid split-current motion, and stronger eddies near banks.
+- [x] Add cheap Mossu/Karu water interaction ripples without adding a full water simulation.
+- [ ] Chrome-check water visuals and `sampleWaterState()` agreement at bank entry points.
+
+Latest route QA note:
+
+- Captured the route from opening lake through shrine approach and sampled channel widths/depths along the same checkpoints.
+- Main river and braids now read as broad separated channels in the sampler, with grassy nook masks between active branches.
+- The biggest visual issue was bank obstruction near the fir-gate braid, so river/lake tree clearance and wet-bank forest fade are the right tuning direction.
+- River edge masks are now explicit: `sampleRiverSurfaceMask()` tracks rendered-water footprint, `sampleRiverWetness()` remains broad damp-bank clearing, `sampleRiverDampBankMask()` isolates bank dampness, and `sampleWaterState()` uses the rendered-water footprint for player-enterable water.
+- Starting-area water is now a small pool system, not a one-off lake: `STARTING_WATER_POOLS` feeds terrain basin cuts, water surfaces, shallow/swim state, grass clearing, and forest avoidance.
+- The main water profile now separates dry bank, damp bank, shallow splash water, and deeper swim water more clearly through terrain tint plus water depth color.
+- River ribbon geometry now carries a procedural curl value, giving straights longer flow streaks, bends more eddy motion, and braids stronger split-current shimmer.
+- Mossu and recruited Karu now feed a fixed-size ripple uniform array, so movement in shallow/swim water creates local rings/wakes while keeping the shader cost bounded.
+- Browser sampler probe after the pass reports `9` water surfaces, `6,307` water vertices, and `11,128` water triangles; full visual/fps Chrome QA is still the next check.
 
 Acceptance:
 
@@ -149,7 +166,7 @@ Acceptance:
 
 Goal: make the world composition feel intentional from meadow to shrine.
 
-Status: upcoming after inventory or river QA, depending on whether we want UI or world polish next.
+Status: next world pass after water-edge contract verification.
 
 Tasks:
 
@@ -187,7 +204,7 @@ Latest Chrome snapshot on `?perfDebug=1`:
 - Pixel ratio settled at `0.78` inside the tuned `0.78-1.55` range.
 - Renderer showed about `1007` calls and `1.78M` triangles from the starting view.
 - Grass showed `4` meshes, `13,792` instances, and about `775,680` estimated triangles.
-- Water showed `6` surfaces, `5,126` vertices, and `8,968` triangles.
+- Before the starting-pool readability pass, water showed `6` surfaces, `5,126` vertices, and `8,968` triangles. The updated browser sampler reports `9` surfaces, `6,307` vertices, and `11,128` triangles.
 
 Acceptance:
 
@@ -214,14 +231,14 @@ Acceptance:
 
 ## Current Next Priorities
 
-1. Inventory holo-card binder pass:
-   Playtest populated cards after collecting landmarks and goods, then tune copy/card density if needed.
-2. River route QA and tuning:
-   Walk the route in Chrome, check swimming and bank readability, then tune any remaining overlap/thickness problems.
-3. Grass visual QA:
-   Play with the premium wind/push pass in Chrome and tune strength if motion is too busy or too subtle.
-4. Terrain/forest composition polish:
+1. Chrome bank-entry water QA:
+   Walk the key river banks and verify visible water, shallow water, swim water, and damp bank read correctly from gameplay camera.
+2. Terrain/forest composition polish:
    Improve mountain silhouettes, high rock/snow transitions, route overlooks, and biome-specific forest density.
+3. Grass visual QA:
+   Play with the premium wind/push pass after terrain/forest changes and tune strength if motion is too busy or too subtle.
+4. Inventory holo-card binder pass:
+   Playtest populated cards after collecting landmarks and goods, then tune copy/card density if needed.
 5. Performance tuning:
    Use `?perfDebug=1` after grass/water/world changes before adding chunking or culling.
 6. Repo cleanup/push:

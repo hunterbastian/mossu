@@ -12,6 +12,7 @@ import {
   Group,
   HemisphereLight,
   InstancedMesh,
+  Material,
   MathUtils,
   Mesh,
   MeshBasicMaterial,
@@ -25,20 +26,28 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { FrameState } from "../../simulation/gameState";
 import {
   ForageableKind,
   sampleBaseTerrainHeight,
   sampleBiomeZone,
+  sampleHabitatLayer,
   sampleIslandBoundaryPoint,
+  samplePaintedGroundMask,
+  sampleRiverDampBankMask,
+  sampleStartingWaterDampBankMask,
+  sampleStartingWaterWetness,
   sampleTerrainHeight,
   sampleTerrainNormal,
+  sampleWaterBankShape,
+  sampleWaterState,
   shadowPockets,
   worldLandmarks,
   worldForageables,
 } from "../../simulation/world";
 import { MossuAvatar } from "../objects/MossuAvatar";
-import { createGrassMesh, GrassShader, sampleOpeningMeadowMask } from "./grassSystem";
+import { createGrassMesh, GrassShader, sampleOpeningMeadowMask, updateGrassMeshLod } from "./grassSystem";
 import { buildClouds, buildMountainAtmosphere, buildSkyDome } from "./atmosphereSystem";
 import {
   AMBIENT_BLOB_SPECIES_NAME,
@@ -48,27 +57,33 @@ import {
   updateAmbientBlobs,
 } from "./ambientBlobs";
 import {
+  buildBiomeTransitionAccents,
   buildGroundLayer,
   buildHighlandAccents,
   buildLandmarkTrees,
   buildMidLayer,
   buildTreeClusters,
+  buildWaterBankAccents,
 } from "./terrainDecorations";
 import { markCameraCollider } from "./sceneHelpers";
 import {
+  buildStartingWaterSystem,
   buildRiverSystem,
   buildHighlandWaterways,
-  makeOpeningLakeSurface,
   WaterSurfaceController,
   WaterSurfaceGroup,
+  WaterRippleSource,
 } from "./waterSystem";
 
 const WORLD_SIZE = 560;
-const TERRAIN_SEGMENTS = 240;
-const GRASS_COUNT = 6400;
-const ALPINE_GRASS_COUNT = 1700;
+const TERRAIN_SEGMENTS = 160;
+const GRASS_COUNT = 5600;
+const ALPINE_GRASS_COUNT = 1000;
 const LANDING_SPLASH_PARTICLES = 18;
 const SNOW_TRAIL_PARTICLES = 20;
+const WATER_RIPPLE_LIMIT = 8;
+const WATER_RIPPLE_LIFETIME = 1.45;
+const WATER_RIPPLE_MIN_DEPTH = 0.16;
 
 interface LandingSplashParticle {
   mesh: Mesh;
@@ -108,6 +123,11 @@ interface ForageableVisual {
   spinDirection: number;
 }
 
+interface WaterRippleActorState {
+  inWater: boolean;
+  lastEmitAt: number;
+}
+
 interface WorldRendererOptions {
   debugSpiritCloseup?: boolean;
 }
@@ -132,14 +152,26 @@ export interface WorldPerfStats {
 
 function colorForTerrain(x: number, y: number, z: number) {
   const zone = sampleBiomeZone(x, z, y);
+  const habitat = sampleHabitatLayer(x, z, y);
   const normal = sampleTerrainNormal(x, z);
   const slope = 1 - normal.y;
   const painterlyNoise = Math.sin(x * 0.07) * 0.04 + Math.cos(z * 0.05) * 0.03 + Math.sin((x - z) * 0.03) * 0.05;
   const patch = Math.round((Math.sin(x * 0.12 + z * 0.08) * 0.5 + 0.5) * 5) / 5;
   const mixValue = MathUtils.clamp(patch * 0.5 + painterlyNoise + y / 220, 0, 1);
   const openingMask = sampleOpeningMeadowMask(x, z);
+  const riverDampBank = sampleRiverDampBankMask(x, z);
+  const startingWaterDampBank = sampleStartingWaterDampBankMask(x, z);
+  const startingWaterWetness = sampleStartingWaterWetness(x, z);
+  const bankShape = sampleWaterBankShape(x, z);
+  const waterShoreMask = MathUtils.clamp(riverDampBank + startingWaterDampBank + startingWaterWetness * 0.18 + bankShape.dampBand * 0.42, 0, 1);
+  const wetBankLine = MathUtils.clamp(riverDampBank * 0.72 + startingWaterDampBank * 0.8 + bankShape.dampBand * 0.72, 0, 1);
+  const dryLipLine = MathUtils.clamp((riverDampBank + startingWaterDampBank) * (1 - startingWaterWetness * 0.25) + bankShape.dryLip * 0.8 - slope * 0.28, 0, 1);
+  const sandbarLine = MathUtils.clamp(bankShape.sandbarLift * 0.86 + bankShape.pebbleBand * 0.28, 0, 1);
+  const coveShade = MathUtils.clamp(bankShape.coveCut * 0.64 + bankShape.shelfCut * 0.28, 0, 1);
+  const paintedGround = samplePaintedGroundMask(x, z) * (1 - waterShoreMask * 0.42);
   const sunWash = Math.sin(x * 0.018 - z * 0.014 + 1.2) * 0.5 + 0.5;
   const fieldBands = Math.sin(x * 0.022 + z * 0.006 - 1.2) * 0.5 + 0.5;
+  const pathBands = Math.sin(x * 0.052 + z * 0.018 + 0.8) * 0.5 + 0.5;
   const meadowBloom = MathUtils.clamp((1 - slope * 2.8) * (0.04 + sunWash * 0.1 + openingMask * 0.08), 0, 0.18);
   const heightGrass = MathUtils.clamp(MathUtils.smoothstep(y, 8, 82), 0, 1);
   const foothillTint = MathUtils.clamp(MathUtils.smoothstep(y, 38, 98), 0, 1);
@@ -169,8 +201,24 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color("#d6d1c4"), 0.18 + mixValue * 0.22)
     .lerp(new Color("#8f958d"), MathUtils.clamp(slope * 1.3 + alpineTint * 0.34, 0, 0.78));
   const snow = new Color("#f7f3e7").lerp(new Color("#dce8f0"), MathUtils.clamp(slope * 0.8 + painterlyNoise * 1.6, 0, 0.44));
+  const paintedEarth = new Color("#a99e70")
+    .lerp(new Color("#d0bd7d"), MathUtils.clamp(0.26 + pathBands * 0.26 + openingMask * 0.14, 0, 1))
+    .lerp(new Color("#8f9270"), foothillTint * 0.2 + alpineTint * 0.18)
+    .lerp(new Color("#c9c092"), dryLipLine * 0.2);
+  const sandbar = new Color("#b8ad7b")
+    .lerp(new Color("#d8c989"), MathUtils.clamp(0.24 + sunWash * 0.22 + pathBands * 0.14, 0, 1))
+    .lerp(new Color("#a1a988"), foothillTint * 0.16 + alpineTint * 0.22);
 
   return grass
+    .lerp(new Color("#a6c86f"), habitat.meadow * (0.12 + openingMask * 0.08))
+    .lerp(new Color("#4f6b45"), habitat.forest * 0.16)
+    .lerp(new Color("#71866f"), habitat.shore * 0.18)
+    .lerp(paintedEarth, paintedGround * (0.34 + (1 - slopeRock) * 0.22))
+    .lerp(sandbar, sandbarLine * 0.34)
+    .lerp(new Color("#3f6d5c"), wetBankLine * 0.34)
+    .lerp(new Color("#5e745e"), coveShade * 0.18)
+    .lerp(new Color("#6f7f5e"), waterShoreMask * 0.22)
+    .lerp(new Color("#c6b987"), dryLipLine * 0.28)
     .lerp(new Color("#d6c57d"), meadowBloom * (0.28 + openingMask * 0.16))
     .lerp(rock, rockMask * (1 - snowMask * 0.46))
     .lerp(snow, snowMask);
@@ -251,8 +299,8 @@ function buildValleyMist() {
   const patches = [
     [-54, -126, 92, 34, 5.2, 0.18, -0.08],
     [-8, -28, 138, 42, 7.8, 0.13, 0.04],
-    [26, 72, 128, 38, 9.4, 0.15, -0.14],
-    [18, 134, 118, 36, 12.6, 0.12, 0.1],
+    [26, 72, 92, 26, 10.2, 0.065, -0.14],
+    [18, 134, 84, 28, 13.4, 0.055, 0.1],
     [-18, 190, 146, 44, 17, 0.1, -0.02],
   ] as const;
 
@@ -579,6 +627,87 @@ function freezeStaticHierarchy(object: Object3D) {
   });
 }
 
+function materialBatchKey(material: Material) {
+  const materialWithColor = material as Material & {
+    color?: Color;
+    roughness?: number;
+    metalness?: number;
+  };
+  return [
+    material.type,
+    materialWithColor.color?.getHexString() ?? "no-color",
+    material.transparent ? "transparent" : "opaque",
+    material.opacity.toFixed(3),
+    material.side,
+    material.depthWrite ? "depth-write" : "no-depth-write",
+    material.depthTest ? "depth-test" : "no-depth-test",
+    materialWithColor.roughness?.toFixed(2) ?? "no-roughness",
+    materialWithColor.metalness?.toFixed(2) ?? "no-metalness",
+  ].join("|");
+}
+
+function canBatchStaticMesh(mesh: Mesh) {
+  if (mesh.userData.cameraCollider || mesh.userData.canopyWind || mesh.userData.shader || mesh.userData.windShader) {
+    return false;
+  }
+  if ((mesh as Mesh & { isInstancedMesh?: boolean }).isInstancedMesh || Array.isArray(mesh.material)) {
+    return false;
+  }
+  return Boolean(mesh.geometry?.getAttribute("position"));
+}
+
+function batchStaticDecorations<T extends Object3D>(root: T, name: string): T {
+  const buckets = new Map<string, { material: Material; meshes: Mesh[] }>();
+  const batchedMeshes: Mesh[] = [];
+
+  root.updateWorldMatrix(true, true);
+  root.traverse((node) => {
+    const mesh = node as Mesh;
+    if (!mesh.isMesh || !canBatchStaticMesh(mesh)) {
+      return;
+    }
+    const material = mesh.material as Material;
+    const key = materialBatchKey(material);
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.meshes.push(mesh);
+    } else {
+      buckets.set(key, { material, meshes: [mesh] });
+    }
+  });
+
+  buckets.forEach(({ material, meshes }, key) => {
+    if (meshes.length < 2) {
+      return;
+    }
+
+    const geometries = meshes.map((mesh) => {
+      const geometry = mesh.geometry.clone();
+      geometry.applyMatrix4(mesh.matrixWorld);
+      return geometry;
+    });
+    const mergedGeometry = mergeGeometries(geometries, false);
+    geometries.forEach((geometry) => geometry.dispose());
+    if (!mergedGeometry) {
+      return;
+    }
+
+    meshes.forEach((mesh) => {
+      mesh.parent?.remove(mesh);
+    });
+
+    mergedGeometry.computeBoundingSphere();
+    const batchedMesh = new Mesh(mergedGeometry, material.clone());
+    batchedMesh.name = `${name}-${key}`;
+    batchedMesh.matrixAutoUpdate = false;
+    batchedMesh.updateMatrix();
+    batchedMeshes.push(batchedMesh);
+  });
+
+  batchedMeshes.forEach((mesh) => root.add(mesh));
+  return root;
+}
+
 function countGeometryVertices(geometry: BufferGeometry) {
   return geometry.getAttribute("position")?.count ?? 0;
 }
@@ -604,6 +733,8 @@ export class WorldRenderer {
   readonly windMeshes: Array<InstancedMesh> = [];
   private readonly treeWindMeshes: Array<InstancedMesh> = [];
   private readonly waterControllers: Array<WaterSurfaceController> = [];
+  private readonly waterRipples: WaterRippleSource[] = [];
+  private readonly waterRippleActorStates = new Map<string, WaterRippleActorState>();
   private readonly cameraCollisionMeshes: Mesh[] = [];
   private readonly gameplayFog = new FogExp2("#c8d6cf", 0.00112);
   private readonly lowlandBackground = new Color("#d8f6ff");
@@ -613,20 +744,23 @@ export class WorldRenderer {
   private readonly lowlandSunColor = new Color("#fff0cf");
   private readonly highlandSunColor = new Color("#e8f2ff");
   private elevationMood = 0;
+  private grassLodFrame = 0;
 
   private readonly shrine = buildShrine();
   private readonly riverSystem = buildRiverSystem();
-  private readonly openingLake = makeOpeningLakeSurface();
+  private readonly startingWater = buildStartingWaterSystem();
   private readonly islandShell = buildFloatingIslandShell();
-  private readonly groundLayer = buildGroundLayer();
-  private readonly midLayer = buildMidLayer();
-  private readonly treeClusters = buildTreeClusters();
-  private readonly highlandAccents = buildHighlandAccents();
+  private readonly groundLayer = batchStaticDecorations(buildGroundLayer(), "ground-layer-batch");
+  private readonly midLayer = batchStaticDecorations(buildMidLayer(), "mid-layer-batch");
+  private readonly treeClusters = batchStaticDecorations(buildTreeClusters(), "tree-cluster-batch");
+  private readonly biomeTransitionAccents = batchStaticDecorations(buildBiomeTransitionAccents(), "biome-transition-batch");
+  private readonly waterBankAccents = batchStaticDecorations(buildWaterBankAccents(), "water-bank-batch");
+  private readonly highlandAccents = batchStaticDecorations(buildHighlandAccents(), "highland-accent-batch");
   private readonly highlandWaterways = buildHighlandWaterways();
   private readonly mountainAtmosphere = buildMountainAtmosphere();
   private readonly valleyMist = buildValleyMist();
   private readonly shadowVolumes = buildShadowPockets();
-  private readonly landmarkTrees = buildLandmarkTrees();
+  private readonly landmarkTrees = batchStaticDecorations(buildLandmarkTrees(), "landmark-tree-batch");
   private readonly mountainSilhouettes = new Group();
   private readonly sun = new DirectionalLight("#fff0cf", 3.12);
   private readonly meadowGlow = new PointLight("#ffe6b3", 1.48, 220, 1.4);
@@ -656,7 +790,6 @@ export class WorldRenderer {
   private readonly mapMarkerGroup = new Group();
   private readonly forageableGroup = new Group();
   private readonly forageableVisuals = buildForageableVisuals();
-  private readonly perfStats: WorldPerfStats;
   private readonly playerMapMarker: MapMarker = {
     group: createMapMarker("#78f3ff", 3.2, 12, 0.42),
     baseScale: 1,
@@ -698,10 +831,12 @@ export class WorldRenderer {
     scene.add(this.terrain);
     scene.add(this.islandShell);
     scene.add(this.riverSystem.group);
-    scene.add(this.openingLake.mesh);
+    scene.add(this.startingWater.group);
     scene.add(this.groundLayer);
     scene.add(this.midLayer);
     scene.add(this.treeClusters);
+    scene.add(this.biomeTransitionAccents);
+    scene.add(this.waterBankAccents);
     scene.add(this.highlandAccents);
     scene.add(this.highlandWaterways.group);
     scene.add(this.mountainAtmosphere);
@@ -724,11 +859,11 @@ export class WorldRenderer {
       new Color("#d6f478"),
       {
         crossPlanes: 2,
-        bladeWidth: 0.72,
-        bladeHeight: 3.85,
-        placementMultiplier: 0.82,
-        scaleMultiplier: 1.2,
-        widthMultiplier: 0.98,
+        bladeWidth: 0.62,
+        bladeHeight: 3.55,
+        placementMultiplier: 1.18,
+        scaleMultiplier: 1.08,
+        widthMultiplier: 0.9,
         fadeInStart: 5,
         fadeInEnd: 12,
         fadeOutStart: 34,
@@ -739,18 +874,29 @@ export class WorldRenderer {
         playerPushRadius: 11.4,
         playerPushStrength: 1.42,
         windExaggeration: 1.22,
+        windTimeScale: 1,
+        broadWindScale: 1,
+        fineWindScale: 1,
+        lod: {
+          label: "near",
+          innerRadius: 0,
+          outerRadius: 76,
+          sampleStride: 1,
+          updateEveryFrames: 4,
+          movementThreshold: 1.8,
+        },
       },
     );
     const meadowMidGrass = createGrassMesh(
-      Math.round(GRASS_COUNT * 0.52),
+      Math.round(GRASS_COUNT * 0.34),
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
       new Color("#43743a"),
       new Color("#b7df6a"),
       {
         crossPlanes: 1,
         bladeWidth: 0.94,
-        bladeHeight: 3.1,
-        placementMultiplier: 0.92,
+        bladeHeight: 3.32,
+        placementMultiplier: 1.14,
         scaleMultiplier: 1.06,
         widthMultiplier: 1.12,
         fadeInStart: 24,
@@ -763,30 +909,52 @@ export class WorldRenderer {
         playerPushRadius: 11.8,
         playerPushStrength: 1.22,
         windExaggeration: 1.15,
+        windTimeScale: 0.72,
+        broadWindScale: 0.82,
+        fineWindScale: 0.34,
+        lod: {
+          label: "mid",
+          innerRadius: 48,
+          outerRadius: 168,
+          sampleStride: 2,
+          updateEveryFrames: 6,
+          movementThreshold: 3,
+        },
       },
     );
     const meadowFarGrass = createGrassMesh(
-      GRASS_COUNT - 860,
+      Math.round(GRASS_COUNT * 0.28),
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
       new Color("#536b42"),
       new Color("#9fbd70"),
       {
         crossPlanes: 1,
-        bladeWidth: 1.1,
-        bladeHeight: 2.45,
-        placementMultiplier: 0.9,
-        scaleMultiplier: 0.88,
-        widthMultiplier: 1.24,
+        bladeWidth: 1.72,
+        bladeHeight: 1.42,
+        placementMultiplier: 0.96,
+        scaleMultiplier: 0.78,
+        widthMultiplier: 1.84,
         fadeInStart: 84,
         fadeInEnd: 118,
         fadeOutStart: 220,
         fadeOutEnd: 320,
         rootFillBoost: 0.28,
-        selfShadowStrength: 0.6,
-        distanceCompressionBoost: 0.26,
-        playerPushRadius: 9.8,
-        playerPushStrength: 0.92,
-        windExaggeration: 1.02,
+        selfShadowStrength: 0.46,
+        distanceCompressionBoost: 0.42,
+        playerPushRadius: 1,
+        playerPushStrength: 0,
+        windExaggeration: 0.9,
+        windTimeScale: 0.38,
+        broadWindScale: 0.64,
+        fineWindScale: 0.04,
+        lod: {
+          label: "far",
+          innerRadius: 128,
+          outerRadius: 332,
+          sampleStride: 4,
+          updateEveryFrames: 10,
+          movementThreshold: 7,
+        },
       },
     );
     const alpineGrass = createGrassMesh(
@@ -796,12 +964,23 @@ export class WorldRenderer {
       new Color("#bec9a4"),
       {
         crossPlanes: 1,
-        bladeHeight: 2.35,
-        placementMultiplier: 0.78,
+        bladeHeight: 2.48,
+        placementMultiplier: 0.92,
         scaleMultiplier: 0.86,
         selfShadowStrength: 0.42,
         distanceCompressionBoost: 0.24,
         windExaggeration: 1.16,
+        windTimeScale: 0.52,
+        broadWindScale: 0.86,
+        fineWindScale: 0.12,
+        lod: {
+          label: "alpine",
+          innerRadius: 34,
+          outerRadius: 340,
+          sampleStride: 2,
+          updateEveryFrames: 10,
+          movementThreshold: 8,
+        },
       },
     );
     this.windMeshes.push(meadowNearGrass, meadowMidGrass, meadowFarGrass, alpineGrass);
@@ -893,24 +1072,25 @@ export class WorldRenderer {
       this.ambientBlobGroup.add(blob.group);
     });
 
-    this.waterControllers.push(...this.riverSystem.controllers, this.openingLake, ...this.highlandWaterways.controllers);
+    this.waterControllers.push(...this.riverSystem.controllers, ...this.startingWater.controllers, ...this.highlandWaterways.controllers);
     this.registerCameraCollider(this.terrain);
     this.collectCameraColliders(this.islandShell);
     this.collectCameraColliders(this.shrine);
     this.collectCameraColliders(this.treeClusters);
+    this.collectCameraColliders(this.biomeTransitionAccents);
     this.collectCameraColliders(this.highlandAccents);
     this.collectCameraColliders(this.landmarkTrees);
     this.collectTreeWindMeshes(this.treeClusters);
-    this.perfStats = this.createPerfStats();
-
     [
       this.terrain,
       this.islandShell,
       this.riverSystem.group,
-      this.openingLake.mesh,
+      this.startingWater.group,
       this.groundLayer,
       this.midLayer,
       this.treeClusters,
+      this.biomeTransitionAccents,
+      this.waterBankAccents,
       this.highlandAccents,
       this.highlandWaterways.group,
       this.shadowVolumes,
@@ -925,7 +1105,7 @@ export class WorldRenderer {
   }
 
   getPerfStats() {
-    return this.perfStats;
+    return this.createPerfStats();
   }
 
   getFaunaStats() {
@@ -952,7 +1132,6 @@ export class WorldRenderer {
       this.updateClouds(elapsed);
       this.updateValleyMist(elapsed);
     }
-    this.updateWater(elapsed);
     this.faunaStats = updateAmbientBlobs(
       this.ambientBlobs,
       this.ambientBlobGroup,
@@ -963,12 +1142,15 @@ export class WorldRenderer {
       recruitPressed,
       regroupPressed,
     );
+    this.updateWaterInteractions(frame, elapsed, mapLookdown);
+    this.updateWater(elapsed);
     this.updateLandingSplash(frame, dt);
     this.updateSnowTrail(frame, dt);
     this.updateForageables(frame, elapsed, mapLookdown);
     this.updateMapMarkers(frame, elapsed, mapLookdown);
+    this.updateGrassLod(frame, mapLookdown);
     this.windMeshes.forEach((mesh) => {
-      mesh.visible = !mapLookdown;
+      mesh.visible = !mapLookdown && mesh.count > 0;
     });
     this.skyDome.visible = !mapLookdown;
     this.islandShell.visible = !mapLookdown;
@@ -1063,6 +1245,17 @@ export class WorldRenderer {
     });
   }
 
+  private updateGrassLod(frame: FrameState, mapLookdown: boolean) {
+    if (mapLookdown) {
+      return;
+    }
+
+    this.grassLodFrame += 1;
+    this.windMeshes.forEach((mesh) => {
+      updateGrassMeshLod(mesh, frame.player.position, this.grassLodFrame);
+    });
+  }
+
   private updateWind(frame: FrameState, elapsed: number) {
     const planarSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
     const playerPush = frame.player.fallingToVoid || !frame.player.grounded
@@ -1108,6 +1301,79 @@ export class WorldRenderer {
     this.alpineGlow.intensity = MathUtils.lerp(0.38, 0.72, this.elevationMood);
   }
 
+  private updateWaterInteractions(frame: FrameState, elapsed: number, mapLookdown: boolean) {
+    for (let index = this.waterRipples.length - 1; index >= 0; index -= 1) {
+      if (elapsed - this.waterRipples[index].startTime > WATER_RIPPLE_LIFETIME) {
+        this.waterRipples.splice(index, 1);
+      }
+    }
+
+    if (mapLookdown) {
+      return;
+    }
+
+    const playerSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
+    this.emitWaterRippleForActor(
+      "mossu",
+      frame.player.position,
+      playerSpeed,
+      elapsed,
+      frame.player.swimming ? 1.05 : frame.player.rolling ? 0.96 : 0.78,
+    );
+
+    this.ambientBlobs.forEach((blob) => {
+      if (!blob.recruited || (blob.waterReaction !== "splash" && blob.waterReaction !== "float")) {
+        const state = this.waterRippleActorStates.get(blob.id);
+        if (state) {
+          state.inWater = false;
+        }
+        return;
+      }
+
+      this.emitWaterRippleForActor(
+        `karu-${blob.id}`,
+        blob.group.position,
+        blob.velocity.length(),
+        elapsed,
+        blob.waterReaction === "float" ? 0.48 : 0.58,
+      );
+    });
+  }
+
+  private emitWaterRippleForActor(
+    key: string,
+    position: Vector3,
+    planarSpeed: number,
+    elapsed: number,
+    baseStrength: number,
+  ) {
+    const water = sampleWaterState(position.x, position.z);
+    const inWater = !!water && water.depth > WATER_RIPPLE_MIN_DEPTH;
+    const state = this.waterRippleActorStates.get(key) ?? { inWater: false, lastEmitAt: -999 };
+    const enteredWater = inWater && !state.inWater;
+
+    if (inWater && water) {
+      const speedFactor = MathUtils.clamp(planarSpeed / 9, 0, 1);
+      const depthFactor = water.swimAllowed ? 1 : MathUtils.clamp(water.depth / 1.8, 0.35, 1);
+      const interval = MathUtils.lerp(0.42, 0.16, speedFactor) * (baseStrength < 0.7 ? 1.24 : 1);
+      if ((enteredWater || speedFactor > 0.16) && elapsed - state.lastEmitAt >= interval) {
+        this.waterRipples.push({
+          x: position.x,
+          z: position.z,
+          startTime: elapsed,
+          strength: MathUtils.clamp(baseStrength * (0.48 + speedFactor * 0.52) * depthFactor, 0.22, 1.18),
+        });
+        state.lastEmitAt = elapsed;
+        if (this.waterRipples.length > WATER_RIPPLE_LIMIT) {
+          this.waterRipples.splice(0, this.waterRipples.length - WATER_RIPPLE_LIMIT);
+        }
+      }
+    }
+
+    state.inWater = inWater;
+    this.waterRippleActorStates.set(key, state);
+  }
+
   private updateValleyMist(elapsed: number) {
     this.valleyMist.children.forEach((patch, index) => {
       const baseX = (patch.userData.baseX as number | undefined) ?? patch.position.x;
@@ -1124,7 +1390,7 @@ export class WorldRenderer {
 
   private updateWater(elapsed: number) {
     this.waterControllers.forEach((controller) => {
-      controller.update(elapsed);
+      controller.update(elapsed, this.waterRipples);
     });
   }
 

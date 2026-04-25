@@ -3,6 +3,7 @@ import {
   BufferGeometry,
   Color,
   DoubleSide,
+  DynamicDrawUsage,
   InstancedBufferAttribute,
   InstancedMesh,
   MathUtils,
@@ -15,6 +16,7 @@ import {
   BiomeZone,
   sampleBiomeZone,
   sampleGrassDensity,
+  sampleHabitatLayer,
   sampleRiverNookMask,
   sampleRiverWetness,
   sampleTerrainHeight,
@@ -46,6 +48,34 @@ export interface GrassOptions {
   playerPushRadius?: number;
   playerPushStrength?: number;
   windExaggeration?: number;
+  windTimeScale?: number;
+  broadWindScale?: number;
+  fineWindScale?: number;
+  lod?: GrassLodOptions;
+}
+
+export interface GrassLodOptions {
+  label: string;
+  innerRadius: number;
+  outerRadius: number;
+  sampleStride?: number;
+  updateEveryFrames?: number;
+  movementThreshold?: number;
+}
+
+interface GrassLodSource {
+  options: Required<GrassLodOptions>;
+  sourceCount: number;
+  matrices: Float32Array;
+  phases: Float32Array;
+  tints: Float32Array;
+  scales: Float32Array;
+  widths: Float32Array;
+  roots: Float32Array;
+  lastFrame: number;
+  lastOriginX: number;
+  lastOriginZ: number;
+  activeCount: number;
 }
 
 export function mergeBufferGeometries(geometries: BufferGeometry[]) {
@@ -81,7 +111,7 @@ export function sampleOpeningMeadowMask(x: number, z: number) {
 }
 
 function makeGrassBladeGeometry(width: number, height: number, crossPlanes = 1) {
-  const geometry = new PlaneGeometry(width, height, 4, 6);
+  const geometry = new PlaneGeometry(width, height, 2, 4);
   geometry.translate(0, height * 0.5, 0);
 
   const positions = geometry.attributes.position as BufferAttribute;
@@ -137,6 +167,7 @@ export function createGrassMesh(
   const scales = new Float32Array(count);
   const widths = new Float32Array(count);
   const roots = new Float32Array(count * 3);
+  const matrices = new Float32Array(count * 16);
   let placed = 0;
 
   while (placed < count) {
@@ -149,17 +180,19 @@ export function createGrassMesh(
     }
 
     const density = sampleGrassDensity(x, z);
+    const habitat = sampleHabitatLayer(x, z, height);
     const openingMask = sampleOpeningMeadowMask(x, z);
     const riverNookMask = sampleRiverNookMask(x, z);
     const riverWetness = sampleRiverWetness(x, z);
     const fieldCluster = Math.sin(x * 0.016 + z * 0.009 - 0.8) * 0.5 + 0.5;
     const placementBias =
       zone === "plains" || zone === "hills"
-        ? 0.58 + openingMask * 0.74 + riverNookMask * 0.32 + fieldCluster * 0.14
+        ? 0.58 + openingMask * 0.74 + habitat.meadow * 0.28 + riverNookMask * 0.28 + fieldCluster * 0.14
         : zone === "foothills"
-          ? 0.78 + openingMask * 0.1 + riverNookMask * 0.22
-          : 1;
-    if (Math.random() > MathUtils.clamp(density * placementBias * (options.placementMultiplier ?? 1), 0, 1)) {
+          ? 0.78 + openingMask * 0.1 + habitat.edge * 0.1 + riverNookMask * 0.18
+          : 0.94 + habitat.edge * 0.08;
+    const habitatPlacementFade = MathUtils.clamp(1 + habitat.meadow * 0.22 - habitat.forest * 0.16 - habitat.shore * 0.38, 0.42, 1.24);
+    if (Math.random() > MathUtils.clamp(density * placementBias * habitatPlacementFade * (options.placementMultiplier ?? 1), 0, 1)) {
       continue;
     }
 
@@ -180,7 +213,7 @@ export function createGrassMesh(
     const width = zone === "alpine" || zone === "ridge"
       ? 0.64 + Math.random() * 0.22
       : 0.72 + Math.random() * 0.24;
-    const heroBoost = isMeadow ? openingMask : 0;
+    const heroBoost = isMeadow ? Math.max(openingMask, habitat.meadow * 0.72) : 0;
     const riverNookBoost = MathUtils.clamp(riverNookMask * (1 - riverWetness), 0, 1);
     const adjustedScale =
       scale
@@ -193,6 +226,7 @@ export function createGrassMesh(
     dummy.scale.set(adjustedWidth, adjustedScale, adjustedWidth);
     dummy.updateMatrix();
     mesh.setMatrixAt(placed, dummy.matrix);
+    dummy.matrix.toArray(matrices, placed * 16);
 
     const sunPatch = Math.sin(x * 0.022 + z * 0.017) * 0.5 + 0.5;
     const coolPatch = Math.cos(x * 0.018 - z * 0.013) * 0.5 + 0.5;
@@ -201,7 +235,9 @@ export function createGrassMesh(
       coolPatch * 0.15 +
       fieldCluster * 0.12 +
       heroBoost * 0.14 +
-      riverNookBoost * 0.2,
+      riverNookBoost * 0.16 +
+      habitat.edge * 0.08 -
+      habitat.forest * 0.1,
       0,
       1,
     );
@@ -209,6 +245,10 @@ export function createGrassMesh(
       tintTop,
       MathUtils.clamp(0.14 + patchMix * 0.72 + Math.random() * 0.05, 0, 1),
     );
+    color
+      .lerp(new Color("#b7df75"), habitat.meadow * 0.16)
+      .lerp(new Color("#6f8a5c"), habitat.forest * 0.18)
+      .lerp(new Color("#7f9d69"), habitat.shore * 0.18);
     tints[placed * 3] = color.r;
     tints[placed * 3 + 1] = color.g;
     tints[placed * 3 + 2] = color.b;
@@ -226,6 +266,31 @@ export function createGrassMesh(
   mesh.geometry.setAttribute("instanceScale", new InstancedBufferAttribute(scales, 1));
   mesh.geometry.setAttribute("instanceWidth", new InstancedBufferAttribute(widths, 1));
   mesh.geometry.setAttribute("instanceRoot", new InstancedBufferAttribute(roots, 3));
+  mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+
+  if (options.lod) {
+    mesh.userData.grassLod = {
+      options: {
+        label: options.lod.label,
+        innerRadius: options.lod.innerRadius,
+        outerRadius: options.lod.outerRadius,
+        sampleStride: options.lod.sampleStride ?? 1,
+        updateEveryFrames: options.lod.updateEveryFrames ?? 6,
+        movementThreshold: options.lod.movementThreshold ?? 2.5,
+      },
+      sourceCount: count,
+      matrices: matrices.slice(),
+      phases: phases.slice(),
+      tints: tints.slice(),
+      scales: scales.slice(),
+      widths: widths.slice(),
+      roots: roots.slice(),
+      lastFrame: -9999,
+      lastOriginX: Number.POSITIVE_INFINITY,
+      lastOriginZ: Number.POSITIVE_INFINITY,
+      activeCount: count,
+    } satisfies GrassLodSource;
+  }
 
   material.onBeforeCompile = (shader: GrassShader) => {
     shader.uniforms.uTime = { value: 0 };
@@ -242,6 +307,9 @@ export function createGrassMesh(
     shader.uniforms.uPlayerPushRadius = { value: options.playerPushRadius ?? 8.8 };
     shader.uniforms.uPlayerPushStrength = { value: options.playerPushStrength ?? 1.15 };
     shader.uniforms.uWindExaggeration = { value: options.windExaggeration ?? 1 };
+    shader.uniforms.uWindTimeScale = { value: options.windTimeScale ?? 1 };
+    shader.uniforms.uBroadWindScale = { value: options.broadWindScale ?? 1 };
+    shader.uniforms.uFineWindScale = { value: options.fineWindScale ?? 1 };
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
@@ -277,6 +345,9 @@ export function createGrassMesh(
         uniform float uPlayerPushRadius;
         uniform float uPlayerPushStrength;
         uniform float uWindExaggeration;
+        uniform float uWindTimeScale;
+        uniform float uBroadWindScale;
+        uniform float uFineWindScale;
       `,
       )
       .replace(
@@ -317,29 +388,30 @@ export function createGrassMesh(
         vDistanceBand = clamp(fadeIn * (1.0 - fadeOut), 0.0, 1.0);
         vec2 baseWindDirection = normalize(vec2(0.92, 0.39));
         vec2 crossWindDirection = vec2(-baseWindDirection.y, baseWindDirection.x);
-        float breath = 0.84 + sin(uTime * 0.18 + sin(uTime * 0.041) * 1.7) * 0.16;
+        float windTime = uTime * uWindTimeScale;
+        float breath = 0.84 + sin(windTime * 0.18 + sin(windTime * 0.041) * 1.7) * 0.16;
         float macroWind = (
-          sin(dot(instanceRoot.xz, baseWindDirection) * 0.016 - uTime * 0.34 + instancePhase * 0.08) +
-          cos(dot(instanceRoot.xz, crossWindDirection) * 0.011 + uTime * 0.22)
+          sin(dot(instanceRoot.xz, baseWindDirection) * 0.016 - windTime * 0.34 + instancePhase * 0.08) +
+          cos(dot(instanceRoot.xz, crossWindDirection) * 0.011 + windTime * 0.22)
         ) * 0.5;
-        float gustLane = sin(instanceRoot.x * 0.007 + instanceRoot.z * 0.004 - uTime * 0.18) * 0.5 + 0.5;
-        float gustPhaseA = dot(instanceRoot.xz, baseWindDirection) * 0.036 - uTime * 1.02 + sin(instanceRoot.z * 0.008) * 0.44;
-        float gustPhaseB = dot(instanceRoot.xz, normalize(vec2(0.48, 0.88))) * 0.024 - uTime * 0.62 + 2.1;
+        float gustLane = sin(instanceRoot.x * 0.007 + instanceRoot.z * 0.004 - windTime * 0.18) * 0.5 + 0.5;
+        float gustPhaseA = dot(instanceRoot.xz, baseWindDirection) * 0.036 - windTime * 1.02 + sin(instanceRoot.z * 0.008) * 0.44;
+        float gustPhaseB = dot(instanceRoot.xz, normalize(vec2(0.48, 0.88))) * 0.024 - windTime * 0.62 + 2.1;
         float gustFront = smoothstep(0.48, 0.96, sin(gustPhaseA));
         float gustShoulder = smoothstep(0.38, 0.92, sin(gustPhaseB)) * 0.54;
         float gustRebound = -smoothstep(0.62, 0.98, sin(gustPhaseA - 1.24)) * 0.24;
         float gustExposure = mix(1.0 + vHeroField * 0.2, 1.14 + vElevationMood * 0.16, vSceneDepthMood);
         float gustWind = (gustFront + gustShoulder) * (0.58 + gustLane * 0.42) * gustExposure;
-        float detailFlutter = sin(instanceRoot.x * 0.12 + uTime * 4.9 + instancePhase * 2.8)
-          * cos(instanceRoot.z * 0.086 - uTime * 3.7 + instancePhase);
+        float detailFlutter = sin(instanceRoot.x * 0.12 + windTime * 4.9 + instancePhase * 2.8)
+          * cos(instanceRoot.z * 0.086 - windTime * 3.7 + instancePhase);
         detailFlutter *= mix(1.0, 0.42, vSceneDepthMood);
         float windLod = clamp(vDistanceBlend * 0.68 + vElevationMood * 0.34, 0.0, 1.0);
         float broadBend = (
           macroWind * mix(0.58, 0.72, vSceneDepthMood) +
           gustWind * mix(0.34, 0.54, vElevationMood) +
           gustRebound
-        ) * breath * uWindExaggeration * mix(0.98, 1.18, vElevationMood);
-        float fineMotion = detailFlutter * (1.0 - windLod) * uWindExaggeration;
+        ) * breath * uWindExaggeration * uBroadWindScale * mix(0.98, 1.18, vElevationMood);
+        float fineMotion = detailFlutter * (1.0 - windLod) * uWindExaggeration * uFineWindScale;
         vGustSignal = clamp(gustWind * (1.0 - vDistanceBlend * 0.28), 0.0, 1.0);
         vec2 windDirection = normalize(baseWindDirection + crossWindDirection * (macroWind * 0.08 + gustWind * 0.18));
         float tuftWeight = pow(uv.y, 1.24);
@@ -429,4 +501,62 @@ export function createGrassMesh(
   };
 
   return mesh;
+}
+
+export function updateGrassMeshLod(mesh: InstancedMesh, origin: Vector3, frameIndex: number) {
+  const lod = mesh.userData.grassLod as GrassLodSource | undefined;
+  if (!lod) {
+    return;
+  }
+
+  const dx = origin.x - lod.lastOriginX;
+  const dz = origin.z - lod.lastOriginZ;
+  const movedEnough = dx * dx + dz * dz >= lod.options.movementThreshold ** 2;
+  const frameDue = frameIndex - lod.lastFrame >= lod.options.updateEveryFrames;
+  if (!movedEnough && !frameDue) {
+    return;
+  }
+
+  const innerRadiusSq = lod.options.innerRadius ** 2;
+  const outerRadiusSq = lod.options.outerRadius ** 2;
+  const stride = Math.max(1, Math.floor(lod.options.sampleStride ?? 1));
+  const matrixArray = mesh.instanceMatrix.array as Float32Array;
+  const phaseArray = mesh.geometry.getAttribute("instancePhase").array as Float32Array;
+  const tintArray = mesh.geometry.getAttribute("instanceTint").array as Float32Array;
+  const scaleArray = mesh.geometry.getAttribute("instanceScale").array as Float32Array;
+  const widthArray = mesh.geometry.getAttribute("instanceWidth").array as Float32Array;
+  const rootArray = mesh.geometry.getAttribute("instanceRoot").array as Float32Array;
+  let active = 0;
+
+  for (let source = 0; source < lod.sourceCount; source += 1) {
+    const rootIndex = source * 3;
+    const rootX = lod.roots[rootIndex];
+    const rootZ = lod.roots[rootIndex + 2];
+    const distanceSq = (rootX - origin.x) ** 2 + (rootZ - origin.z) ** 2;
+    if (distanceSq < innerRadiusSq || distanceSq > outerRadiusSq || source % stride !== 0) {
+      continue;
+    }
+
+    matrixArray.set(lod.matrices.subarray(source * 16, source * 16 + 16), active * 16);
+    phaseArray[active] = lod.phases[source];
+    scaleArray[active] = lod.scales[source];
+    widthArray[active] = lod.widths[source];
+    tintArray.set(lod.tints.subarray(rootIndex, rootIndex + 3), active * 3);
+    rootArray.set(lod.roots.subarray(rootIndex, rootIndex + 3), active * 3);
+    active += 1;
+  }
+
+  mesh.count = active;
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.geometry.getAttribute("instancePhase").needsUpdate = true;
+  mesh.geometry.getAttribute("instanceTint").needsUpdate = true;
+  mesh.geometry.getAttribute("instanceScale").needsUpdate = true;
+  mesh.geometry.getAttribute("instanceWidth").needsUpdate = true;
+  mesh.geometry.getAttribute("instanceRoot").needsUpdate = true;
+  mesh.visible = active > 0;
+
+  lod.activeCount = active;
+  lod.lastFrame = frameIndex;
+  lod.lastOriginX = origin.x;
+  lod.lastOriginZ = origin.z;
 }

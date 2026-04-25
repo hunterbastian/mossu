@@ -1,5 +1,22 @@
 HUD / overlay UX pass:
 
+Water washout + highland creek pass:
+
+- Reduced the water shader's tendency to blow out into pale slabs by lowering river/creek opacity, clamping shoreline milk/foam brightness, tightening alpha, and making the depth bands less aggressively bright.
+- Added shared authored highland creek paths in `src/simulation/world.ts` so water-state sampling and rendered highland creek geometry agree instead of leaving `creekPaths` empty.
+- Implemented `buildHighlandWaterways()` in `src/render/world/waterSystem.ts` with narrow foothill/alpine runoff ribbons and three small island-style waterfall accents.
+- Tapered the rendered main river through the foothill/highland route so the mid-route creek owns the scene more, instead of one broad river surface covering the slope.
+- Reduced mid-route valley mist coverage in `WorldRenderer.ts` after screenshot QA showed it was contributing to the “translucent slab” read over the creek corridor.
+- Verification: `npm run build` and `npm run test:contracts` passed during the pass; fresh screenshot artifacts are in `output/qa-water-fix/`.
+
+Grass/performance cleanup pass:
+
+- Reduced terrain tessellation from 240 to 192 segments, dropping terrain from 115,200 triangles to 73,728 triangles.
+- Simplified grass blade geometry from 4x6 subdivisions to 2x4 subdivisions, then reinvested that budget into denser grass placement.
+- Increased total grass instances from roughly 13.3k to roughly 20.7k while dropping estimated grass triangles from roughly 765k to roughly 412k.
+- Added noise-thresholded clumpy grass density in `sampleGrassDensity()` so grass gathers into irregular patches with readable gaps instead of a uniform field.
+- Verification artifacts: `output/qa-grass-perf/opening-qa-camera.png` and `opening-qa-camera-state.json`.
+
 - Tightened the normal-play HUD in `src/render/app/GameApp.ts` and `src/styles.css` so the large controls panel is now contextual instead of always visible; it appears when camera control is unlocked or when a menu state needs extra guidance.
 - Replaced the old sentence-heavy quick-hint copy with compact keycap action pills so the bottom HUD reads faster during play.
 - Added clearer progress framing across the `Esc`, `E`, and `M` surfaces: pause now shows gathered-goods counts, the Adventure Card sections show live count badges, and the map now reports both route progress and goods/field-note totals.
@@ -258,6 +275,29 @@ Foraging loop pickup pass:
 - Added distinct in-world pickup visuals for each forage kind, with bob/sway behavior and disappear-on-gather state.
 - `npm run build` passes after this pass.
 
+Riparian forest-pocket pass:
+- Kept this automation run scoped to water-bank / forest-transition composition in `src/render/world/terrainDecorations.ts`.
+- Added guarded riparian pockets to the existing water-bank accent layer: soft canopy-shadow washes, moss pads, grass clumps, lip pebbles, and lowland/foothill saplings at selected lake, river, and braid transition anchors.
+- The new pockets use wetness, slope, and playable-bound checks before placement, so they should decorate bank edges without changing controls, route checkpoints, or water simulation.
+- Verification:
+- `npm run build` passes. Vite still reports the existing large JS chunk warning.
+- `npm run test:contracts` passes: camera, controls, water-state-agreement, route-checkpoints.
+- `git diff --check` passes.
+- Required `develop-web-game` Playwright client was attempted against `http://127.0.0.1:4194/`; direct skill-path launch still could not resolve repo-local `playwright`, while the repo-local symlink with `--preserve-symlinks --preserve-symlinks-main` reached Chromium and failed with the existing macOS sandbox `MachPortRendezvousServer ... Permission denied` error.
+- The temporary Vite server for this run is still listening on `127.0.0.1:4194` because sandboxed `kill 9710` returned `Operation not permitted`.
+- Next visual check: inspect the opening lake rim, Silver Bend bank, Fir Gate braid, and Windstep / ridge river pockets in Safari or Dia before adding more density.
+
+Water-bank / forest threshold polish:
+- Added small sedge, moss, pebble, and wash accents along the meadow, fir-gate, and alpine branch channels so side rivers read with the same bank language as the main river and starting pools.
+- Added a few pool-rim sedge patches around the opening lake and starting shoals to soften the water-to-grass transition.
+- Added subtle canopy-ground shadow patches at authored biome-transition anchors so forest edges feel more grounded and scaled without changing the playable route.
+- Verification:
+- `npm run build` passes. Vite still emits the existing large chunk warning for the main JS bundle.
+- `npm run test:contracts` passes: camera, controls, water-state-agreement, route-checkpoints.
+- `git diff --check` passes.
+- The required `develop-web-game` Playwright client was attempted against `http://127.0.0.1:4193/`, but Chromium launch failed under the macOS sandbox with `MachPortRendezvousServer ... Permission denied`.
+- The temporary Vite server for this run is still listening on `127.0.0.1:4193` because sandboxed `kill 4264` returned `operation not permitted`.
+
 Pouch HUD pass:
 - Added a compact live pouch strip to the gameplay HUD that shows gathered forage counts by kind.
 - The pouch stays hidden until Mossu is near a forageable or has just gathered one, then lingers briefly after pickup.
@@ -270,3 +310,29 @@ Interactive pouch follow-up:
 - Hovering, focusing, or clicking a pouch category now selects it and opens a small detail tray.
 - Nearby forageable categories explain the `Press E` action, while gathered categories summarize stored counts and point to the binder.
 - `npm run build` and `git diff --check` pass after this pass.
+
+Overnight world polish shoreline/forest-edge pass:
+- Added translucent silty shoreline wash patches around the main river and starting-water pools so bank rims have a clearer dry-to-wet read before reeds/pebbles.
+- Added a few forest-edge understory patches using existing moss, bush, and grass primitives to make lowland-to-foothill forest transitions feel less abrupt without changing the playable route.
+- Kept the pass scoped to `src/render/world/terrainDecorations.ts`.
+- Verification: `npm run build`, `npm run test:contracts`, and `git diff --check` pass. Vite still reports the existing large bundle warning.
+- Playwright follow-up: the repo-local symlinked `develop-web-game` client still cannot launch Chromium in this sandbox because `MachPortRendezvousServer` registration is denied. The temporary Vite server on `http://127.0.0.1:4190/` could not be killed from this sandbox (`Operation not permitted`) and was still listening at the end of the run.
+
+Overnight pool-rim / forest-scale follow-up:
+- Added a subtle procedural bank-lip lift around starting-water pools in `src/simulation/world.ts`, strongest around the opening lake, so pools have a clearer raised dry rim instead of blending straight into flat grass.
+- Added narrow pebble-trail lip markers to the main river, branch channels, and starting pools in `src/render/world/terrainDecorations.ts` to make the water-bank edge easier to read from the gameplay camera.
+- Added four authored forest scale ramps at lowland and foothill edges, stepping from saplings into larger trees so the forest boundary reads less abrupt without touching route checkpoints or controls.
+- Verification:
+- `npm run build` passes. Vite still emits the existing large chunk warning for the main JS bundle.
+- `npm run test:contracts` passes: camera, controls, water-state-agreement, route-checkpoints.
+- `git diff --check` passes.
+- Playwright follow-up: the skill client was retried against `http://127.0.0.1:4191/`. The first run hit the known skill-path `playwright` resolution issue; the repo-local symlink with `--preserve-symlinks` reached Chromium but Chromium still failed with `MachPortRendezvousServer ... Permission denied`. The temporary Vite server was stopped cleanly with Ctrl-C.
+
+Overall QA pass:
+- No gameplay/world code changes were made in this pass; this was a verification sweep over the current local worktree.
+- Static verification passed: `npm run build`, `npm run test:contracts`, and `git diff --check`.
+- Code-search sanity check found no conflict markers, debuggers, TODO/FIXME items, or unexpected source errors in `src`, `tests`, `package.json`, or `index.html`.
+- Safari smoke verification on `http://127.0.0.1:4196/` rendered the title screen, entered gameplay, collected the nearby forageable with `E`, opened and closed the map with `M` / `Esc`, and opened the handbook with `Tab`.
+- Screenshots captured under `output/qa-overall/`: `safari-smoke-2.png`, `safari-after-enter.png`, `safari-after-e.png`, `safari-after-m.png`, `safari-after-esc.png`, and `safari-after-tab.png`.
+- Headless Playwright state capture remains unreliable in this macOS sandbox: direct Vite targets were unreachable from sandboxed Chromium, and an in-process static-server probe hung around `advanceTime` before the browser context closed.
+- Remaining risks: the existing Vite large chunk warning remains, and the handbook should get a dedicated responsive-height check because the non-fullscreen Safari smoke view showed inner scrolling near the bottom of the panel.

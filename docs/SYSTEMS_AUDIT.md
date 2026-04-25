@@ -60,33 +60,43 @@ Files:
 Current state:
 
 - River gameplay is sampled in `world.ts` through `sampleRiverChannels()`, `sampleWaterState()`, `sampleRiverWetness()`, and `sampleRiverNookMask()`.
+- Starting-area pools are sampled from `STARTING_WATER_POOLS`, which also drives terrain basin cuts, wet-bank clearing, shallow/swim state, and rendered pool surfaces.
 - Main river width is now broad enough to read as a central valley river across the map.
 - Three braided branch segments are active: meadow, fir gate, and alpine.
 - Rendered water is built in `waterSystem.ts` as water ribbons over those channels.
-- The opening lake is separate and readable.
+- River ribbon geometry now includes procedural flow curl so the shader can create longer straight-current bands, bend eddies, and braid split motion without painted flow textures.
+- The opening lake is now part of a small starting-water pool system, alongside shallow shoals around the burrow meadow.
 - Highland creeks are currently muted.
-- Grass density now favors dry river nooks and clears wet river/lake edges more aggressively.
+- Grass and forest density now favor dry river nooks and clear wet river/pool edges more aggressively.
+
+Latest route QA:
+
+- Route checkpoints from opening lake through shrine approach have been captured and sampled.
+- Main/branch separation is clear in the sampler, and grassy nook masks exist between active braids.
+- Bank readability tuning should keep clearing trees and dense forest away from wet banks.
+- River and starting-water edge masks are now named separately: rendered surface footprint, broad damp-bank wetness, damp-bank-only clearing, grassy nook mask, and player-enterable `sampleWaterState()`.
+- Water visuals now push stronger readability: darker damp edges, a softer illustrated shoreline rim, lighter green shallow water, deeper blue-teal swim water, and more directional flow bands.
+- Mossu and recruited Karu now emit cheap local ripple rings through a fixed-size shader uniform array when they move through shallow/swim water.
+- The browser sampler now reports `9` water surfaces, `6,307` vertices, and `11,128` triangles after adding the starting-area pools.
 
 Remaining checks:
 
-- Walk the full route in Chrome and confirm branch/main separation from gameplay camera height.
-- Check bank readability and swimming transitions around wider water.
-- Tune any channel that still feels too thin, too thick, or overlapped.
-- Confirm rendered river width and gameplay active width agree at the places players enter/exit water.
+- Chrome-check rendered river/pool width and gameplay active width at the places players enter/exit water.
 
 Target:
 
 - A broader, cleaner main river crossing the map.
 - Fewer awkward braids, each with clear start/end feathering.
 - Wider grassy nooks and small island-like banks between main and side channels.
-- Water visuals, swimming state, river wetness, and grass clearing should agree.
+- Water visuals, swimming state, wetness, forest avoidance, and grass clearing should agree through their named masks instead of sharing one overloaded value.
 
 Implementation notes:
 
-- Continue in `world.ts` for sampler changes: `RIVER_BRANCH_SEGMENTS`, `sampleRiverWidth()`, `sampleRiverWetness()`, and `sampleRiverNookMask()`.
+- Continue in `world.ts` for sampler changes: `RIVER_BRANCH_SEGMENTS`, `STARTING_WATER_POOLS`, `sampleRiverWidth()`, `sampleRiverSurfaceMask()`, `sampleRiverWetness()`, `sampleRiverDampBankMask()`, `sampleStartingWaterWetness()`, and `sampleRiverNookMask()`.
 - Update `waterSystem.ts` only when rendered width or segment density needs visual correction.
+- Keep flow and interaction effects shader-driven and bounded; do not add full shallow-water simulation unless gameplay needs it.
 - Prefer fewer, wider, cleaner channels over many thin decorative ribbons.
-- Keep the opening lake as a start-area feature.
+- Keep the opening lake and shallow meadow pools as start-area features.
 - Leave highland creeks muted until the main valley river reads well.
 
 Files:
@@ -194,6 +204,7 @@ Current state:
 - `?cameraDebug=1` exposes camera state.
 - `?perfDebug=1` exposes FPS, frame time, pixel ratio, renderer calls, triangles, memory, grass, forest, water, and shader counts.
 - First Chrome tuning snapshot after the premium grass/water pass: about `1007` renderer calls, `1.78M` triangles, `13,792` grass instances, `8,968` water triangles, and pixel ratio downshifted to `0.78`.
+- After the starting-water readability pass, static browser probe counts are `9` water surfaces and `11,128` water triangles; full FPS tuning still needs a real Chrome walk.
 
 Targets:
 
@@ -216,19 +227,19 @@ Files:
 
 ## Next Code Pass
 
-Best next implementation pass: inventory holo-card binder polish.
+Best next implementation pass: terrain/forest composition polish.
 
 Why:
 
-- Rivers, Karu, performance instrumentation, and grass all have first implementations now.
-- Inventory is still the largest visible redesign item that has not received its full pass.
-- The existing DOM/CSS foundation already has `inventory-holo-card` classes, so this is likely a controlled UI polish pass rather than a risky systems rewrite.
+- Rivers now have a named edge contract, so terrain/forest can tune banks, overlooks, and mountain silhouettes without redefining water behavior.
+- Grass and forest placement both depend on terrain slope, river wetness, and nook masks.
+- Final grass tuning should happen after the bigger terrain and forest sightline changes.
 
 Parallel/secondary follow-up:
 
-1. River route QA in Chrome.
+1. Chrome bank-entry water QA.
 2. Grass wind/push visual tuning.
-3. Terrain/forest composition polish.
+3. Inventory populated-card playtest.
 4. Performance tuning based on `?perfDebug=1`.
 
 This gives the rest of the redesign a cleaner world foundation.

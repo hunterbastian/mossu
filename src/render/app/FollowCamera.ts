@@ -18,6 +18,7 @@ import {
   worldLandmarks,
 } from "../../simulation/world";
 import { ViewMode } from "../../simulation/viewMode";
+import { movementYawToTrailingCameraYaw } from "./cameraYaw";
 
 CameraControls.install({ THREE });
 (BufferGeometry.prototype as BufferGeometry & { computeBoundsTree?: typeof computeBoundsTree }).computeBoundsTree =
@@ -408,8 +409,9 @@ export class FollowCamera {
       if (this.manualLookCooldown <= 0 && !player.fallingToVoid) {
         if (player.grounded && speed > 1.2 && profile.yawResponsiveness > 0) {
           const desiredYaw = Math.atan2(player.velocity.x, player.velocity.z);
+          const desiredCameraYaw = movementYawToTrailingCameraYaw(desiredYaw);
           const currentYaw = controls._sphericalEnd.theta;
-          const delta = Math.atan2(Math.sin(desiredYaw - currentYaw), Math.cos(desiredYaw - currentYaw));
+          const delta = Math.atan2(Math.sin(desiredCameraYaw - currentYaw), Math.cos(desiredCameraYaw - currentYaw));
           controls._sphericalEnd.theta = currentYaw + delta * (1 - Math.exp(-dt * profile.yawResponsiveness));
         }
       }
@@ -585,7 +587,28 @@ export class FollowCamera {
       }
 
       this.controls.mouseButtons.left = CameraControls.ACTION.ROTATE;
-      this.controls.lockPointer();
+      const originalRequestPointerLock = this.domElement.requestPointerLock;
+      this.domElement.requestPointerLock = ((...args: Parameters<HTMLElement["requestPointerLock"]>) => {
+        try {
+          const result = originalRequestPointerLock.apply(this.domElement, args);
+          if (result && typeof (result as Promise<void>).catch === "function") {
+            void (result as Promise<void>).catch(() => {
+              this.pointerLocked = false;
+            });
+          }
+          return result;
+        } catch {
+          this.pointerLocked = false;
+          return Promise.resolve() as ReturnType<HTMLElement["requestPointerLock"]>;
+        }
+      }) as HTMLElement["requestPointerLock"];
+      try {
+        this.controls.lockPointer();
+      } catch {
+        this.pointerLocked = false;
+      } finally {
+        this.domElement.requestPointerLock = originalRequestPointerLock;
+      }
     };
 
     this.domElement.onwheel = (event) => {

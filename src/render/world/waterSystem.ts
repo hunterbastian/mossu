@@ -7,28 +7,32 @@ import {
   Group,
   MathUtils,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
+  PlaneGeometry,
   Vector3,
+  Vector4,
 } from "three";
 import { GrassShader } from "./grassSystem";
 import {
   ALPINE_RUNOFF_SURFACE_OFFSET,
   FOOTHILL_CREEK_SURFACE_OFFSET,
+  HIGHLAND_CREEK_PATHS,
   MAIN_RIVER_SURFACE_OFFSET,
-  OPENING_LAKE_CENTER_X,
-  OPENING_LAKE_CENTER_Z,
-  OPENING_LAKE_RADIUS,
-  OPENING_LAKE_SURFACE_OFFSET,
   RIVER_BRANCH_SEGMENTS,
+  STARTING_WATER_POOLS,
   sampleRiverChannelAt,
   sampleRiverChannelCenter,
+  sampleRiverRenderWidthScale,
   sampleTerrainHeight,
   sampleTerrainNormal,
   WATERFALL_OUTFLOW_SURFACE_OFFSET,
+  type HighlandCreekPath,
   type RiverChannelId,
+  type StartingWaterPool,
 } from "../../simulation/world";
 
-type WaterProfileKey = "mainRiver" | "foothillCreek" | "alpineRunoff" | "waterfallOutflow";
+type WaterProfileKey = "mainRiver" | "stillPool" | "foothillCreek" | "alpineRunoff" | "waterfallOutflow";
 type WaterSurfaceBackend = "webgl";
 
 interface WaterProfile {
@@ -72,11 +76,19 @@ interface WaterSurfaceOptions {
   opacity?: number;
   flowSpeed?: number;
   flowDirection?: number;
+  flowBraidStrength?: number;
+}
+
+export interface WaterRippleSource {
+  x: number;
+  z: number;
+  startTime: number;
+  strength: number;
 }
 
 export interface WaterSurfaceController {
   mesh: Mesh;
-  update: (elapsed: number) => void;
+  update: (elapsed: number, ripples?: readonly WaterRippleSource[]) => void;
   dispose?: () => void;
 }
 
@@ -90,7 +102,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     key: "mainRiver",
     widthScale: 1.02,
     levelOffset: MAIN_RIVER_SURFACE_OFFSET,
-    opacity: 0.9,
+    opacity: 0.84,
     flowSpeed: 0.82,
     roughness: 0.16,
     metalness: 0.03,
@@ -98,31 +110,63 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     detailWaveAmplitude: 0.014,
     baseFrequency: 34,
     detailFrequency: 66,
-    shallowColor: "#9fc7bc",
-    deepColor: "#4f8588",
-    foamColor: "#eef4df",
-    shorelineMilkColor: "#dfe8cc",
+    shallowColor: "#c2e3d3",
+    deepColor: "#2f6f86",
+    foamColor: "#f3f3df",
+    shorelineMilkColor: "#f3f0d7",
     highlightColor: "#edd89f",
     sparkleColor: "#f8f1cf",
     reflectionColor: "#a9c9c9",
-    sedimentColor: "#aeb08a",
-    bedColor: "#65765f",
+    sedimentColor: "#a0a981",
+    bedColor: "#4f675d",
     causticColor: "#e9ecc3",
-    shorelineFoamStrength: 0.28,
-    shorelineMilkStrength: 0.44,
-    slopeFoamStrength: 0.18,
-    highlightStrength: 0.26,
-    clarity: 0.76,
-    rippleContrast: 0.68,
+    shorelineFoamStrength: 0.42,
+    shorelineMilkStrength: 0.3,
+    slopeFoamStrength: 0.14,
+    highlightStrength: 0.18,
+    clarity: 0.9,
+    rippleContrast: 0.92,
     depthShadowStrength: 0.44,
     causticStrength: 0.2,
     sparkleStrength: 0.2,
+  },
+  stillPool: {
+    key: "stillPool",
+    widthScale: 1,
+    levelOffset: MAIN_RIVER_SURFACE_OFFSET,
+    opacity: 0.9,
+    flowSpeed: 0.38,
+    roughness: 0.2,
+    metalness: 0.02,
+    baseWaveAmplitude: 0.02,
+    detailWaveAmplitude: 0.008,
+    baseFrequency: 22,
+    detailFrequency: 44,
+    shallowColor: "#cce7d1",
+    deepColor: "#4f8c92",
+    foamColor: "#f6f1d8",
+    shorelineMilkColor: "#f1e8bc",
+    highlightColor: "#f3d98c",
+    sparkleColor: "#fff6cf",
+    reflectionColor: "#b7d7cc",
+    sedimentColor: "#b0aa7d",
+    bedColor: "#64745e",
+    causticColor: "#f3edbd",
+    shorelineFoamStrength: 0.36,
+    shorelineMilkStrength: 0.76,
+    slopeFoamStrength: 0.08,
+    highlightStrength: 0.28,
+    clarity: 0.96,
+    rippleContrast: 0.66,
+    depthShadowStrength: 0.32,
+    causticStrength: 0.34,
+    sparkleStrength: 0.26,
   },
   foothillCreek: {
     key: "foothillCreek",
     widthScale: 0.92,
     levelOffset: FOOTHILL_CREEK_SURFACE_OFFSET,
-    opacity: 0.84,
+    opacity: 0.68,
     flowSpeed: 1.18,
     roughness: 0.12,
     metalness: 0.03,
@@ -140,10 +184,10 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     sedimentColor: "#d8e1cb",
     bedColor: "#8a9980",
     causticColor: "#f4f1cc",
-    shorelineFoamStrength: 0.42,
-    shorelineMilkStrength: 0.44,
-    slopeFoamStrength: 0.34,
-    highlightStrength: 0.4,
+    shorelineFoamStrength: 0.34,
+    shorelineMilkStrength: 0.18,
+    slopeFoamStrength: 0.28,
+    highlightStrength: 0.24,
     clarity: 0.82,
     rippleContrast: 0.88,
     depthShadowStrength: 0.4,
@@ -154,7 +198,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     key: "alpineRunoff",
     widthScale: 0.88,
     levelOffset: ALPINE_RUNOFF_SURFACE_OFFSET,
-    opacity: 0.8,
+    opacity: 0.64,
     flowSpeed: 1.46,
     roughness: 0.14,
     metalness: 0.03,
@@ -172,10 +216,10 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     sedimentColor: "#ccd9cf",
     bedColor: "#7f8e87",
     causticColor: "#eef4db",
-    shorelineFoamStrength: 0.4,
-    shorelineMilkStrength: 0.28,
-    slopeFoamStrength: 0.54,
-    highlightStrength: 0.48,
+    shorelineFoamStrength: 0.32,
+    shorelineMilkStrength: 0.14,
+    slopeFoamStrength: 0.42,
+    highlightStrength: 0.28,
     clarity: 0.74,
     rippleContrast: 1.02,
     depthShadowStrength: 0.5,
@@ -186,7 +230,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     key: "waterfallOutflow",
     widthScale: 0.9,
     levelOffset: WATERFALL_OUTFLOW_SURFACE_OFFSET,
-    opacity: 0.86,
+    opacity: 0.7,
     flowSpeed: 1.68,
     roughness: 0.12,
     metalness: 0.04,
@@ -204,10 +248,10 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     sedimentColor: "#d7ded3",
     bedColor: "#879089",
     causticColor: "#f7f5e5",
-    shorelineFoamStrength: 0.5,
-    shorelineMilkStrength: 0.22,
-    slopeFoamStrength: 0.66,
-    highlightStrength: 0.56,
+    shorelineFoamStrength: 0.4,
+    shorelineMilkStrength: 0.12,
+    slopeFoamStrength: 0.5,
+    highlightStrength: 0.32,
     clarity: 0.68,
     rippleContrast: 1.14,
     depthShadowStrength: 0.58,
@@ -217,6 +261,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
 };
 
 const WATER_RIBBON_COLUMNS = [-1, -0.8, -0.54, -0.22, 0.22, 0.54, 0.8, 1];
+const WATER_RIPPLE_LIMIT = 8;
 
 function getWaterWidth(options: WaterSurfaceOptions, point: Vector3, t: number) {
   const baseWidth = typeof options.width === "function" ? options.width(point, t) : options.width;
@@ -234,12 +279,16 @@ function buildWaterRibbonGeometry(points: Vector3[], options: WaterSurfaceOption
   const bankValues: number[] = [];
   const slopeValues: number[] = [];
   const flowTValues: number[] = [];
+  const flowCurlValues: number[] = [];
   const lateral = new Vector3();
   const tangent = new Vector3();
+  const prevTangent = new Vector3();
+  const nextTangent = new Vector3();
   const prevDelta = new Vector3();
   const nextDelta = new Vector3();
   const levelOffset = options.levelOffset ?? options.profile.levelOffset;
   const flowDirection = resolveWaterFlowDirection(points, options.flowDirection);
+  const flowBraidStrength = options.flowBraidStrength ?? 0.35;
 
   for (let i = 0; i < samples.length; i += 1) {
     const sample = samples[i];
@@ -252,6 +301,23 @@ function buildWaterRibbonGeometry(points: Vector3[], options: WaterSurfaceOption
     } else {
       tangent.normalize();
     }
+    prevTangent.subVectors(sample, prev).setY(0);
+    nextTangent.subVectors(next, sample).setY(0);
+    if (prevTangent.lengthSq() < 1e-5) {
+      prevTangent.copy(tangent);
+    } else {
+      prevTangent.normalize();
+    }
+    if (nextTangent.lengthSq() < 1e-5) {
+      nextTangent.copy(tangent);
+    } else {
+      nextTangent.normalize();
+    }
+    const bendCurl = MathUtils.clamp(
+      (prevTangent.x * nextTangent.z - prevTangent.z * nextTangent.x) * 18,
+      -1,
+      1,
+    );
 
     lateral.set(-tangent.z, 0, tangent.x).normalize();
     const t = samples.length > 1 ? i / (samples.length - 1) : 0;
@@ -277,6 +343,7 @@ function buildWaterRibbonGeometry(points: Vector3[], options: WaterSurfaceOption
       bankValues.push(bank);
       slopeValues.push(localSlope);
       flowTValues.push(t);
+      flowCurlValues.push(MathUtils.clamp(bendCurl + offset * flowBraidStrength * 0.42, -1, 1));
     });
   }
 
@@ -299,6 +366,7 @@ function buildWaterRibbonGeometry(points: Vector3[], options: WaterSurfaceOption
   geometry.setAttribute("aBank", new Float32BufferAttribute(bankValues, 1));
   geometry.setAttribute("aSlope", new Float32BufferAttribute(slopeValues, 1));
   geometry.setAttribute("aFlowT", new Float32BufferAttribute(flowTValues, 1));
+  geometry.setAttribute("aFlowCurl", new Float32BufferAttribute(flowCurlValues, 1));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return { geometry, flowDirection };
@@ -331,6 +399,7 @@ function createLakeGeometry(
   const bankValues: number[] = [];
   const slopeValues: number[] = [];
   const flowTValues: number[] = [];
+  const flowCurlValues: number[] = [];
   const totalRings = Math.max(2, rings);
   const totalSegments = Math.max(16, radialSegments);
   const surfaceY = center.y;
@@ -341,6 +410,7 @@ function createLakeGeometry(
   bankValues.push(0);
   slopeValues.push(0.08);
   flowTValues.push(0);
+  flowCurlValues.push(0.18);
 
   for (let ring = 1; ring <= totalRings; ring += 1) {
     const ringT = ring / totalRings;
@@ -358,6 +428,7 @@ function createLakeGeometry(
       bankValues.push(MathUtils.clamp(ringT ** 1.1, 0, 1));
       slopeValues.push(MathUtils.clamp((1 - sampleTerrainNormal(x, z).y) * 2.8 + edgeBlend * 0.14, 0.04, 0.32));
       flowTValues.push(angleT);
+      flowCurlValues.push(Math.sin(angle * 2.0) * 0.2 + ringT * 0.18);
     }
   }
 
@@ -388,6 +459,7 @@ function createLakeGeometry(
   geometry.setAttribute("aBank", new Float32BufferAttribute(bankValues, 1));
   geometry.setAttribute("aSlope", new Float32BufferAttribute(slopeValues, 1));
   geometry.setAttribute("aFlowT", new Float32BufferAttribute(flowTValues, 1));
+  geometry.setAttribute("aFlowCurl", new Float32BufferAttribute(flowCurlValues, 1));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
@@ -410,6 +482,7 @@ function createWebGLWaterController(
   const sedimentColor = new Color(profile.sedimentColor);
   const bedColor = new Color(profile.bedColor);
   const causticColor = new Color(profile.causticColor);
+  const rippleUniforms = Array.from({ length: WATER_RIPPLE_LIMIT }, () => new Vector4(0, 0, -999, 0));
   const material = new MeshStandardMaterial({
     color: shallowColor,
     roughness: profile.roughness,
@@ -424,6 +497,9 @@ function createWebGLWaterController(
 
   material.onBeforeCompile = (shader: GrassShader) => {
     shader.uniforms.uTime = { value: 0 };
+    shader.uniforms.uRippleTime = { value: 0 };
+    shader.uniforms.uRippleCount = { value: 0 };
+    shader.uniforms.uRippleSources = { value: rippleUniforms };
     shader.uniforms.uFlowSpeed = { value: options.flowSpeed ?? profile.flowSpeed };
     shader.uniforms.uFlowDirection = { value: flowDirection };
     shader.uniforms.uWaterShallow = { value: shallowColor };
@@ -455,6 +531,9 @@ function createWebGLWaterController(
         "#include <common>",
         `#include <common>
         uniform float uTime;
+        uniform float uRippleTime;
+        uniform int uRippleCount;
+        uniform vec4 uRippleSources[${WATER_RIPPLE_LIMIT}];
         uniform float uFlowSpeed;
         uniform float uFlowDirection;
         uniform float uBaseWaveAmplitude;
@@ -465,13 +544,33 @@ function createWebGLWaterController(
         attribute float aBank;
         attribute float aSlope;
         attribute float aFlowT;
+        attribute float aFlowCurl;
         varying vec2 vWaterUv;
         varying vec3 vWaterWorldPosition;
         varying vec3 vWaterViewDirection;
         varying float vWaterChannel;
         varying float vWaterBank;
         varying float vWaterSlope;
-        varying float vWaterFlowT;`,
+        varying float vWaterFlowT;
+        varying float vWaterFlowCurl;
+
+        float waterRippleRing(vec2 worldXZ, float scale) {
+          float ripple = 0.0;
+          for (int i = 0; i < ${WATER_RIPPLE_LIMIT}; i++) {
+            if (i < uRippleCount) {
+              vec4 source = uRippleSources[i];
+              float age = max(0.0, uRippleTime - source.z);
+              float life = 1.45;
+              float alive = step(age, life) * smoothstep(0.02, 0.14, age);
+              float distanceToSource = distance(worldXZ, source.xy);
+              float front = age * (6.8 + source.w * 1.8);
+              float ring = exp(-abs(distanceToSource - front) * (1.65 + source.w * 0.35));
+              float wakeCore = exp(-distanceToSource * 0.42) * 0.18;
+              ripple += (ring + wakeCore) * max(0.0, 1.0 - age / life) * source.w * alive * scale;
+            }
+          }
+          return ripple;
+        }`,
       )
       .replace(
         "#include <uv_vertex>",
@@ -480,21 +579,25 @@ function createWebGLWaterController(
         vWaterChannel = aChannel;
         vWaterBank = aBank;
         vWaterSlope = aSlope;
-        vWaterFlowT = aFlowT;`,
+        vWaterFlowT = aFlowT;
+        vWaterFlowCurl = aFlowCurl;`,
       )
       .replace(
         "#include <begin_vertex>",
         `#include <begin_vertex>
         float slopeBoost = 0.55 + aSlope * 0.95;
         float channelMask = 0.35 + aChannel * 0.65;
-        float flowWarp = sin(aFlowT * 15.0 + uv.x * 9.0 + position.x * 0.025 + uTime * 0.45)
-          + cos(aFlowT * 11.0 - uv.x * 12.0 + position.z * 0.018 - uTime * 0.38);
-        float broadFlow = sin(aFlowT * uBaseFrequency - uTime * uFlowSpeed * 1.35 * uFlowDirection + position.x * 0.03 + position.z * 0.015 + flowWarp * 0.45);
-        float detailFlow = cos((aFlowT + uv.x * 0.18) * uDetailFrequency - uTime * uFlowSpeed * 2.25 * uFlowDirection + position.z * 0.04 + flowWarp * 0.7);
-        float crossRipple = sin(uv.x * 18.0 + uTime * 1.4 + aFlowT * 22.0 + flowWarp * 0.6);
+        float flowCurl = aFlowCurl;
+        float flowWarp = sin(aFlowT * 15.0 + uv.x * 9.0 + position.x * 0.025 + uTime * 0.45 + flowCurl * 1.7)
+          + cos(aFlowT * 11.0 - uv.x * 12.0 + position.z * 0.018 - uTime * 0.38 + flowCurl * 2.3);
+        float broadFlow = sin(aFlowT * uBaseFrequency - uTime * uFlowSpeed * 1.35 * uFlowDirection + position.x * 0.03 + position.z * 0.015 + flowWarp * 0.45 + flowCurl * 2.2);
+        float detailFlow = cos((aFlowT + uv.x * 0.18 + flowCurl * 0.035) * uDetailFrequency - uTime * uFlowSpeed * 2.25 * uFlowDirection + position.z * 0.04 + flowWarp * 0.7);
+        float crossRipple = sin(uv.x * 18.0 + uTime * 1.4 + aFlowT * 22.0 + flowWarp * 0.6 + flowCurl * 3.0);
+        float localRipple = waterRippleRing(position.xz, (0.28 + aChannel * 0.72) * (1.0 - aBank * 0.2));
         transformed.y += broadFlow * uBaseWaveAmplitude * (0.4 + channelMask * 0.6) * slopeBoost;
         transformed.y += detailFlow * uDetailWaveAmplitude * (0.35 + aSlope * 0.85);
-        transformed.y += crossRipple * uDetailWaveAmplitude * 0.45 * (0.3 + aBank * 0.7);`,
+        transformed.y += crossRipple * uDetailWaveAmplitude * 0.45 * (0.3 + aBank * 0.7);
+        transformed.y += localRipple * 0.22;`,
       )
       .replace(
         "#include <project_vertex>",
@@ -509,6 +612,9 @@ function createWebGLWaterController(
         "#include <common>",
         `#include <common>
         uniform float uTime;
+        uniform float uRippleTime;
+        uniform int uRippleCount;
+        uniform vec4 uRippleSources[${WATER_RIPPLE_LIMIT}];
         uniform float uFlowSpeed;
         uniform float uFlowDirection;
         uniform vec3 uWaterShallow;
@@ -539,6 +645,7 @@ function createWebGLWaterController(
         varying float vWaterBank;
         varying float vWaterSlope;
         varying float vWaterFlowT;
+        varying float vWaterFlowCurl;
 
         float waterHash(vec2 p) {
           return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -564,31 +671,78 @@ function createWebGLWaterController(
             amplitude *= 0.5;
           }
           return value;
+        }
+
+        float waterRippleRing(vec2 worldXZ, float scale) {
+          float ripple = 0.0;
+          for (int i = 0; i < ${WATER_RIPPLE_LIMIT}; i++) {
+            if (i < uRippleCount) {
+              vec4 source = uRippleSources[i];
+              float age = max(0.0, uRippleTime - source.z);
+              float life = 1.45;
+              float alive = step(age, life) * smoothstep(0.02, 0.14, age);
+              float distanceToSource = distance(worldXZ, source.xy);
+              float front = age * (6.8 + source.w * 1.8);
+              float ring = exp(-abs(distanceToSource - front) * (1.6 + source.w * 0.32));
+              float wakeCore = exp(-distanceToSource * 0.4) * 0.16;
+              ripple += (ring + wakeCore) * max(0.0, 1.0 - age / life) * source.w * alive * scale;
+            }
+          }
+          return ripple;
         }`,
       )
       .replace(
         "vec4 diffuseColor = vec4( diffuse, opacity );",
         `float slopeBoost = smoothstep(0.08, 0.9, vWaterSlope);
         float channelDepth = pow(clamp(vWaterChannel, 0.0, 1.0), 1.22);
+        float toonDepthBand =
+          channelDepth > 0.68 ? 0.86 :
+          channelDepth > 0.34 ? 0.42 :
+          0.08;
         float bankMask = clamp(vWaterBank, 0.0, 1.0);
         float shallowMask = 1.0 - channelDepth;
-        vec2 flowUv = vec2(vWaterFlowT * (uBaseFrequency * 0.1), (vWaterUv.x - 0.5) * 5.4);
-        float flowWarp = waterFbm(flowUv * 1.2 + vec2(uTime * 0.16 * uFlowDirection, -uTime * 0.08));
-        float eddyNoise = waterFbm(flowUv * 2.6 + vec2(-uTime * 0.34 * uFlowDirection, uTime * 0.12));
+        float flowCurl = vWaterFlowCurl;
+        float bendStrength = abs(flowCurl);
+        vec2 proceduralFlow = normalize(vec2(1.0, flowCurl * 0.72 + (vWaterUv.x - 0.5) * bankMask * 0.55));
+        vec2 flowUv = vec2(
+          vWaterFlowT * (uBaseFrequency * 0.1) + proceduralFlow.y * 0.38,
+          (vWaterUv.x - 0.5) * 5.4 + flowCurl * 0.9
+        );
+        float flowWarp = waterFbm(flowUv * 1.2 + vec2(uTime * 0.16 * uFlowDirection, -uTime * 0.08) * proceduralFlow);
+        float eddyNoise = waterFbm(flowUv * 2.6 + vec2(-uTime * 0.34 * uFlowDirection, uTime * 0.12 + flowCurl * 0.18));
         float sparkleNoise = waterFbm(flowUv * 4.8 + vec2(uTime * 0.48 * uFlowDirection, uTime * 0.16));
         vec2 bedUv = vWaterWorldPosition.xz * vec2(0.048, 0.044) + vec2(flowWarp * 0.38, eddyNoise * 0.26);
         float bedNoise = waterFbm(bedUv + vec2(13.4, -7.8));
         float pebbleNoise = waterFbm(bedUv * 2.2 + vec2(-4.6, 9.3));
-        float broadFlow = sin(vWaterFlowT * uBaseFrequency - uTime * uFlowSpeed * 1.5 * uFlowDirection + vWaterWorldPosition.x * 0.022 + vWaterWorldPosition.z * 0.015 + flowWarp * 3.0) * 0.5 + 0.5;
-        float detailFlow = cos(vWaterFlowT * uDetailFrequency - uTime * uFlowSpeed * 2.6 * uFlowDirection + vWaterUv.x * 16.0 + vWaterWorldPosition.z * 0.03 + eddyNoise * 2.2) * 0.5 + 0.5;
-        float currentBands = sin(flowUv.x * 6.5 - uTime * uFlowSpeed * 1.55 * uFlowDirection + flowWarp * 4.2 + flowUv.y * 2.4) * 0.5 + 0.5;
-        float sideShimmer = sin((vWaterUv.x - 0.5) * 22.0 + vWaterFlowT * 18.0 - uTime * (1.2 + slopeBoost) * uFlowDirection + flowWarp * 2.0) * 0.5 + 0.5;
+        float broadFlow = sin(vWaterFlowT * uBaseFrequency - uTime * uFlowSpeed * 1.5 * uFlowDirection + vWaterWorldPosition.x * 0.022 + vWaterWorldPosition.z * 0.015 + flowWarp * 3.0 + flowCurl * 2.6) * 0.5 + 0.5;
+        float detailFlow = cos(vWaterFlowT * uDetailFrequency - uTime * uFlowSpeed * 2.6 * uFlowDirection + vWaterUv.x * 16.0 + vWaterWorldPosition.z * 0.03 + eddyNoise * 2.2 + flowCurl * 1.5) * 0.5 + 0.5;
+        float currentBands = sin(flowUv.x * 6.5 - uTime * uFlowSpeed * 1.55 * uFlowDirection + flowWarp * 4.2 + flowUv.y * 2.4 + flowCurl * 2.1) * 0.5 + 0.5;
+        float sideShimmer = sin((vWaterUv.x - 0.5) * 22.0 + vWaterFlowT * 18.0 - uTime * (1.2 + slopeBoost) * uFlowDirection + flowWarp * 2.0 + flowCurl * 4.0) * 0.5 + 0.5;
+        float bendEddy = bendStrength * smoothstep(0.18, 0.86, bankMask) * smoothstep(0.32, 0.96, sin((vWaterUv.x - 0.5) * 18.0 + vWaterFlowT * 24.0 + uTime * (1.0 + bendStrength) * uFlowDirection + eddyNoise * 3.2) * 0.5 + 0.5);
+        float actorRipple = waterRippleRing(vWaterWorldPosition.xz, (0.34 + shallowMask * 0.66) * (1.0 - bankMask * 0.22));
         float bankFeather = smoothstep(0.08, 0.92, bankMask);
-        vec3 waterTint = mix(uWaterShallow, uWaterDeep, channelDepth * 0.92);
-        waterTint = mix(waterTint, uSedimentColor, bankMask * (0.32 + eddyNoise * 0.18));
-        waterTint = mix(waterTint, uWaterShallow * vec3(1.08, 1.1, 1.04), shallowMask * (0.1 + uClarity * 0.18));
-        waterTint = mix(waterTint, mix(uWaterShallow, uWaterFoam, 0.28), slopeBoost * 0.18);
-        float shorelineMilkMask = bankFeather * shallowMask * (1.0 - slopeBoost * 0.48) * (0.46 + eddyNoise * 0.22) * uShorelineMilkStrength;
+        float shorelineLine = smoothstep(0.56, 0.76, bankMask) * (1.0 - smoothstep(0.9, 1.0, bankMask));
+        float shorelineEdge = smoothstep(0.78, 1.0, bankMask);
+        float graphicShoreLine = smoothstep(0.64, 0.76, bankMask) * (1.0 - smoothstep(0.82, 0.93, bankMask));
+        float shallowShelfLine = smoothstep(0.2, 0.34, channelDepth) * (1.0 - smoothstep(0.42, 0.58, channelDepth));
+        float deepCoreLine = smoothstep(0.64, 0.78, channelDepth) * (1.0 - smoothstep(0.86, 0.96, channelDepth));
+        float directionalRipple = smoothstep(
+          0.5,
+          1.0,
+          sin(flowUv.x * 11.0 - uTime * uFlowSpeed * 2.1 * uFlowDirection + flowUv.y * 1.35 + flowWarp * 4.8 + flowCurl * 2.4) * 0.5 + 0.5
+        );
+        vec3 waterTint = mix(uWaterShallow, uWaterDeep, toonDepthBand * 0.92);
+        waterTint = mix(waterTint, uSedimentColor, bankMask * (0.24 + eddyNoise * 0.12));
+        waterTint = mix(waterTint, uSedimentColor * vec3(0.88, 0.96, 0.82), shorelineEdge * (0.2 + eddyNoise * 0.06));
+        waterTint = mix(waterTint, uWaterShallow * vec3(1.02, 1.04, 1.0), shallowMask * (0.06 + uClarity * 0.1));
+        waterTint = mix(waterTint, mix(uWaterShallow, uWaterFoam, 0.16), slopeBoost * 0.1);
+        waterTint = mix(waterTint, uWaterShallow * vec3(1.04, 1.02, 0.96), shallowShelfLine * 0.14);
+        waterTint = mix(waterTint, uWaterDeep * vec3(0.82, 0.94, 1.02), deepCoreLine * 0.22);
+        float shorelineMilkMask = (
+          bankFeather * shallowMask * (1.0 - slopeBoost * 0.48) * (0.42 + eddyNoise * 0.2) +
+          shorelineLine * (0.28 + directionalRipple * 0.2)
+        ) * uShorelineMilkStrength;
+        shorelineMilkMask = min(shorelineMilkMask, 0.26);
         waterTint = mix(waterTint, uShorelineMilkColor, shorelineMilkMask);
         vec3 bedTint = mix(uBedColor, uSedimentColor, bedNoise * 0.46 + pebbleNoise * 0.24);
         bedTint = mix(bedTint, uBedColor * vec3(0.82, 0.86, 0.9), channelDepth * 0.42 + slopeBoost * 0.18);
@@ -598,22 +752,25 @@ function createWebGLWaterController(
         causticPattern = causticPattern * 0.5 + 0.5;
         float causticMask = pow(smoothstep(0.58, 1.0, causticPattern + sparkleNoise * 0.24), 1.5) * shallowMask * uCausticStrength;
         float depthShadow = channelDepth * uDepthShadowStrength + slopeBoost * 0.08;
-        float shorelineFoam = bankMask * smoothstep(0.46, 0.96, currentBands * (0.55 + uRippleContrast * 0.18) + detailFlow * 0.35 + eddyNoise * 0.28);
+        float shorelineFoam = shorelineLine * smoothstep(0.3, 0.86, directionalRipple * 0.36 + currentBands * (0.34 + uRippleContrast * 0.16) + detailFlow * 0.24 + eddyNoise * 0.16 + bendEddy * 0.2);
         float slopeFoam = slopeBoost * smoothstep(0.5, 1.0, detailFlow * 0.54 + broadFlow * 0.24 + sparkleNoise * 0.22);
-        float currentFoam = slopeBoost * smoothstep(0.74, 0.98, currentBands * (0.58 + uRippleContrast * 0.14) + sparkleNoise * 0.32) * 0.42;
+        float currentFoam = slopeBoost * smoothstep(0.68, 0.98, currentBands * (0.48 + uRippleContrast * 0.14) + directionalRipple * 0.28 + sparkleNoise * 0.28 + bendEddy * 0.2) * 0.46;
         float outletFoam = smoothstep(0.72, 1.0, slopeBoost + bankMask * 0.35) * smoothstep(0.42, 0.92, sideShimmer);
         float foamMask = clamp(
           shorelineFoam * uShorelineFoamStrength
+          + graphicShoreLine * (0.18 + uShorelineMilkStrength * 0.24)
           + slopeFoam * uSlopeFoamStrength
           + currentFoam
+          + bendEddy * 0.18
+          + actorRipple * 0.32
           + outletFoam * 0.24,
           0.0,
-          1.0
+          0.68
         );
         vec3 viewDir = normalize(vWaterViewDirection);
         float fresnel = pow(1.0 - abs(viewDir.y), 2.3);
         vec3 reflectionTint = mix(uReflectionColor, uHighlightColor, smoothstep(0.48, 1.0, broadFlow * 0.4 + sideShimmer * 0.38 + sparkleNoise * 0.22));
-        float highlightRibbon = smoothstep(0.54, 1.0, currentBands * 0.34 + detailFlow * 0.28 + sideShimmer * 0.2 + sparkleNoise * 0.18);
+        float highlightRibbon = smoothstep(0.5, 1.0, currentBands * 0.28 + directionalRipple * 0.22 + detailFlow * 0.24 + sideShimmer * 0.18 + sparkleNoise * 0.16 + actorRipple * 0.24);
         float highlightMask = fresnel * highlightRibbon * (0.35 + slopeBoost * 0.65) * uHighlightStrength;
         float glintMask = pow(smoothstep(0.76, 1.0, sparkleNoise * 0.55 + detailFlow * 0.45), 2.0) * (0.2 + slopeBoost * 0.4) * fresnel;
         float sparkleScatter = waterNoise(vWaterWorldPosition.xz * 0.22 + vec2(uTime * 0.18, -uTime * 0.12));
@@ -625,13 +782,17 @@ function createWebGLWaterController(
         vec3 finalWater = mix(waterTint, bedTint, bedVisibility);
         finalWater += uCausticColor * causticMask;
         finalWater *= 1.0 - depthShadow * 0.16;
-        finalWater = mix(finalWater, uWaterFoam, foamMask * (0.3 + bankMask * 0.45 + slopeBoost * 0.3));
-        finalWater = mix(finalWater, uShorelineMilkColor, shorelineMilkMask * 0.42);
+        finalWater = mix(finalWater, uWaterFoam, foamMask * (0.18 + shorelineLine * 0.28 + slopeBoost * 0.2));
+        finalWater = mix(finalWater, uShorelineMilkColor, shorelineMilkMask * 0.24 + graphicShoreLine * 0.16);
+        finalWater = mix(finalWater, uHighlightColor, shallowShelfLine * 0.08);
         finalWater = mix(finalWater, reflectionTint, highlightMask * (0.22 + shallowMask * 0.12 + channelDepth * 0.12));
-        finalWater += uHighlightColor * glintMask * 0.55;
+        finalWater = mix(finalWater, uWaterFoam, actorRipple * 0.22);
+        finalWater += uHighlightColor * glintMask * 0.28;
         finalWater += uSparkleColor * sparkleMask;
-        finalWater += reflectionTint * fresnel * (0.04 + channelDepth * 0.08) * (0.35 + uClarity * 0.65);
-        float alphaMask = clamp(0.7 + channelDepth * 0.18 + foamMask * 0.12 + fresnel * 0.05 - bankMask * 0.12 + shorelineMilkMask * 0.08, 0.0, 1.0);
+        finalWater += reflectionTint * fresnel * (0.025 + channelDepth * 0.045) * (0.28 + uClarity * 0.45);
+        vec3 waterCeiling = mix(vec3(0.78, 0.9, 0.92), vec3(0.94, 0.96, 0.92), clamp(foamMask * 0.7 + sparkleMask * 0.8, 0.0, 1.0));
+        finalWater = min(finalWater, waterCeiling);
+        float alphaMask = clamp(0.52 + channelDepth * 0.16 + foamMask * 0.06 + fresnel * 0.025 - bankMask * 0.18 + shorelineMilkMask * 0.025, 0.34, 0.82);
         vec4 diffuseColor = vec4(finalWater, opacity * alphaMask);`,
       );
 
@@ -642,9 +803,21 @@ function createWebGLWaterController(
   mesh.renderOrder = 2;
   return {
     mesh,
-    update(elapsed: number) {
+    update(elapsed: number, ripples: readonly WaterRippleSource[] = []) {
       if (shaderRef) {
         shaderRef.uniforms.uTime.value = elapsed + phaseOffset;
+        shaderRef.uniforms.uRippleTime.value = elapsed;
+        shaderRef.uniforms.uRippleCount.value = Math.min(WATER_RIPPLE_LIMIT, ripples.length);
+        const sources = shaderRef.uniforms.uRippleSources.value as Vector4[];
+        for (let i = 0; i < WATER_RIPPLE_LIMIT; i += 1) {
+          const ripple = ripples[i];
+          sources[i].set(
+            ripple?.x ?? 0,
+            ripple?.z ?? 0,
+            ripple?.startTime ?? -999,
+            ripple?.strength ?? 0,
+          );
+        }
       }
     },
     dispose() {
@@ -703,10 +876,65 @@ function makeCreekSurface(
 ) {
   return createWaterSurface(points, {
     profile,
-    width: radius * 2.35,
+    width: radius * 1.58,
     segments: 42,
     opacity,
   });
+}
+
+function makeHighlandCreekSurface(path: HighlandCreekPath) {
+  const profile = WATER_PROFILES[path.profile];
+  const points = path.points.map(([x, z]) => new Vector3(
+    x,
+    sampleTerrainHeight(x, z) + path.surfaceOffset,
+    z,
+  ));
+  return makeCreekSurface(points, path.width, profile, path.opacity);
+}
+
+function makeWaterfallPanel(width: number, height: number, opacity: number) {
+  const group = new Group();
+  const outer = new Mesh(
+    new PlaneGeometry(width, height, 1, 8),
+    new MeshBasicMaterial({
+      color: "#d3edf2",
+      transparent: true,
+      opacity,
+      depthWrite: false,
+      side: DoubleSide,
+    }),
+  );
+  const inner = new Mesh(
+    new PlaneGeometry(width * 0.56, height * 0.94, 1, 8),
+    new MeshBasicMaterial({
+      color: "#f4fbf3",
+      transparent: true,
+      opacity: opacity * 0.52,
+      depthWrite: false,
+      side: DoubleSide,
+    }),
+  );
+  outer.position.y = height * 0.5;
+  inner.position.y = height * 0.48;
+  inner.position.z = 0.06;
+  group.add(outer, inner);
+  return group;
+}
+
+function addSmallWaterfall(
+  group: Group,
+  x: number,
+  z: number,
+  width: number,
+  height: number,
+  yaw: number,
+) {
+  const waterfall = makeWaterfallPanel(width, height, 0.24);
+  waterfall.position.set(x, sampleTerrainHeight(x, z) - height * 0.18, z);
+  waterfall.rotation.y = yaw;
+  waterfall.rotation.z = Math.sin(x * 0.13 + z * 0.07) * 0.05;
+  waterfall.name = `small-waterfall-${Math.round(x)}-${Math.round(z)}`;
+  group.add(waterfall);
 }
 
 function makeRiverSurface(
@@ -728,9 +956,17 @@ function makeRiverSurface(
 
   return createWaterSurface(points, {
     profile: WATER_PROFILES.mainRiver,
-    width: (point: Vector3) => sampleRiverChannelAt(channelId, point.z).width * widthScale,
+    width: (point: Vector3) => {
+      const channel = sampleRiverChannelAt(channelId, point.z);
+      const foothillTaper = MathUtils.smoothstep(36, 104, point.z);
+      const alpineTaper = MathUtils.smoothstep(114, 184, point.z);
+      const mainTaper = 1 - foothillTaper * 0.34 - alpineTaper * 0.12;
+      const branchTaper = 1 - foothillTaper * 0.2 - alpineTaper * 0.08;
+      return channel.width * widthScale * (channelId === "main" ? mainTaper : branchTaper);
+    },
     segments: Math.max(56, Math.round(sampleCount * 1.45)),
     opacity,
+    flowBraidStrength: channelId === "main" ? 0.34 : 0.86,
   });
 }
 
@@ -750,40 +986,73 @@ export function buildRiverSystem(): WaterSurfaceGroup {
     group.add(surface.mesh);
     controllers.push(surface);
   };
+  const renderPathWidthScale = (channelId: RiverChannelId) =>
+    sampleRiverRenderWidthScale(channelId) / WATER_PROFILES.mainRiver.widthScale;
 
   group.name = "braided-river-system";
-  addRiver("main", -214, -146, 46, 1.04);
-  addRiver("main", -80, 236, 168, 1.04);
+  addRiver("main", -214, -146, 46, renderPathWidthScale("main"));
+  addRiver("main", -80, 236, 168, renderPathWidthScale("main"));
   RIVER_BRANCH_SEGMENTS.forEach((segment) => {
     const sampleCount = Math.max(42, Math.round((segment.endZ - segment.startZ) * 0.68));
-    addRiver(segment.id, segment.startZ, segment.endZ, sampleCount, 0.98, 0.78);
+    addRiver(segment.id, segment.startZ, segment.endZ, sampleCount, renderPathWidthScale(segment.id), 0.78);
   });
 
   return { group, controllers };
 }
 
-export function makeOpeningLakeSurface() {
+function makeStartingWaterSurface(pool: StartingWaterPool) {
   const center = new Vector3(
-    OPENING_LAKE_CENTER_X,
-    sampleTerrainHeight(OPENING_LAKE_CENTER_X, OPENING_LAKE_CENTER_Z) + OPENING_LAKE_SURFACE_OFFSET,
-    OPENING_LAKE_CENTER_Z,
+    pool.x,
+    sampleTerrainHeight(pool.x, pool.z) + pool.surfaceOffset,
+    pool.z,
   );
+  const isOpeningLake = pool.id === "opening-lake";
 
   return createLakeSurface(center, {
-    profile: WATER_PROFILES.mainRiver,
-    width: OPENING_LAKE_RADIUS * 2,
-    flowSpeed: 0.12,
+    profile: WATER_PROFILES.stillPool,
+    width: Math.max(pool.renderRadiusX, pool.renderRadiusZ) * 2,
+    flowSpeed: pool.flowSpeed,
+    opacity: pool.opacity,
   }, {
-    radiusX: OPENING_LAKE_RADIUS * 1.32,
-    radiusZ: OPENING_LAKE_RADIUS * 1.08,
-    radialSegments: 68,
-    rings: 9,
-    edgeSoftness: 0.4,
+    radiusX: pool.renderRadiusX,
+    radiusZ: pool.renderRadiusZ,
+    radialSegments: isOpeningLake ? 76 : 48,
+    rings: isOpeningLake ? 10 : 7,
+    edgeSoftness: pool.edgeSoftness,
   });
+}
+
+export function buildStartingWaterSystem(): WaterSurfaceGroup {
+  const group = new Group();
+  const controllers: WaterSurfaceController[] = [];
+  group.name = "starting-water-pools";
+
+  STARTING_WATER_POOLS.forEach((pool) => {
+    const surface = makeStartingWaterSurface(pool);
+    surface.mesh.name = `starting-water-${pool.id}`;
+    group.add(surface.mesh);
+    controllers.push(surface);
+  });
+
+  return { group, controllers };
 }
 
 export function buildHighlandWaterways(): WaterSurfaceGroup {
   const group = new Group();
+  const controllers: WaterSurfaceController[] = [];
   group.name = "highland-waterways-muted";
-  return { group, controllers: [] };
+
+  HIGHLAND_CREEK_PATHS.forEach((path) => {
+    const surface = makeHighlandCreekSurface(path);
+    surface.mesh.name = `highland-creek-${path.id}`;
+    surface.mesh.renderOrder = 1;
+    group.add(surface.mesh);
+    controllers.push(surface);
+  });
+
+  addSmallWaterfall(group, 25, 89, 2.8, 5.4, -0.22);
+  addSmallWaterfall(group, 38, 128, 4.4, 10.2, -0.36);
+  addSmallWaterfall(group, -16, 158, 2.4, 4.8, 0.48);
+
+  return { group, controllers };
 }

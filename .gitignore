@@ -5,6 +5,7 @@ dist/
 
 # Local verification scratch output
 .codex-tmp/
+.contract-test-build/
 .playwright-mcp/
 output/
 mossu-*.png

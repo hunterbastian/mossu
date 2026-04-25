@@ -36,7 +36,11 @@ npm run preview
 - `sampleTerrainNormal(x, z)`
 - `sampleBiomeZone(x, z, height)`
 - `sampleWaterState(x, z)`
+- `sampleRiverSurfaceMask(x, z)`
 - `sampleRiverWetness(x, z)`
+- `sampleRiverDampBankMask(x, z)`
+- `sampleStartingWaterWetness(x, z)`
+- `sampleRiverEdgeState(x, z)`
 - `worldLandmarks`
 - `worldForageables`
 - `scenicPockets`
@@ -63,7 +67,7 @@ Do not change these casually. Terrain, water, grass, collectibles, character sta
 - `FollowCamera.ts`: Journey-like third-person camera and map camera mode.
 - `MossuAvatar.ts`: player character rig and animation.
 - `grassSystem.ts`: instanced grass geometry/shader.
-- `waterSystem.ts`: stylized water ribbons, lake surface, water controllers.
+- `waterSystem.ts`: stylized water ribbons, starting pool surfaces, water controllers.
 - `terrainDecorations.ts`: trees, rocks, flowers, bushes, forest fill.
 - `ambientBlobs.ts`: Karu fauna visuals, ambient behavior, and recruited follow behavior.
 - `atmosphereSystem.ts`: sky, clouds, mountain haze.
@@ -133,7 +137,18 @@ Water is split between:
 - swimming behavior in `waterTraversal.ts`
 - rendered water surfaces in `waterSystem.ts`
 
-Keep visible water surfaces aligned with `sampleWaterState()` so swimming and visuals agree.
+Keep visible water surfaces aligned with `sampleWaterState()` so swimming and visuals agree. Use the river edge masks deliberately:
+
+- `sampleRiverSurfaceMask()` is the rendered river footprint.
+- `sampleWaterState()` is player-enterable water inside that footprint, still filtered by depth.
+- `sampleRiverWetness()` is broader damp-bank clearing for grass, trees, wind, and banks.
+- `sampleRiverDampBankMask()` is wet bank outside the visible/player water.
+- `STARTING_WATER_POOLS` and `sampleStartingWaterWetness()` cover the opening lake and shallow meadow pools with matching basin dips.
+- `sampleRiverNookMask()` is dry grassy space between main channels and braids.
+
+The water shader uses the same broad profile for the valley river and starting pools. The current readability target is darker damp bank, milky illustrated shoreline rim, lighter green shallow splash water, deeper blue-teal swim water, and directional ripples that follow river flow.
+
+River surfaces use a procedural flow-map-lite approach. `waterSystem.ts` derives curl from river ribbon geometry, then uses that attribute in the shader so straights get long flow bands, bends get eddies, and braids get split-current motion without painted flow textures. Mossu and recruited Karu feed a small fixed-size ripple source array into the same water controllers for cheap local rings/wakes.
 
 ## Performance Notes
 

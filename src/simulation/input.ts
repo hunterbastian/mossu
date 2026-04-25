@@ -1,3 +1,5 @@
+import { sampleMovementAxes } from "./controlScheme";
+
 export interface InputSnapshot {
   moveX: number;
   moveY: number;
@@ -57,8 +59,7 @@ export class InputController {
   }
 
   sample(): InputSnapshot {
-    const moveX = (this.isPressed("KeyD", "d") || this.isPressed("ArrowRight", "arrowright") ? 1 : 0) - (this.isPressed("KeyA", "a") || this.isPressed("ArrowLeft", "arrowleft") ? 1 : 0);
-    const moveY = (this.isPressed("KeyW", "w") || this.isPressed("ArrowUp", "arrowup") ? 1 : 0) - (this.isPressed("KeyS", "s") || this.isPressed("ArrowDown", "arrowdown") ? 1 : 0);
+    const { moveX, moveY } = sampleMovementAxes((code, key) => this.isPressed(code, key));
     const jumpHeld = this.isPressed("Space", " ");
     const jumpPressed = this.jumpPressedFrame;
     const interactHeld = this.isPressed("KeyE", "e");

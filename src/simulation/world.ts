@@ -10,6 +10,17 @@ export type BiomeZone =
   | "ridge"
   | "peak_shrine";
 
+export type HabitatZone = "shore" | "meadow" | "forest";
+
+export interface HabitatLayerSample {
+  zone: HabitatZone;
+  shore: number;
+  meadow: number;
+  forest: number;
+  clearing: number;
+  edge: number;
+}
+
 export type LandmarkType =
   | "lone_tree"
   | "arch"
@@ -85,6 +96,26 @@ export interface RiverChannelSample {
   envelope: number;
 }
 
+export interface RiverEdgeSample {
+  zone: "dry" | "damp_bank" | "shallow_water" | "swim_water";
+  surfaceMask: number;
+  dampBankMask: number;
+  wetness: number;
+  nookMask: number;
+  waterDepth: number;
+  swimAllowed: boolean;
+}
+
+export interface WaterBankShape {
+  shelfCut: number;
+  coveCut: number;
+  sandbarLift: number;
+  rimLift: number;
+  dampBand: number;
+  dryLip: number;
+  pebbleBand: number;
+}
+
 interface RiverBranchSegment {
   id: Exclude<RiverChannelId, "main">;
   startZ: number;
@@ -93,6 +124,24 @@ interface RiverBranchSegment {
   width: number;
   depthScale: number;
   flowStrength: number;
+}
+
+export interface StartingWaterPool {
+  id: string;
+  x: number;
+  z: number;
+  radiusX: number;
+  radiusZ: number;
+  renderRadiusX: number;
+  renderRadiusZ: number;
+  surfaceOffset: number;
+  basinDepth: number;
+  shoreDepth: number;
+  flowStrength: number;
+  flowSpeed: number;
+  opacity: number;
+  swimAllowed: boolean;
+  edgeSoftness: number;
 }
 
 const riverCenter = (z: number) => (
@@ -106,6 +155,9 @@ export const RIVER_BRANCH_SEGMENTS: readonly RiverBranchSegment[] = [
   { id: "fir-gate-braid", startZ: 52, endZ: 132, offset: -78, width: 26, depthScale: 0.72, flowStrength: 0.46 },
   { id: "alpine-braid", startZ: 134, endZ: 214, offset: 68, width: 21, depthScale: 0.64, flowStrength: 0.54 },
 ] as const;
+// Total rendered-water footprint scale. Keep this aligned with waterSystem ribbon width.
+export const MAIN_RIVER_RENDER_WIDTH_SCALE = 1.0608;
+export const BRANCH_RIVER_RENDER_WIDTH_SCALE = 0.9996;
 export const MAIN_RIVER_SURFACE_OFFSET = 4.1;
 export const FOOTHILL_CREEK_SURFACE_OFFSET = 1.5;
 export const ALPINE_RUNOFF_SURFACE_OFFSET = 1.3;
@@ -114,6 +166,76 @@ export const OPENING_LAKE_CENTER_X = -34;
 export const OPENING_LAKE_CENTER_Z = -112;
 export const OPENING_LAKE_RADIUS = 24.5;
 export const OPENING_LAKE_SURFACE_OFFSET = 3.8;
+export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
+  {
+    id: "opening-lake",
+    x: OPENING_LAKE_CENTER_X,
+    z: OPENING_LAKE_CENTER_Z,
+    radiusX: OPENING_LAKE_RADIUS * 1.18,
+    radiusZ: OPENING_LAKE_RADIUS * 1.02,
+    renderRadiusX: OPENING_LAKE_RADIUS * 1.38,
+    renderRadiusZ: OPENING_LAKE_RADIUS * 1.14,
+    surfaceOffset: OPENING_LAKE_SURFACE_OFFSET,
+    basinDepth: 8.6,
+    shoreDepth: 1.4,
+    flowStrength: 0.08,
+    flowSpeed: 0.12,
+    opacity: 0.9,
+    swimAllowed: true,
+    edgeSoftness: 0.44,
+  },
+  {
+    id: "burrow-shoal",
+    x: -76,
+    z: -154,
+    radiusX: 12.5,
+    radiusZ: 7.4,
+    renderRadiusX: 14.8,
+    renderRadiusZ: 9.2,
+    surfaceOffset: 1.45,
+    basinDepth: 3.2,
+    shoreDepth: 0.78,
+    flowStrength: 0.04,
+    flowSpeed: 0.08,
+    opacity: 0.82,
+    swimAllowed: false,
+    edgeSoftness: 0.52,
+  },
+  {
+    id: "sun-mirror-pond",
+    x: 2,
+    z: -121,
+    radiusX: 18,
+    radiusZ: 10.8,
+    renderRadiusX: 21.2,
+    renderRadiusZ: 13,
+    surfaceOffset: 2,
+    basinDepth: 3.8,
+    shoreDepth: 0.95,
+    flowStrength: 0.035,
+    flowSpeed: 0.07,
+    opacity: 0.8,
+    swimAllowed: false,
+    edgeSoftness: 0.56,
+  },
+  {
+    id: "reed-cove",
+    x: -79,
+    z: -105,
+    radiusX: 15.5,
+    radiusZ: 12,
+    renderRadiusX: 18.4,
+    renderRadiusZ: 14.2,
+    surfaceOffset: 2.35,
+    basinDepth: 4.6,
+    shoreDepth: 1.1,
+    flowStrength: 0.045,
+    flowSpeed: 0.09,
+    opacity: 0.82,
+    swimAllowed: false,
+    edgeSoftness: 0.54,
+  },
+] as const;
 const ridgePassCenter = (x: number) => Math.exp(-(((x - 12) / 46) ** 2));
 const ISLAND_CENTER_X = -6;
 const ISLAND_CENTER_Z = 30;
@@ -203,6 +325,24 @@ export function sampleRiverChannelCenter(id: RiverChannelId, z: number) {
   return sampleRiverChannelAt(id, z).centerX;
 }
 
+export function sampleRiverRenderWidthScale(id: RiverChannelId) {
+  return id === "main" ? MAIN_RIVER_RENDER_WIDTH_SCALE : BRANCH_RIVER_RENDER_WIDTH_SCALE;
+}
+
+export function sampleRiverSurfaceHalfWidth(channel: RiverChannelSample) {
+  return Math.max(0.48, channel.width * sampleRiverRenderWidthScale(channel.id) * 0.5);
+}
+
+export function sampleRiverSurfaceMask(x: number, z: number) {
+  return sampleRiverChannels(z).reduce((best, channel) => {
+    const distance = Math.abs(x - channel.centerX);
+    const halfWidth = sampleRiverSurfaceHalfWidth(channel);
+    const surface = 1 - smootherStep(halfWidth * 0.92, halfWidth, distance);
+    return Math.max(best, surface * channel.envelope);
+  }, 0);
+}
+
+// Broad dampness mask for grass, forest, wind, and bank shaping; not the gameplay water width.
 export function sampleRiverWetness(x: number, z: number) {
   return sampleRiverChannels(z).reduce((best, channel) => {
     const distance = Math.abs(x - channel.centerX);
@@ -210,6 +350,10 @@ export function sampleRiverWetness(x: number, z: number) {
     const wetness = 1 - smootherStep(halfWidth * 0.78, halfWidth * 1.28, distance);
     return Math.max(best, wetness * channel.envelope);
   }, 0);
+}
+
+export function sampleRiverDampBankMask(x: number, z: number) {
+  return sampleRiverWetness(x, z) * (1 - sampleRiverSurfaceMask(x, z));
 }
 
 function sampleRiverBankMask(x: number, z: number) {
@@ -220,6 +364,97 @@ function sampleRiverBankMask(x: number, z: number) {
     const outerBank = 1 - smootherStep(halfWidth * 1.18, halfWidth * 1.92, distance);
     return Math.max(best, innerBank * outerBank * channel.envelope);
   }, 0);
+}
+
+function emptyWaterBankShape(): WaterBankShape {
+  return {
+    shelfCut: 0,
+    coveCut: 0,
+    sandbarLift: 0,
+    rimLift: 0,
+    dampBand: 0,
+    dryLip: 0,
+    pebbleBand: 0,
+  };
+}
+
+function mergeWaterBankShape(best: WaterBankShape, next: WaterBankShape) {
+  best.shelfCut = Math.max(best.shelfCut, next.shelfCut);
+  best.coveCut = Math.max(best.coveCut, next.coveCut);
+  best.sandbarLift = Math.max(best.sandbarLift, next.sandbarLift);
+  best.rimLift = Math.max(best.rimLift, next.rimLift);
+  best.dampBand = Math.max(best.dampBand, next.dampBand);
+  best.dryLip = Math.max(best.dryLip, next.dryLip);
+  best.pebbleBand = Math.max(best.pebbleBand, next.pebbleBand);
+  return best;
+}
+
+function sampleRiverBankShape(x: number, z: number) {
+  return sampleRiverChannels(z).reduce((best, channel) => {
+    const distance = Math.abs(x - channel.centerX);
+    const side = x >= channel.centerX ? 1 : -1;
+    const halfWidth = sampleRiverSurfaceHalfWidth(channel);
+    const bankWidth = channel.width * (channel.id === "main" ? 0.86 : 0.68);
+    const bankNoise = fbmNoise(z * 0.026 + side * 8.7 + channel.width * 0.01, channel.centerX * 0.018 + side * 4.1, 3) * 0.5 + 0.5;
+    const scallop = Math.sin(z * 0.082 + side * 1.9 + channel.centerX * 0.018) * 0.5 + 0.5;
+    const coveCenter = halfWidth * (1.08 + bankNoise * 0.2 + scallop * 0.1);
+    const shelfCenter = halfWidth * (0.94 + bankNoise * 0.08);
+    const rimCenter = halfWidth * (1.42 + bankNoise * 0.18);
+    const coveRing = Math.exp(-(((distance - coveCenter) / Math.max(4.2, bankWidth * 0.24)) ** 2));
+    const shelfRing = Math.exp(-(((distance - shelfCenter) / Math.max(4.5, bankWidth * 0.3)) ** 2));
+    const sandbarRing = Math.exp(-(((distance - halfWidth * (0.72 + scallop * 0.12)) / Math.max(3.8, bankWidth * 0.18)) ** 2));
+    const rimRing = Math.exp(-(((distance - rimCenter) / Math.max(3.6, bankWidth * 0.18)) ** 2));
+    const outerFade = 1 - smootherStep(halfWidth * 2.1, halfWidth * 2.72, distance);
+    const innerWaterFade = 1 - sampleRiverSurfaceMask(x, z) * 0.5;
+    const irregularity = 0.72 + bankNoise * 0.42 + scallop * 0.16;
+    const envelope = channel.envelope * outerFade;
+
+    return mergeWaterBankShape(best, {
+      shelfCut: shelfRing * envelope * (0.64 + bankNoise * 0.28),
+      coveCut: coveRing * envelope * innerWaterFade * irregularity,
+      sandbarLift: sandbarRing * envelope * (0.26 + scallop * 0.2) * (channel.id === "main" ? 1 : 0.72),
+      rimLift: rimRing * envelope * innerWaterFade * (0.52 + bankNoise * 0.3),
+      dampBand: Math.max(shelfRing * 0.62, coveRing * 0.74) * envelope,
+      dryLip: rimRing * envelope,
+      pebbleBand: Math.max(rimRing * 0.84, sandbarRing * 0.42) * envelope,
+    });
+  }, emptyWaterBankShape());
+}
+
+function samplePoolBankShape(x: number, z: number) {
+  return STARTING_WATER_POOLS.reduce((best, pool) => {
+    const distance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX, pool.radiusZ);
+    if (distance > 1.72) {
+      return best;
+    }
+
+    const angle = Math.atan2((z - pool.z) / pool.radiusZ, (x - pool.x) / pool.radiusX);
+    const edgeNoise = fbmNoise(Math.cos(angle) * 1.8 + pool.x * 0.015, Math.sin(angle) * 1.8 + pool.z * 0.015, 3) * 0.5 + 0.5;
+    const scallop = Math.sin(angle * 5.0 + pool.x * 0.02 - pool.z * 0.01) * 0.5 + 0.5;
+    const coveCenter = 0.98 + edgeNoise * 0.11 - scallop * 0.05;
+    const shelfRing = Math.exp(-(((distance - 0.88) / 0.18) ** 2));
+    const coveRing = Math.exp(-(((distance - coveCenter) / 0.16) ** 2));
+    const sandbarRing = Math.exp(-(((distance - 0.72 - scallop * 0.07) / 0.12) ** 2));
+    const rimRing = Math.exp(-(((distance - 1.16 - edgeNoise * 0.08) / 0.16) ** 2));
+    const outerFade = 1 - smootherStep(1.42, 1.72, distance);
+    const poolScale = pool.id === "opening-lake" ? 1.18 : 0.82;
+
+    return mergeWaterBankShape(best, {
+      shelfCut: shelfRing * outerFade * poolScale * (0.76 + edgeNoise * 0.24),
+      coveCut: coveRing * outerFade * poolScale * (0.66 + scallop * 0.28),
+      sandbarLift: sandbarRing * outerFade * poolScale * (0.36 + edgeNoise * 0.18),
+      rimLift: rimRing * outerFade * poolScale * (0.48 + scallop * 0.24),
+      dampBand: Math.max(shelfRing, coveRing) * outerFade,
+      dryLip: rimRing * outerFade,
+      pebbleBand: Math.max(rimRing * 0.72, sandbarRing * 0.56) * outerFade,
+    });
+  }, emptyWaterBankShape());
+}
+
+export function sampleWaterBankShape(x: number, z: number): WaterBankShape {
+  const river = sampleRiverBankShape(x, z);
+  const pool = samplePoolBankShape(x, z);
+  return mergeWaterBankShape(river, pool);
 }
 
 export function sampleRiverNookMask(x: number, z: number) {
@@ -368,6 +603,83 @@ function bowlDepression(x: number, z: number, centerX: number, centerZ: number, 
   return -(t * t) * depth;
 }
 
+function ellipseDistance(x: number, z: number, centerX: number, centerZ: number, radiusX: number, radiusZ: number) {
+  return Math.hypot((x - centerX) / radiusX, (z - centerZ) / radiusZ);
+}
+
+function ellipticalDepressionCut(
+  x: number,
+  z: number,
+  centerX: number,
+  centerZ: number,
+  radiusX: number,
+  radiusZ: number,
+  depth: number,
+) {
+  const distance = ellipseDistance(x, z, centerX, centerZ, radiusX, radiusZ);
+  if (distance >= 1) {
+    return 0;
+  }
+
+  const t = 1 - distance;
+  return t * t * depth;
+}
+
+function sampleRouteTerraceLift(x: number, z: number) {
+  return ROUTE_TERRACE_SEGMENTS.reduce((best, [ax, az, bx, bz, width, lift], index) => {
+    const segment = distanceToSegment2D(x, z, ax, az, bx, bz);
+    const core = 1 - smootherStep(width * 0.16, width * 0.54, segment.distance);
+    const shoulder = smootherStep(width * 0.42, width * 0.76, segment.distance) *
+      (1 - smootherStep(width * 0.86, width * 1.34, segment.distance));
+    const stepRhythm = Math.sin(segment.t * Math.PI * 1.7 + index * 0.58) * 0.5 + 0.5;
+    const terrace = core * lift * 0.52 + shoulder * lift * (0.48 + stepRhythm * 0.14);
+    return Math.max(best, terrace);
+  }, 0);
+}
+
+function sampleStartingWaterBasinCut(x: number, z: number) {
+  return STARTING_WATER_POOLS.reduce((best, pool) => {
+    const basin = ellipticalDepressionCut(x, z, pool.x, pool.z, pool.radiusX, pool.radiusZ, pool.basinDepth);
+    const shoreDistance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX * 1.42, pool.radiusZ * 1.42);
+    const shoreCut = shoreDistance < 1
+      ? (1 - smootherStep(0.62, 1, shoreDistance)) * pool.shoreDepth
+      : 0;
+    return Math.max(best, basin + shoreCut);
+  }, 0);
+}
+
+export function sampleStartingWaterSurfaceMask(x: number, z: number) {
+  return STARTING_WATER_POOLS.reduce((best, pool) => {
+    const distance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX, pool.radiusZ);
+    const surface = 1 - smootherStep(0.9, 1, distance);
+    return Math.max(best, surface);
+  }, 0);
+}
+
+export function sampleStartingWaterWetness(x: number, z: number) {
+  return STARTING_WATER_POOLS.reduce((best, pool) => {
+    const distance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX * 1.34, pool.radiusZ * 1.34);
+    const wetness = 1 - smootherStep(0.74, 1, distance);
+    return Math.max(best, wetness);
+  }, 0);
+}
+
+export function sampleStartingWaterDampBankMask(x: number, z: number) {
+  const bankShape = samplePoolBankShape(x, z);
+  return Math.max(sampleStartingWaterWetness(x, z) * (1 - sampleStartingWaterSurfaceMask(x, z)), bankShape.dampBand * 0.5);
+}
+
+function sampleStartingWaterBankLipLift(x: number, z: number) {
+  return STARTING_WATER_POOLS.reduce((best, pool) => {
+    const distance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX * 1.1, pool.radiusZ * 1.1);
+    const innerRim = smootherStep(0.78, 1.02, distance);
+    const outerFade = 1 - smootherStep(1.02, 1.42, distance);
+    const handPaintedBreakup = 0.82 + fbmNoise(x * 0.033 + 12.8, z * 0.033 - 6.1, 2) * 0.18;
+    const lift = pool.id === "opening-lake" ? 1.05 : 0.58;
+    return Math.max(best, innerRim * outerFade * handPaintedBreakup * lift);
+  }, 0);
+}
+
 function sampleIslandContour(x: number, z: number) {
   const nx = Math.abs((x - ISLAND_CENTER_X) / ISLAND_RADIUS_X);
   const nz = Math.abs((z - ISLAND_CENTER_Z) / ISLAND_RADIUS_Z);
@@ -375,6 +687,80 @@ function sampleIslandContour(x: number, z: number) {
     Math.pow(nx, ISLAND_SUPERELLIPSE_EXPONENT) + Math.pow(nz, ISLAND_SUPERELLIPSE_EXPONENT),
     1 / ISLAND_SUPERELLIPSE_EXPONENT,
   );
+}
+
+const ROUTE_TERRACE_SEGMENTS = [
+  [-58, -158, -44, -134, 18, 0.55],
+  [-44, -134, -4, -38, 26, 0.42],
+  [-4, -38, riverCenter(24), 24, 24, 0.48],
+  [riverCenter(24), 24, 24, 88, 22, 0.6],
+  [24, 88, 20, 108, 18, 0.72],
+  [20, 108, 42, 134, 20, 0.68],
+  [42, 134, 10, 154, 18, 0.64],
+  [10, 154, -26, 168, 18, 0.52],
+  [-26, 168, 16, 186, 16, 0.46],
+  [16, 186, 2, 214, 15, 0.38],
+] as const;
+
+const PAINTED_GROUND_CLEARINGS = [
+  [-44, -134, 22, 0.42],
+  [-4, -38, 20, 0.34],
+  [24, 88, 24, 0.32],
+  [20, 108, 18, 0.28],
+  [42, 134, 19, 0.28],
+  [10, 154, 20, 0.24],
+  [-26, 168, 18, 0.24],
+  [16, 186, 17, 0.22],
+  [2, 214, 20, 0.26],
+] as const;
+
+function sampleRoutePathInfo(x: number, z: number) {
+  return ROUTE_TERRACE_SEGMENTS.reduce((best, [ax, az, bx, bz, width], index) => {
+    const segment = distanceToSegment2D(x, z, ax, az, bx, bz);
+    const core = 1 - smootherStep(width * 0.18, width * 0.54, segment.distance);
+    const paint = 1 - smootherStep(width * 0.36, width * 1.02, segment.distance);
+    const shoulder = smootherStep(width * 0.46, width * 0.76, segment.distance) *
+      (1 - smootherStep(width * 0.9, width * 1.36, segment.distance));
+    const score = paint + core * 0.35 + shoulder * 0.16;
+    return score > best.score
+      ? {
+        score,
+        core,
+        paint,
+        shoulder,
+        distance: segment.distance,
+        t: segment.t,
+        segmentIndex: index,
+      }
+      : best;
+  }, {
+    score: 0,
+    core: 0,
+    paint: 0,
+    shoulder: 0,
+    distance: Infinity,
+    t: 0,
+    segmentIndex: -1,
+  });
+}
+
+function sampleRouteSmoothMask(x: number, z: number) {
+  const route = sampleRoutePathInfo(x, z);
+  const breakup = fbmNoise(x * 0.04 + 9.2, z * 0.04 - 13.7, 2) * 0.12;
+  return saturate(route.core * 0.86 + route.paint * 0.28 + route.shoulder * 0.18 + breakup);
+}
+
+export function samplePaintedGroundMask(x: number, z: number) {
+  const route = sampleRoutePathInfo(x, z);
+  const routeBreakup = 0.82 + fbmNoise(x * 0.038 - 4.2, z * 0.038 + 6.1, 3) * 0.18;
+  const pocketClear = PAINTED_GROUND_CLEARINGS.reduce((best, [cx, cz, radius, strength]) => {
+    const distance = Math.hypot(x - cx, z - cz);
+    const clear = 1 - smootherStep(radius * 0.42, radius * 0.96, distance);
+    return Math.max(best, clear * strength);
+  }, 0);
+  const bankShape = sampleWaterBankShape(x, z);
+  const shoreWear = Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z), bankShape.dampBand) * 0.46;
+  return saturate(route.paint * routeBreakup + route.shoulder * 0.36 + pocketClear + shoreWear);
 }
 
 export function sampleIslandEdgeFactor(x: number, z: number) {
@@ -402,14 +788,29 @@ export function sampleIslandBoundaryPoint(angle: number) {
 
 export function sampleBaseTerrainHeight(x: number, z: number) {
   const highlandMask = smootherStep(58, 188, z);
-  const rolling = terrainNoise(x, z) * (7.2 + highlandMask * 2.4);
+  const routeSmooth = sampleRouteSmoothMask(x, z);
+  const bankShape = sampleWaterBankShape(x, z);
+  const rolling = terrainNoise(x, z) * (7.2 + highlandMask * 2.4) * (1 - routeSmooth * 0.36);
   const ridgeTexture = mountainRidgeNoise(x, z) * highlandMask;
-  const peakCarve = (ridgeTexture - 0.34) * 24 * smootherStep(90, 214, z);
-  const fineSurface = fbmNoise(x * 0.045 - 3.4, z * 0.045 + 5.2, 3) * (0.9 + highlandMask * 1.9);
+  const peakCarve = (ridgeTexture - 0.34) * 24 * smootherStep(90, 214, z) * (1 - routeSmooth * 0.42);
+  const fineSurface = fbmNoise(x * 0.045 - 3.4, z * 0.045 + 5.2, 3) * (0.9 + highlandMask * 1.9) * (1 - routeSmooth * 0.78);
   const meadowLift = 11 + Math.sin(z * 0.01) * 2.2;
   const riverCut = sampleRiverBedCut(x, z);
   const riverNookLift = sampleRiverNookMask(x, z) * 4.2;
-  const riverBankLift = sampleRiverBankMask(x, z) * 1.6;
+  const riverBankLift = sampleRiverBankMask(x, z) * 1.25;
+  const wetBankTerrace =
+    Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z), bankShape.dampBand) *
+    (0.58 + fbmNoise(x * 0.036 + 8.4, z * 0.036 - 4.2, 2) * 0.14);
+  const startingWaterBankLip = sampleStartingWaterBankLipLift(x, z) * 0.72;
+  const dryBankLip =
+    sampleRiverBankMask(x, z) * (1 - sampleRiverSurfaceMask(x, z) * 0.75) * (0.52 + highlandMask * 0.44) +
+    sampleStartingWaterDampBankMask(x, z) * (1 - sampleStartingWaterSurfaceMask(x, z) * 0.72) * 0.62 +
+    bankShape.rimLift * (0.72 + highlandMask * 0.34);
+  const bankShelfCut = bankShape.shelfCut * (1.05 + highlandMask * 0.32);
+  const coveCut = bankShape.coveCut * (0.78 + highlandMask * 0.22);
+  const sandbarLift = bankShape.sandbarLift * (0.46 + highlandMask * 0.18);
+  const routeTerraceLift = sampleRouteTerraceLift(x, z) * (1 - sampleStartingWaterSurfaceMask(x, z) * 0.5);
+  const routeSurfacePress = samplePaintedGroundMask(x, z) * (0.34 + highlandMask * 0.28) * (1 - sampleStartingWaterSurfaceMask(x, z) * 0.72);
   const hillBand = smootherStep(-170, 10, z) * 10;
   const foothillBand = smootherStep(-10, 95, z) * 18;
   const mountainMass =
@@ -419,16 +820,16 @@ export function sampleBaseTerrainHeight(x: number, z: number) {
   const ridgeWall = smootherStep(78, 182, z) * 26 * (1 - ridgePassCenter(x));
   const shrineShelf = Math.exp(-(((x + 2) / 28) ** 2) - (((z - 214) / 20) ** 2)) * 18;
   const paintedSteps = quantize(Math.sin((x - z) * 0.028) * 0.5 + 0.5, 7) * 2.4;
-  const alpineShelf = smootherStep(118, 195, z) * paintedSteps;
+  const alpineShelf = smootherStep(118, 195, z) * paintedSteps * (1 - routeSmooth * 0.62);
   const startBurrow = bowlDepression(x, z, -44, -134, 15, 12);
-  const openingLakeBasin = bowlDepression(x, z, OPENING_LAKE_CENTER_X, OPENING_LAKE_CENTER_Z, OPENING_LAKE_RADIUS, 8.2);
+  const startingWaterBasin = sampleStartingWaterBasinCut(x, z);
   const mountainHollow = bowlDepression(x, z, 38, 128, 20, 10);
   const pineGateRise = Math.exp(-(((x - 24) / 34) ** 2) - (((z - 88) / 28) ** 2)) * 9;
   const passShelf = Math.exp(-(((x - 20) / 30) ** 2) - (((z - 108) / 24) ** 2)) * 11;
   const cascadeShelf = Math.exp(-(((x - 34) / 28) ** 2) - (((z - 130) / 22) ** 2)) * 14;
   const traverseShelf = Math.exp(-(((x - 10) / 34) ** 2) - (((z - 154) / 26) ** 2)) * 11;
   const ridgeLead = Math.exp(-(((x - 14) / 24) ** 2) - (((z - 186) / 18) ** 2)) * 8;
-  return meadowLift + rolling + fineSurface + peakCarve + hillBand + foothillBand + mountainMass + ridgeWall + shrineShelf + alpineShelf + pineGateRise + passShelf + cascadeShelf + traverseShelf + ridgeLead + riverNookLift + riverBankLift - riverCut + startBurrow + openingLakeBasin + mountainHollow;
+  return meadowLift + rolling + fineSurface + peakCarve + hillBand + foothillBand + mountainMass + ridgeWall + shrineShelf + alpineShelf + pineGateRise + passShelf + cascadeShelf + traverseShelf + ridgeLead + riverNookLift + riverBankLift + wetBankTerrace + startingWaterBankLip + dryBankLip + sandbarLift + routeTerraceLift - routeSurfacePress - bankShelfCut - coveCut - riverCut + startBurrow - startingWaterBasin + mountainHollow;
 }
 
 export function sampleTerrainHeight(x: number, z: number) {
@@ -474,19 +875,66 @@ interface CreekPath {
   swimAllowed: boolean;
 }
 
-const creekPaths: CreekPath[] = [];
+export interface HighlandCreekPath extends CreekPath {
+  id: string;
+  profile: "foothillCreek" | "alpineRunoff" | "waterfallOutflow";
+  opacity: number;
+}
 
-const waterPools = [
+export const HIGHLAND_CREEK_PATHS: readonly HighlandCreekPath[] = [
   {
-    kind: "pool" as const,
-    x: OPENING_LAKE_CENTER_X,
-    z: OPENING_LAKE_CENTER_Z,
-    radius: OPENING_LAKE_RADIUS,
-    surfaceOffset: OPENING_LAKE_SURFACE_OFFSET,
-    flowStrength: 0.08,
-    swimAllowed: true,
+    id: "fir-gate-brook",
+    kind: "creek",
+    profile: "foothillCreek",
+    points: [
+      [31, 108],
+      [24, 92],
+      [23, 78],
+      [29, 62],
+      [34, 48],
+    ],
+    width: 2.7,
+    surfaceOffset: FOOTHILL_CREEK_SURFACE_OFFSET,
+    flowStrength: 0.34,
+    swimAllowed: false,
+    opacity: 0.48,
+  },
+  {
+    id: "mistfall-runoff",
+    kind: "creek",
+    profile: "waterfallOutflow",
+    points: [
+      [10, 154],
+      [23, 148],
+      [36, 138],
+      [40, 128],
+      [46, 116],
+    ],
+    width: 3.4,
+    surfaceOffset: WATERFALL_OUTFLOW_SURFACE_OFFSET,
+    flowStrength: 0.48,
+    swimAllowed: false,
+    opacity: 0.52,
+  },
+  {
+    id: "cloudback-rill",
+    kind: "creek",
+    profile: "alpineRunoff",
+    points: [
+      [-34, 184],
+      [-22, 170],
+      [-8, 156],
+      [-18, 146],
+    ],
+    width: 2.2,
+    surfaceOffset: ALPINE_RUNOFF_SURFACE_OFFSET,
+    flowStrength: 0.42,
+    swimAllowed: false,
+    opacity: 0.46,
   },
 ] as const;
+
+const creekPaths: readonly CreekPath[] = HIGHLAND_CREEK_PATHS;
 
 function sampleCreekWater(x: number, z: number): WaterState | null {
   let best: WaterState | null = null;
@@ -527,9 +975,9 @@ function samplePoolWater(x: number, z: number): WaterState | null {
   let best: WaterState | null = null;
   let bestDepth = 0;
 
-  for (const pool of waterPools) {
-    const distance = Math.hypot(x - pool.x, z - pool.z);
-    if (distance > pool.radius) {
+  for (const pool of STARTING_WATER_POOLS) {
+    const distance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX, pool.radiusZ);
+    if (distance > 1) {
       continue;
     }
 
@@ -542,7 +990,7 @@ function samplePoolWater(x: number, z: number): WaterState | null {
     const swirlAngle = Math.atan2(z - pool.z, x - pool.x) + Math.PI * 0.5;
     bestDepth = depth;
     best = {
-      kind: pool.kind,
+      kind: "pool",
       surfaceY,
       depth,
       flowDirection: new Vector2(Math.cos(swirlAngle), Math.sin(swirlAngle)).normalize(),
@@ -560,7 +1008,7 @@ export function sampleWaterState(x: number, z: number): WaterState | null {
 
   for (const channel of sampleRiverChannels(z)) {
     const riverDistance = Math.abs(x - channel.centerX);
-    const activeWidth = channel.width * 0.53;
+    const activeWidth = sampleRiverSurfaceHalfWidth(channel);
     if (riverDistance > activeWidth) {
       continue;
     }
@@ -591,11 +1039,34 @@ export function sampleWaterState(x: number, z: number): WaterState | null {
   }
 
   const pool = samplePoolWater(x, z);
-  if (pool && pool.depth > bestDepth) {
+  if (pool && (sampleStartingWaterSurfaceMask(x, z) > 0.82 || pool.depth > bestDepth)) {
     best = pool;
   }
 
   return best;
+}
+
+export function sampleRiverEdgeState(x: number, z: number): RiverEdgeSample {
+  const water = sampleWaterState(x, z);
+  const surfaceMask = Math.max(sampleRiverSurfaceMask(x, z), sampleStartingWaterSurfaceMask(x, z));
+  const dampBankMask = Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z));
+  const wetness = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
+  const nookMask = sampleRiverNookMask(x, z);
+  const zone =
+    water?.swimAllowed ? "swim_water" :
+    water ? "shallow_water" :
+    dampBankMask > 0.08 ? "damp_bank" :
+    "dry";
+
+  return {
+    zone,
+    surfaceMask,
+    dampBankMask,
+    wetness,
+    nookMask,
+    waterDepth: water?.depth ?? 0,
+    swimAllowed: water?.swimAllowed ?? false,
+  };
 }
 
 export function sampleWindStrength(x: number, z: number, height: number) {
@@ -612,22 +1083,115 @@ export function sampleWindField(x: number, z: number, height: number): WindField
 }
 
 export function sampleBiomeZone(x: number, z: number, height = sampleTerrainHeight(x, z)): BiomeZone {
-  if (height > 144 || z > 198) {
+  if (height > 178 || z > 206) {
     return "peak_shrine";
   }
-  if (height > 112 || z > 160) {
+  if (height > 150 || z > 166) {
     return "ridge";
   }
-  if (height > 78 || z > 108) {
+  if (height > 118 || z > 122) {
     return "alpine";
   }
-  if (height > 42 || z > 42) {
+  if (height > 48 || z > 42) {
     return "foothills";
   }
   if (z > -70) {
     return "hills";
   }
   return "plains";
+}
+
+function sampleScenicMeadowMask(x: number, z: number) {
+  return scenicPockets.reduce((best, pocket) => {
+    const distance = Math.hypot(x - pocket.position.x, z - pocket.position.z);
+    const feather =
+      pocket.kind === "meadow_clearing" ? 1.34 :
+      pocket.kind === "moss_hollow" ? 0.94 :
+      pocket.kind === "stream_bend" ? 0.72 :
+      0.62;
+    const strength =
+      pocket.kind === "meadow_clearing" ? 1 :
+      pocket.kind === "moss_hollow" ? 0.38 :
+      pocket.kind === "stream_bend" ? 0.22 :
+      0.18;
+    const mask = 1 - smootherStep(pocket.radius * 0.34, pocket.radius * feather, distance);
+    return Math.max(best, mask * strength);
+  }, 0);
+}
+
+export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainHeight(x, z)): HabitatLayerSample {
+  const biome = sampleBiomeZone(x, z, height);
+  const slope = 1 - sampleTerrainNormal(x, z).y;
+  const route = sampleRoutePathInfo(x, z);
+  const edgeState = sampleRiverEdgeState(x, z);
+  const bankShape = sampleWaterBankShape(x, z);
+  const pocketMeadow = sampleScenicMeadowMask(x, z);
+  const lowlandOpen =
+    biome === "plains" ? 0.52 :
+    biome === "hills" ? 0.42 :
+    biome === "foothills" ? 0.22 :
+    0.08;
+  const shore = saturate(
+    edgeState.surfaceMask * 0.34 +
+    edgeState.dampBankMask * 0.76 +
+    edgeState.wetness * 0.48 +
+    edgeState.nookMask * 0.26 +
+    bankShape.dampBand * 0.48 +
+    bankShape.sandbarLift * 0.24,
+  );
+
+  const openingMeadow = Math.exp(-(((x + 44) / 76) ** 2) - (((z + 112) / 72) ** 2));
+  const meadowNoise = fbmNoise(x * 0.028 + 5.7, z * 0.028 - 3.1, 3) * 0.5 + 0.5;
+  const meadow = saturate(
+    pocketMeadow * 0.9 +
+    openingMeadow * 0.52 +
+    route.paint * 0.28 +
+    route.shoulder * 0.2 +
+    lowlandOpen * (0.3 + meadowNoise * 0.18) -
+    shore * 0.42 -
+    slope * 0.5,
+  );
+
+  const forestNoise = fbmNoise(x * 0.018 - 9.4, z * 0.018 + 2.3, 4) * 0.5 + 0.5;
+  const forestBreakup = fbmNoise(x * 0.06 + 11.2, z * 0.06 - 7.8, 2) * 0.5 + 0.5;
+  const lowlandRim = smootherStep(58, 148, Math.abs(x)) * smootherStep(-134, 44, z) * (1 - smootherStep(52, 96, z));
+  const firGate = smootherStep(34, 138, z) * (1 - smootherStep(206, 236, z));
+  const highlandPocket = Math.exp(-(((x + 2) / 104) ** 2) - (((z - 148) / 112) ** 2));
+  const authoredGroves = Math.max(
+    Math.exp(-(((x + 126) / 58) ** 2) - (((z + 78) / 62) ** 2)),
+    Math.exp(-(((x - 108) / 62) ** 2) - (((z - 40) / 70) ** 2)),
+    Math.exp(-(((x + 86) / 70) ** 2) - (((z - 132) / 78) ** 2)),
+    Math.exp(-(((x - 84) / 68) ** 2) - (((z - 144) / 78) ** 2)),
+  );
+  const clearing = saturate(meadow * 0.72 + shore * 0.44 + route.core * 0.56 + route.paint * 0.18);
+  const forest = saturate(
+    Math.max(lowlandRim * 0.74, firGate * 0.52, highlandPocket * 0.58, authoredGroves * 0.82) +
+    smootherStep(0.46, 0.72, forestNoise) * 0.42 +
+    forestBreakup * 0.12 -
+    clearing * 0.72 -
+    openingMeadow * 0.4 -
+    shore * 0.52 -
+    slope * 0.18,
+  );
+  const edge = saturate(
+    (1 - Math.abs(forest - 0.48) * 2.2) * smootherStep(0.18, 0.42, forest) +
+    meadow * forest * 0.42 +
+    route.shoulder * 0.24,
+  );
+  const zone =
+    shore > 0.48 ? "shore" :
+    forest > Math.max(0.32, meadow + 0.08) ? "forest" :
+    "meadow";
+
+  return { zone, shore, meadow, forest, clearing, edge };
+}
+
+export function sampleHabitatZone(x: number, z: number, height = sampleTerrainHeight(x, z)): HabitatZone {
+  return sampleHabitatLayer(x, z, height).zone;
+}
+
+export function sampleHabitatMask(x: number, z: number, zone: HabitatZone, height = sampleTerrainHeight(x, z)) {
+  return sampleHabitatLayer(x, z, height)[zone];
 }
 
 export function isGrassZone(zone: BiomeZone) {
@@ -637,6 +1201,7 @@ export function isGrassZone(zone: BiomeZone) {
 export function sampleGrassDensity(x: number, z: number) {
   const height = sampleTerrainHeight(x, z);
   const zone = sampleBiomeZone(x, z, height);
+  const habitat = sampleHabitatLayer(x, z, height);
   const slope = 1 - sampleTerrainNormal(x, z).y;
   if (!isGrassZone(zone) || slope > 0.58) {
     return 0;
@@ -645,7 +1210,7 @@ export function sampleGrassDensity(x: number, z: number) {
   const riverGap = sampleRiverWetness(x, z);
   const riverNook = sampleRiverNookMask(x, z);
   const riverBank = sampleRiverBankMask(x, z) * (1 - riverGap);
-  const lakeGap = Math.exp(-(((x - OPENING_LAKE_CENTER_X) / (OPENING_LAKE_RADIUS * 0.95)) ** 2) - (((z - OPENING_LAKE_CENTER_Z) / (OPENING_LAKE_RADIUS * 0.85)) ** 2));
+  const lakeGap = sampleStartingWaterWetness(x, z);
   const base =
     zone === "plains" ? 1 :
     zone === "hills" ? 0.92 :
@@ -661,9 +1226,23 @@ export function sampleGrassDensity(x: number, z: number) {
     zone === "hills" ? 0.9 :
     zone === "foothills" ? 0.64 :
     0.3;
+  const patchNoise = fbmNoise(x * 0.032 + 4.2, z * 0.032 - 1.4, 4) * 0.5 + 0.5;
+  const finePatchNoise = fbmNoise(x * 0.076 - 2.8, z * 0.076 + 5.1, 2) * 0.5 + 0.5;
+  const clumpMask = smootherStep(0.42, 0.66, patchNoise);
+  const openGapMask = 1 - smootherStep(0.18, 0.38, patchNoise);
+  const patchMultiplier =
+    0.48 +
+    clumpMask * (0.72 + meadowLushness * 0.12 + habitat.meadow * 0.14) +
+    finePatchNoise * 0.1;
   return Math.max(
     0,
-    base +
+    base * patchMultiplier +
+    clumpMask * meadowLushness * 0.24 -
+    openGapMask * meadowLushness * 0.16 +
+    habitat.meadow * (0.16 + clumpMask * 0.12) +
+    habitat.edge * 0.08 -
+    habitat.forest * 0.1 -
+    habitat.shore * 0.38 +
     riverNook * (0.48 + meadowLushness * 0.16) +
     riverBank * (0.16 + riverNook * 0.18) -
     riverGap * 1.18 -
@@ -1018,7 +1597,7 @@ export const scenicPockets: ScenicPocket[] = [
   },
 ];
 
-export const startingPosition = new Vector3(-58, sampleTerrainHeight(-58, -158) + 2.6, -158);
+export const startingPosition = new Vector3(-58, sampleTerrainHeight(-58, -158) + 2.2, -158);
 export const startingLookTarget = new Vector3(18, sampleTerrainHeight(18, 108) + 12, 108);
 
 export function sampleObjectiveText() {

@@ -1,0 +1,9 @@
+- generic [ref=e2]:
+  - generic:
+    - generic
+    - generic
+    - generic
+    - complementary
+    - complementary
+  - generic: camera journey-scenic / walk distance 34.51 polar 1.31 (0.58-2.28) up 130.6deg fov 48.5 shoulder 0.13 lookAhead 0.07 focusY 5.46 recenter 0s yaw 0.62 locked false player x -58.0 y -1.1 z -158.0
+  - generic: perf 43.9fps avg 22.8ms raw 23.5ms quality avg 22.91ms pixelRatio 0.78 (0.78-1.55) renderer calls 1011 tris 1778958 lines 0 points 0 memory geometries 975 textures 1 terrain 58081v / 115200t grass 4 meshes / 13792 inst / est 775680t forest 2 meshes / 166 inst / est 18544t water 6 surfaces / 5126v / 8968t animated shaders 12 grass 4 trees 2 water 6
