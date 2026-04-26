@@ -2,6 +2,7 @@ import { MathUtils } from "three";
 import type { CharacterScreenView } from "../../simulation/characterScreenData";
 import { MOVEMENT_CONTROL_LABELS, MOVEMENT_CONTROL_SUMMARY } from "../../simulation/controlScheme";
 import type { FrameState } from "../../simulation/gameState";
+import { ROLL_MODE_INDICATOR_DELAY } from "../../simulation/playerSimulationConstants";
 import { worldLandmarks } from "../../simulation/world";
 import type { ForageableKind, WorldLandmark } from "../../simulation/world";
 import { ViewMode } from "../../simulation/viewMode";
@@ -36,6 +37,8 @@ export interface HudShellUpdate {
     recruitedCount: number;
     nearestRecruitableDistance: number | null;
     recruitedThisFrame: number;
+    rollingCount: number;
+    mossuCollisionCount: number;
     dominantMood: "curious" | "shy" | "brave" | "sleepy";
     regroupActive: boolean;
     callHeardActive: boolean;
@@ -61,6 +64,9 @@ export class HudShell {
   private readonly staminaHud = document.createElement("section");
   private readonly staminaRing = document.createElement("div");
   private readonly staminaValue = document.createElement("p");
+  private readonly rollModeHud = document.createElement("section");
+  private readonly rollModeMeter = document.createElement("div");
+  private readonly rollModeValue = document.createElement("p");
   private readonly pouchHud = document.createElement("section");
   private readonly pouchItems = document.createElement("div");
   private readonly pouchDetail = document.createElement("div");
@@ -175,12 +181,14 @@ export class HudShell {
       fauna.nearestRecruitableDistance !== null &&
       fauna.nearestRecruitableDistance <= 14.5;
     const shouldShowControlsPanel = pauseMenuOpen || characterScreenOpen;
+    const overlayOpen = isMapMode || pauseMenuOpen || characterScreenOpen;
 
     this.statusValues.zone.textContent = this.prettyZone(frame.currentZone);
     this.statusValues.landmark.textContent = frame.currentLandmark;
     this.statusValues.wind.textContent = `${Math.round(windStrength * 100)}%`;
     this.statusValues.collections.textContent = `${characterData.totals.discovered}/${characterData.totals.total}`;
     this.updateStaminaHud(frame.player.stamina, frame.player.staminaMax, frame.player.staminaVisible);
+    this.updateRollModeHud(frame.player.rollHoldSeconds, frame.player.rollModeReady, frame.player.rolling, overlayOpen);
     this.element.classList.toggle("hud--map", isMapMode);
     this.element.classList.toggle("hud--pause", pauseMenuOpen);
     this.element.classList.toggle("hud--character-screen", characterScreenOpen);
@@ -190,8 +198,8 @@ export class HudShell {
     this.updateMapOverlay(frame, characterData, viewMode);
     this.updatePauseMenu(frame, characterData, windStrength);
     this.updateCharacterScreen(characterData, focusedCollectionId, characterScreenOpen);
-    this.updatePouchHud(characterData, nearbyForageable?.kind ?? null, latestGatheredGood?.forageableId ?? null, isMapMode || pauseMenuOpen || characterScreenOpen);
-    this.updatePickupCard(latestGatheredGood ?? null, isMapMode || pauseMenuOpen || characterScreenOpen);
+    this.updatePouchHud(characterData, nearbyForageable?.kind ?? null, latestGatheredGood?.forageableId ?? null, overlayOpen);
+    this.updatePickupCard(latestGatheredGood ?? null, overlayOpen);
 
     if (pauseMenuOpen) {
       this.statusValues.objectiveTitle.textContent = "Pause Menu";
@@ -212,9 +220,11 @@ export class HudShell {
       this.statusValues.objectiveBody.textContent = "The camera is pulled high above the island so the full route can breathe on screen.";
       this.statusValues.ability.textContent = "Map view.";
       this.statusValues.prompt.innerHTML = "<strong>World View</strong>";
-      this.controlsPanelStatus.innerHTML = "Press <strong>M</strong> or <strong>Esc</strong> to return to the trail.";
+      this.controlsPanelStatus.innerHTML =
+        "Scroll to zoom the island view. Press <strong>R</strong> or <strong>Home</strong> to reset zoom. <strong>M</strong> or <strong>Esc</strong> returns to the trail.";
       this.statusValues.hint.innerHTML = this.renderQuickActions([
         ["Tab", "inventory"],
+        ["R / Home", "reset zoom"],
         ["M", "close"],
         ["Esc", "close"],
       ]);
@@ -223,7 +233,9 @@ export class HudShell {
 
     this.statusValues.objectiveTitle.textContent = frame.objective.title;
     this.statusValues.objectiveBody.textContent = frame.objective.body;
-    this.statusValues.ability.textContent = "Ability ready: Breeze Float lets Mossu drift across ravines by holding Space in the air.";
+    this.statusValues.ability.textContent = frame.player.rollModeReady
+      ? "Roll mode active: jump, then hold Space to Breeze Float."
+      : "Ability ready: Breeze Float uses stamina only while holding Space in the air.";
 
     const faunaMoodIcon = this.renderFaunaMoodIcon(fauna.dominantMood);
     const faunaMoodLabel = `${fauna.dominantMood[0].toUpperCase()}${fauna.dominantMood.slice(1)}`;
@@ -234,6 +246,7 @@ export class HudShell {
       latestCollection !== undefined ||
       nearbyForageable !== null ||
       fauna.recruitedThisFrame > 0 ||
+      fauna.rollingCount > 0 ||
       (fauna.callHeardActive && fauna.recruitedCount > 0) ||
       (fauna.regroupActive && fauna.recruitedCount > 0) ||
       nearbyRecruitableFauna ||
@@ -254,6 +267,8 @@ export class HudShell {
       this.statusValues.prompt.innerHTML = `<strong>Forage</strong> Press E to tuck ${nearbyForageable.title} into Mossu's pouch.`;
     } else if (fauna.recruitedThisFrame > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.recruitedThisFrame} ${faunaName} joined Mossu's trail.</span>`;
+    } else if (fauna.rollingCount > 0) {
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.rollingCount} rolling with Mossu.</span>`;
     } else if (fauna.callHeardActive && fauna.recruitedCount > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> heard Mossu.</span>`;
     } else if (fauna.regroupActive && fauna.recruitedCount > 0) {
@@ -463,7 +478,10 @@ export class HudShell {
       (entry) => entry.forageableId === characterData.latestGatheredGoodId,
     );
 
-    this.characterSummary.textContent = `Mossu's handbook is still filling in. ${characterData.totals.discovered} of ${characterData.totals.total} keepsake cards have been stamped, and ${characterData.gatheredTotals.gathered} of ${characterData.gatheredTotals.total} pouch goods have been gathered so far.`;
+    this.characterSummary.textContent =
+      characterData.totals.discovered === 0 && characterData.gatheredTotals.gathered === 0
+        ? "Mossu's holo binder lists every keepsake and pouch good on the route. Stamps register when you reach landmarks; trail finds log when you gather."
+        : `Mossu's handbook is still filling in. ${characterData.totals.discovered} of ${characterData.totals.total} keepsake cards have been stamped, and ${characterData.gatheredTotals.gathered} of ${characterData.gatheredTotals.total} pouch goods have been gathered so far.`;
     this.characterStamp.textContent = `${characterData.totals.discovered}/${characterData.totals.total} cards · ${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total} goods`;
     this.collectionsSectionBadge.textContent = `${characterData.totals.discovered}/${characterData.totals.total}`;
     this.gatheredGoodsSectionBadge.textContent = `${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total}`;
@@ -711,7 +729,7 @@ export class HudShell {
     this.statusValues.hint.className = "hint-chip";
     this.statusValues.ability.className = "ability-pill";
     bottomStack.append(this.statusValues.prompt, this.buildControlsPanel(), this.statusValues.hint);
-    utilityStack.append(this.buildPouchHud(), this.buildStaminaHud(), this.statusValues.ability);
+    utilityStack.append(this.buildPouchHud(), this.buildRollModeHud(), this.buildStaminaHud(), this.statusValues.ability);
     bottom.append(bottomStack, utilityStack);
 
     top.append(objective, status);
@@ -853,6 +871,36 @@ export class HudShell {
     return this.staminaHud;
   }
 
+  private buildRollModeHud() {
+    this.rollModeHud.className = "roll-mode-hud";
+
+    const badge = document.createElement("div");
+    badge.className = "roll-mode-hud__badge";
+    badge.setAttribute("aria-hidden", "true");
+    badge.textContent = "Shift";
+
+    const body = document.createElement("div");
+    body.className = "roll-mode-hud__body";
+    const label = document.createElement("p");
+    label.className = "roll-mode-hud__label";
+    label.textContent = "Roll Mode";
+    this.rollModeMeter.className = "roll-mode-hud__meter";
+    this.rollModeValue.className = "roll-mode-hud__value";
+    this.rollModeValue.textContent = "hold";
+    body.append(label, this.rollModeMeter, this.rollModeValue);
+    this.rollModeHud.append(badge, body);
+    return this.rollModeHud;
+  }
+
+  private updateRollModeHud(holdSeconds: number, ready: boolean, rolling: boolean, overlayOpen: boolean) {
+    const progress = MathUtils.clamp(holdSeconds / ROLL_MODE_INDICATOR_DELAY, 0, 1);
+    const visible = !overlayOpen && (rolling || holdSeconds > 0 || ready);
+    this.rollModeHud.style.setProperty("--roll-progress", progress.toFixed(3));
+    this.rollModeValue.textContent = ready ? "ready" : `${Math.ceil(Math.max(0, ROLL_MODE_INDICATOR_DELAY - holdSeconds))}s`;
+    this.rollModeHud.classList.toggle("roll-mode-hud--visible", visible);
+    this.rollModeHud.classList.toggle("roll-mode-hud--active", ready);
+  }
+
   private updateStaminaHud(stamina: number, staminaMax: number, visible: boolean) {
     const staminaRatio = staminaMax <= 0 ? 0 : MathUtils.clamp(stamina / staminaMax, 0, 1);
     this.staminaHud.style.setProperty("--stamina-ratio", staminaRatio.toFixed(3));
@@ -905,12 +953,20 @@ export class HudShell {
     this.upgradesGrid.className = "upgrade-grid";
     upgradesSection.append(this.upgradesGrid);
 
-    const collectionsSection = this.buildCharacterSection("Keepsake Cards", "Registered landmarks", this.collectionsSectionBadge);
+    const collectionsSection = this.buildCharacterSection(
+      "Keepsake Cards",
+      "Route landmarks — stamp by visiting",
+      this.collectionsSectionBadge,
+    );
     collectionsSection.classList.add("character-section--binder", "character-section--dex");
     this.collectionsList.className = "collection-list";
     collectionsSection.append(this.collectionsList);
 
-    const gatheredGoodsSection = this.buildCharacterSection("Pouch Goods", "Seeds, shells, tufts, berries, stones, feathers", this.gatheredGoodsSectionBadge);
+    const gatheredGoodsSection = this.buildCharacterSection(
+      "Pouch Goods",
+      "Forage along the path — hold E when the pouch sparkles",
+      this.gatheredGoodsSectionBadge,
+    );
     gatheredGoodsSection.classList.add("character-section--binder", "character-section--goods");
     this.gatheredGoodsList.className = "gathered-goods-list";
     gatheredGoodsSection.append(this.gatheredGoodsList);
@@ -1083,7 +1139,20 @@ export class HudShell {
 
     const footer = document.createElement("div");
     footer.className = "world-map__footer";
-    footer.innerHTML = `<span></span><strong>Press M or Esc to close</strong><span></span>`;
+    const footerRow = document.createElement("div");
+    footerRow.className = "world-map__footer-row";
+    const leafLeft = document.createElement("span");
+    const closeLine = document.createElement("strong");
+    closeLine.textContent = "Press M or Esc to close";
+    const leafRight = document.createElement("span");
+    footerRow.append(leafLeft, closeLine, leafRight);
+    const scrollHint = document.createElement("div");
+    scrollHint.className = "world-map__footer-hint";
+    scrollHint.textContent = "Scroll to zoom the island view";
+    const resetHint = document.createElement("div");
+    resetHint.className = "world-map__footer-hint";
+    resetHint.textContent = "R or Home to reset zoom";
+    footer.append(footerRow, scrollHint, resetHint);
 
     shell.append(badge, header, topDivider, body, bottomDivider, filters, footer);
     this.mapOverlay.append(shell);

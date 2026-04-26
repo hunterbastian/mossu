@@ -36,6 +36,8 @@ export interface PlayerState {
   staminaVisible: boolean;
   rolling: boolean;
   rollingBoostActive: boolean;
+  rollHoldSeconds: number;
+  rollModeReady: boolean;
   grounded: boolean;
   swimming: boolean;
   waterDepth: number;
@@ -115,6 +117,8 @@ export class GameState {
         staminaVisible: false,
         rolling: false,
         rollingBoostActive: false,
+        rollHoldSeconds: 0,
+        rollModeReady: false,
         grounded: true,
         swimming: false,
         waterDepth: 0,
@@ -166,7 +170,7 @@ export class GameState {
       return;
     }
 
-    const { sustainedRolling, isFloating, horizontalSpeed } = applyMovementPhysics(
+    const { isFloating, horizontalSpeed } = applyMovementPhysics(
       player,
       this.frame.save,
       input,
@@ -193,7 +197,7 @@ export class GameState {
     const waterStateAfterMove = sampleWaterState(player.position.x, player.position.z);
     resolveWaterContact(player, terrainHeight, waterStateAfterMove, wasGrounded, downwardSpeedBeforeResolve, runtime);
 
-    updateStaminaAndAbilityState(player, dt, runtime, sustainedRolling, isFloating);
+    updateStaminaAndAbilityState(player, dt, runtime, isFloating);
 
     if (horizontalSpeed > 0.3) {
       player.heading = Math.atan2(player.velocity.x, player.velocity.z);

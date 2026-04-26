@@ -353,3 +353,54 @@ Overall QA pass:
 - Screenshots captured under `output/qa-overall/`: `safari-smoke-2.png`, `safari-after-enter.png`, `safari-after-e.png`, `safari-after-m.png`, `safari-after-esc.png`, and `safari-after-tab.png`.
 - Headless Playwright state capture remains unreliable in this macOS sandbox: direct Vite targets were unreachable from sandboxed Chromium, and an in-process static-server probe hung around `advanceTime` before the browser context closed.
 - Remaining risks: the existing Vite large chunk warning remains, and the handbook should get a dedicated responsive-height check because the non-fullscreen Safari smoke view showed inner scrolling near the bottom of the panel.
+
+Visual anchor scene polish implementation:
+- Added a dedicated `anchor-scene-accents` visual layer for the six review anchors: opening meadow, opening lake shore, Silver Bend, Fir Gate forest edge, highland creek/waterfalls, and shrine approach.
+- The new layer uses the existing instanced small-prop batching for clover, flowers, reeds, moss, grass clumps, pebbles, and shrubs, while only adding a few authored mature trees, rock accents, shadows, and side waterfall ribbons.
+- Tuned water profiles to reduce milky shoreline glare and sparkle washout while preserving readable shallow/deep bands.
+- Updated the visual contract test roots so the new anchor small-prop batch is covered by the black-plant / instance-color checks.
+- Verification:
+- `npm run test:contracts` passes: camera, controls, habitats, movement, visuals, water-state-agreement, route-checkpoints.
+- `npm run build` passes. Vite still reports the existing large JS chunk warning.
+- `git diff --check` passes.
+- Required `develop-web-game` client notes: direct skill-path launch still cannot resolve repo-local `playwright`; the repo-local symlink launch with escalated local-network access loaded the built static preview, entered gameplay, and captured `output/anchor-scene-polish/shot-0.png` plus `state-0.json`.
+- Headless/desktop visual caveat: real Chrome was opened with the local preview URL, but macOS screen capture returned black/desktop captures instead of a useful Chrome frame. Treat the Playwright gameplay screenshot as the reliable captured artifact for this run and do a human Chrome route review before shipping.
+- Temporary Vite and Python preview servers were stopped after QA.
+
+Roll mode / Karu mimic pass:
+- Shift rolling is now stamina-free. The stamina meter is reserved for Breeze Float, and the character screen copy now says that explicitly.
+- Added simulation state for `rollHoldSeconds` and `rollModeReady`; holding Shift for about 3 seconds now drives a small Roll Mode HUD indicator.
+- Roll jump still preserves forward momentum, and holding Space after the roll jump can transition into Breeze Float while consuming stamina only for the float.
+- Recruited Karu now tighten their follow slots while Mossu rolls, speed up slightly to keep pace, tuck their feet, bounce, and rotate through a soft rolling mimic pose instead of only hopping behind.
+- `render_game_to_text` now reports roll hold and roll-ready state for lightweight QA.
+- Future animation plan:
+- Phase 1: add Mossu roll-charge anticipation, a tiny dust puff, and a clearer "ready" body squash when Shift is held long enough.
+- Phase 2: give Karu staggered mimic delays so the herd rolls in a cute wave instead of all matching the same frame.
+- Phase 3: build a roll-jump transition pose: squash, launch stretch, air tuck, then Breeze Float fluff/ear spread.
+- Phase 4: add landing recovery feedback for roll landings, slope landings, and roll-to-float landings.
+- Verification:
+- `npm run test:contracts` passes: camera, controls, habitats, movement, visuals, water-state-agreement, route-checkpoints.
+- `npm run build` passes. Vite still reports the existing large JS chunk warning.
+- Required `develop-web-game` browser smoke was attempted against `http://127.0.0.1:8002/`, but headless Chromium timed out before `domcontentloaded`. A custom Shift-specific Playwright probe was also attempted and hit the same headless initialization problem before `render_game_to_text` became available. The temporary server and hung probe were stopped.
+
+Karu true-roll follow-up:
+- Promoted Karu rolling from a visual-only mimic blend into explicit `blob.rolling` state.
+- Recruited Karu now enter that state with a tiny per-slot stagger when Mossu is rolling, stay out of roll state while floating or bank-waiting, and use stronger catch-up movement while rolling.
+- The Karu roll pose now keys off their own rolling state, and `render_game_to_text` reports `fauna.rollingCount` so QA can tell whether the herd is actually rolling.
+- The HUD can briefly surface how many Karu are rolling with Mossu.
+- Verification:
+- `npm run test:contracts` passes: camera, controls, habitats, movement, visuals, water-state-agreement, route-checkpoints.
+- `npm run build` passes. Vite still reports the existing large JS chunk warning.
+- `git diff --check` passes.
+
+Mossu/Karu soft collision pass:
+- Added lightweight planar collisions between Mossu and Karu without introducing a full physics engine.
+- Karu now use slightly different collision radii for idle, recruited, and rolling states, so rolling herd members feel rounder and less ghost-like.
+- Overlaps are resolved mostly by nudging Karu away, with a smaller Mossu nudge while grounded and not swimming; both sides also get a small velocity response when they run into each other.
+- The world update order now applies Karu collision before the Mossu avatar pose update, so the visible body follows the adjusted position in the same frame.
+- `render_game_to_text` now reports `fauna.mossuCollisionCount` for QA probes.
+- Verification:
+- `npm run test:contracts` passes: camera, controls, habitats, movement, visuals, water-state-agreement, route-checkpoints.
+- `npm run build` passes. Vite still reports the existing large JS chunk warning.
+- `git diff --check` passes before this progress note.
+- The required `develop-web-game` client loaded a built static preview on `http://127.0.0.1:8003/`, entered gameplay, and captured `output/karu-collision-smoke/shot-0.png` plus `state-0.json`.

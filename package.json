@@ -7,7 +7,8 @@
     "dev": "vite",
     "test:contracts": "tsc -p tsconfig.contracts.json && esbuild tests/contracts/runContracts.ts --bundle --platform=node --format=esm --outfile=.contract-test-build/runContracts.mjs && node .contract-test-build/runContracts.mjs",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "qa": "npm run test:contracts && npm run build"
   },
   "dependencies": {
     "camera-controls": "^3.1.2",

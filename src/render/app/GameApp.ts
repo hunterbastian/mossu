@@ -40,6 +40,7 @@ const PAUSED_INPUT: InputSnapshot = {
   interactPressed: false,
   inventoryTogglePressed: false,
   mapTogglePressed: false,
+  mapViewResetPressed: false,
   escapePressed: false,
 };
 
@@ -128,6 +129,7 @@ export class GameApp {
 
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("keydown", this.handleTitleKeyDown);
+    window.addEventListener("wheel", this.handleMapWheel, { passive: false });
     document.addEventListener("pointerlockchange", this.handlePointerLockChange);
     this.handleResize();
   }
@@ -150,6 +152,7 @@ export class GameApp {
     window.cancelAnimationFrame(this.raf);
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.handleTitleKeyDown);
+    window.removeEventListener("wheel", this.handleMapWheel);
     document.removeEventListener("pointerlockchange", this.handlePointerLockChange);
     this.input.dispose();
     this.followCamera.dispose();
@@ -199,6 +202,8 @@ export class GameApp {
         stamina: Number(frame.player.stamina.toFixed(1)),
         staminaMax: Number(frame.player.staminaMax.toFixed(1)),
         rolling: frame.player.rolling,
+        rollHoldSeconds: Number(frame.player.rollHoldSeconds.toFixed(2)),
+        rollModeReady: frame.player.rollModeReady,
         grounded: frame.player.grounded,
         swimming: frame.player.swimming,
         waterDepth: Number(frame.player.waterDepth.toFixed(1)),
@@ -238,6 +243,8 @@ export class GameApp {
             ? null
             : Number(faunaStats.nearestRecruitableDistance.toFixed(1)),
         recruitedThisFrame: faunaStats.recruitedThisFrame,
+        rollingCount: faunaStats.rollingCount,
+        mossuCollisionCount: faunaStats.mossuCollisionCount,
         dominantMood: faunaStats.dominantMood,
         regroupActive: faunaStats.regroupActive,
         callHeardActive: faunaStats.callHeardActive,
@@ -272,6 +279,9 @@ export class GameApp {
       }
       this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
     } else if (this.viewMode === "map_lookdown") {
+      if (input.mapViewResetPressed) {
+        this.followCamera.recenterMapView();
+      }
       if (input.escapePressed || input.mapTogglePressed) {
         this.closeMap();
       } else if (input.inventoryTogglePressed) {
@@ -347,11 +357,15 @@ export class GameApp {
       this.viewMode === "map_lookdown";
     const contextualFeedbackActive =
       frame.player.staminaVisible ||
+      frame.player.rolling ||
+      frame.player.rollHoldSeconds > 0 ||
+      frame.player.rollModeReady ||
       frame.forageableTarget !== null ||
       frame.interactionTarget !== null ||
       frame.lastCatalogedLandmarkId !== null ||
       frame.lastGatheredForageableId !== null ||
       faunaStats.recruitedThisFrame > 0 ||
+      faunaStats.rollingCount > 0 ||
       faunaStats.regroupActive ||
       faunaStats.callHeardActive ||
       (faunaStats.nearestRecruitableDistance !== null && faunaStats.nearestRecruitableDistance <= 14.5);
@@ -453,6 +467,7 @@ export class GameApp {
       maxPixelRatio: Number(this.maxPixelRatio.toFixed(2)),
       minPixelRatio: Number(this.minPixelRatio.toFixed(2)),
       bloomEnabled: this.shouldUseBloom(),
+      mapZoom: this.followCamera.getMapZoomFactor(),
       renderer: {
         calls: rendererInfo.render.calls,
         triangles: rendererInfo.render.triangles,
@@ -475,7 +490,7 @@ export class GameApp {
     const perf = this.getPerformanceSnapshot();
     this.perfDebugPanel.textContent = [
       `perf ${perf.fps}fps  avg ${perf.frameMs}ms  raw ${perf.latestFrameMs}ms`,
-      `quality avg ${perf.qualitySampleFrameMs}ms  pixelRatio ${perf.pixelRatio} (${perf.minPixelRatio}-${perf.maxPixelRatio})  bloom ${perf.bloomEnabled ? "on" : "off"}`,
+      `quality avg ${perf.qualitySampleFrameMs}ms  pixelRatio ${perf.pixelRatio} (${perf.minPixelRatio}-${perf.maxPixelRatio})  bloom ${perf.bloomEnabled ? "on" : "off"}  mapZoom ${perf.mapZoom.toFixed(2)}`,
       `renderer calls ${perf.renderer.calls}  tris ${perf.renderer.triangles}  lines ${perf.renderer.lines}  points ${perf.renderer.points}`,
       `memory geometries ${perf.memory.geometries}  textures ${perf.memory.textures}`,
       `terrain ${perf.world.terrainVertices}v / ${perf.world.terrainTriangles}t`,
@@ -491,6 +506,14 @@ export class GameApp {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.composer.setSize(window.innerWidth, window.innerHeight);
     this.followCamera.resize(window.innerWidth, window.innerHeight);
+  };
+
+  private handleMapWheel = (event: WheelEvent) => {
+    if (this.viewMode !== "map_lookdown" || this.titleScreenOpen) {
+      return;
+    }
+    event.preventDefault();
+    this.followCamera.adjustMapZoomFromWheel(event.deltaY);
   };
 
   private handlePointerLockChange = () => {

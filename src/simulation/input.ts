@@ -11,6 +11,7 @@ export interface InputSnapshot {
   interactPressed: boolean;
   inventoryTogglePressed: boolean;
   mapTogglePressed: boolean;
+  mapViewResetPressed: boolean;
   escapePressed: boolean;
 }
 
@@ -21,6 +22,7 @@ export class InputController {
   private interactPressedFrame = false;
   private inventoryTogglePressedFrame = false;
   private mapTogglePressedFrame = false;
+  private mapViewResetPressedFrame = false;
   private escapePressedFrame = false;
   private disposeCallbacks: Array<() => void> = [];
 
@@ -41,6 +43,12 @@ export class InputController {
       }
       if (!this.isPressed("KeyM", "m") && this.matchesKey(event, "KeyM", "m")) {
         this.mapTogglePressedFrame = true;
+      }
+      if (!this.isPressed("KeyR", "r") && this.matchesKey(event, "KeyR", "r")) {
+        this.mapViewResetPressedFrame = true;
+      }
+      if (!this.isPressed("Home", "home") && event.code === "Home") {
+        this.mapViewResetPressedFrame = true;
       }
       if (!this.isPressed("Escape", "escape") && this.matchesKey(event, "Escape", "escape")) {
         this.escapePressedFrame = true;
@@ -71,11 +79,13 @@ export class InputController {
     const interactPressed = this.interactPressedFrame;
     const inventoryTogglePressed = this.inventoryTogglePressedFrame;
     const mapTogglePressed = this.mapTogglePressedFrame;
+    const mapViewResetPressed = this.mapViewResetPressedFrame;
     const escapePressed = this.escapePressedFrame;
     this.jumpPressedFrame = false;
     this.interactPressedFrame = false;
     this.inventoryTogglePressedFrame = false;
     this.mapTogglePressedFrame = false;
+    this.mapViewResetPressedFrame = false;
     this.escapePressedFrame = false;
     return {
       moveX,
@@ -88,6 +98,7 @@ export class InputController {
       interactPressed,
       inventoryTogglePressed,
       mapTogglePressed,
+      mapViewResetPressed,
       escapePressed,
     };
   }

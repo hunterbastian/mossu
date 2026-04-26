@@ -1,5 +1,6 @@
 import { InstancedMesh, Material, Object3D } from "three";
 import {
+  buildAnchorSceneAccents,
   buildBiomeTransitionAccents,
   buildGroundLayer,
   buildHighlandAccents,
@@ -27,6 +28,7 @@ export function runVisualContracts() {
     buildTreeClusters(),
     buildBiomeTransitionAccents(),
     buildWaterBankAccents(),
+    buildAnchorSceneAccents(),
     buildHighlandAccents(),
   ];
   const smallPropMeshes = roots.flatMap(collectSmallPropMeshes);

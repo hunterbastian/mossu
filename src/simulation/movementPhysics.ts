@@ -24,6 +24,7 @@ import {
   ROLL_GRAVITY_FULL_SLOPE,
   ROLL_GRAVITY_MIN_SLOPE,
   ROLL_JUMP_FORWARD_BONUS,
+  ROLL_MODE_INDICATOR_DELAY,
   ROLL_SLOPE_ACCELERATION,
   ROLL_SLOPE_SPEED_BONUS,
   ROLL_SPEED,
@@ -136,7 +137,10 @@ export function applyMovementPhysics(
     scratch.worldMove.setScalar(0);
   }
 
-  player.rolling = input.rollHeld && !player.swimming && player.stamina > STAMINA_ACTION_THRESHOLD;
+  player.rolling = input.rollHeld && !player.swimming;
+  runtime.rollModeHoldSeconds = player.rolling ? runtime.rollModeHoldSeconds + dt : 0;
+  player.rollHoldSeconds = runtime.rollModeHoldSeconds;
+  player.rollModeReady = player.rollHoldSeconds >= ROLL_MODE_INDICATOR_DELAY;
   const terrainSlope = computeRollSlopeAmount(scratch.groundNormal);
   const rollingPlanarSpeed = Math.hypot(player.velocity.x, player.velocity.z);
   const rollGravityActive = player.rolling && player.grounded && terrainSlope > ROLL_GRAVITY_MIN_SLOPE;

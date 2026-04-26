@@ -16,9 +16,11 @@ import {
   ROLL_BOOST_MULTIPLIER,
   ROLL_GRAVITY_FULL_SLOPE,
   ROLL_GRAVITY_MIN_SLOPE,
+  ROLL_MODE_INDICATOR_DELAY,
   ROLL_SPEED,
   WALK_SPEED,
 } from "../../src/simulation/playerSimulationConstants";
+import { updateStaminaAndAbilityState } from "../../src/simulation/staminaAbilities";
 import { startingPosition } from "../../src/simulation/world";
 import { assert } from "./testHarness";
 
@@ -33,6 +35,7 @@ const baseInput: InputSnapshot = {
   interactPressed: false,
   inventoryTogglePressed: false,
   mapTogglePressed: false,
+  mapViewResetPressed: false,
   escapePressed: false,
 };
 
@@ -46,6 +49,8 @@ function makePlayer(): PlayerState {
     staminaVisible: false,
     rolling: false,
     rollingBoostActive: false,
+    rollHoldSeconds: 0,
+    rollModeReady: false,
     grounded: true,
     swimming: false,
     waterDepth: 0,
@@ -112,7 +117,21 @@ export function runMovementContracts() {
   assert(planarSpeed(walkPlayer) <= WALK_SPEED + 0.001, "walking remains capped at walk speed");
   assert(planarSpeed(rollPlayer) > WALK_SPEED + 4, "rolling is meaningfully faster than walking");
   assert(rollPlayer.rollingBoostActive, `roll boost activates after ${ROLL_BOOST_DELAY}s`);
+  assert(rollPlayer.stamina === rollPlayer.staminaMax, "rolling does not consume stamina");
   assert(planarSpeed(rollPlayer) <= ROLL_SPEED * ROLL_BOOST_MULTIPLIER + 12, "rolling stays bounded after boost and slope carry");
+
+  const readyPlayer = makePlayer();
+  const readyRuntime = createPlayerSimulationRuntime();
+  const readyScratch = createMovementScratch();
+  const readyInput = { ...baseInput, rollHeld: true };
+  for (let i = 0; i < Math.ceil(ROLL_MODE_INDICATOR_DELAY * 60) + 1; i += 1) {
+    const dt = 1 / 60;
+    tickMovementTimers(readyPlayer, readyInput, dt, readyRuntime);
+    applyMovementPhysics(readyPlayer, save, readyInput, 0, dt, readyRuntime, readyScratch);
+    updateStaminaAndAbilityState(readyPlayer, dt, readyRuntime, false);
+  }
+  assert(readyPlayer.rollModeReady, `holding Shift for ${ROLL_MODE_INDICATOR_DELAY}s readies roll mode`);
+  assert(readyPlayer.stamina === readyPlayer.staminaMax, "charging roll mode is stamina-free");
 
   const jumpPlayer = makePlayer();
   const jumpRuntime = createPlayerSimulationRuntime();
@@ -130,6 +149,25 @@ export function runMovementContracts() {
   assert(!jumpPlayer.grounded, "roll jump leaves the ground");
   assert(planarSpeed(jumpPlayer) > speedBeforeJump + 2, "roll jump carries extra forward momentum");
   assert(planarSpeed(jumpPlayer) <= ROLL_SPEED + ROLL_AIR_SPEED_BONUS + 8, "roll jump momentum stays bounded");
+
+  const floatPlayer = makePlayer();
+  const floatRuntime = createPlayerSimulationRuntime();
+  const floatScratch = createMovementScratch();
+  for (let i = 0; i < 110; i += 1) {
+    const dt = 1 / 60;
+    const floatInput = {
+      ...baseInput,
+      rollHeld: true,
+      moveY: 1,
+      jumpHeld: true,
+      jumpPressed: i === 0,
+    };
+    tickMovementTimers(floatPlayer, floatInput, dt, floatRuntime);
+    const result = applyMovementPhysics(floatPlayer, save, floatInput, 0, dt, floatRuntime, floatScratch);
+    updateStaminaAndAbilityState(floatPlayer, dt, floatRuntime, result.isFloating);
+  }
+  assert(!floatPlayer.grounded, "roll jump can transition into air control");
+  assert(floatPlayer.stamina < floatPlayer.staminaMax, "Breeze Float, not rolling, consumes stamina while Space is held in air");
 
   const flatNormal = new Vector3(0, 1, 0);
   const slopeNormal = new Vector3(0.28, 0.96, 0).normalize();

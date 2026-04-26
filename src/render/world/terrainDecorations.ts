@@ -101,6 +101,9 @@ function sampleForestComposition(x: number, z: number, y: number): ForestComposi
     Math.exp(-(((x - 76) / 58) ** 2) - (((z - 146) / 72) ** 2)),
   );
   const routeClearing = Math.exp(-((x / 34) ** 2)) * MathUtils.smoothstep(z, -28, 186) * (1 - MathUtils.smoothstep(z, 204, 230));
+  // Tight band on the main approach so ridge / shrine silhouettes stay visible from the path (not a wide deforest).
+  const alpineRouteVista =
+    Math.exp(-((x / 26) ** 2)) * MathUtils.smoothstep(z, 96, 188) * (1 - MathUtils.smoothstep(z, 198, 218));
   const startClearing = Math.exp(-(((x + 44) / 52) ** 2) - (((z + 132) / 44) ** 2));
   const waterClearing = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
   const altitudeEdge = MathUtils.smoothstep(y, 44, 132);
@@ -112,7 +115,11 @@ function sampleForestComposition(x: number, z: number, y: number): ForestComposi
 
   return {
     patch: MathUtils.clamp((broadPatch - 0.34) * 1.75 + localBreakup * 0.38 + grovePulse * 0.62 + habitat.forest * 0.46, 0, 1),
-    clearing: MathUtils.clamp(routeClearing * 0.88 + startClearing * 0.95 + waterClearing * 0.74 + habitat.clearing * 0.52, 0, 1),
+    clearing: MathUtils.clamp(
+      routeClearing * 0.88 + startClearing * 0.95 + waterClearing * 0.74 + habitat.clearing * 0.52 + alpineRouteVista * 0.62,
+      0,
+      1,
+    ),
     edge: MathUtils.clamp(edge + habitat.edge * 0.34, 0, 1),
   };
 }
@@ -262,18 +269,18 @@ function sampleInstancedTreeDensity(kind: InstancedForestKind, x: number, z: num
 
   if (kind === "round") {
     const biomeDensity =
-      zone === "plains" ? 0.16 :
+      zone === "plains" ? 0.13 :
       zone === "hills" ? 0.34 :
-      zone === "foothills" ? 0.28 :
+      zone === "foothills" ? 0.32 :
       0;
     return (biomeDensity + edgeBoost) * waterFade * forestEnvelope * clumpGate * clearingFade * (1 - habitat.meadow * 0.5);
   }
 
   const biomeDensity =
-    zone === "hills" ? 0.08 :
-    zone === "foothills" ? 0.54 :
-    zone === "alpine" ? 0.68 :
-    zone === "ridge" ? 0.42 :
+    zone === "hills" ? 0.1 :
+    zone === "foothills" ? 0.56 :
+    zone === "alpine" ? 0.72 :
+    zone === "ridge" ? 0.5 :
     0;
   return (biomeDensity + edgeBoost) * waterFade * MathUtils.clamp(forestEnvelope + firApproach * 0.34, 0, 1) * clumpGate * clearingFade * (1 - habitat.meadow * 0.42);
 }
@@ -2027,6 +2034,271 @@ export function buildWaterBankAccents() {
   riparianAnchors.forEach(([x, z, scale, tone, treeKind], index) => {
     addRiparianPocket(x, z, scale, tone, treeKind, 540 + index * 13);
   });
+
+  group.add(props.buildGroup());
+  return group;
+}
+
+export function buildAnchorSceneAccents() {
+  const group = new Group();
+  const props = new SmallPropInstancer("anchor-scene-small-props");
+  group.name = "anchor-scene-accents";
+
+  const addTerrainObject = (object: Object3D, x: number, z: number, yOffset: number, yaw: number) => {
+    if (!isInsideIslandPlayableBounds(x, z)) {
+      return;
+    }
+
+    object.position.set(x, sampleTerrainHeight(x, z) + yOffset, z);
+    object.rotation.y = yaw;
+    group.add(object);
+  };
+
+  const addShadow = (x: number, z: number, scale: number, tone: string, opacity: number, yaw: number) => {
+    const shadow = makeCanopyShadowPatch(scale, tone, opacity);
+    addTerrainObject(shadow, x, z, 0.036, yaw);
+  };
+
+  const addBankRead = (x: number, z: number, scale: number, yaw: number, tone: "warm" | "cool" | "alpine") => {
+    if (!isInsideIslandPlayableBounds(x, z)) {
+      return;
+    }
+
+    const wetness = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
+    const slope = 1 - sampleTerrainNormal(x, z).y;
+    if (wetness < 0.04 || wetness > 0.86 || slope > 0.38) {
+      return;
+    }
+
+    const y = sampleTerrainHeight(x, z);
+    const shelfTone = tone === "alpine" ? "#babbae" : tone === "cool" ? "#aab58a" : "#d0bf8a";
+    const washTone = tone === "alpine" ? "#c6c7b9" : tone === "cool" ? "#b9c098" : "#d9ca91";
+    const shelf = makeShoreShelfPatch(scale, shelfTone, tone === "warm" ? 0.2 : 0.16);
+    shelf.position.set(x, y + 0.05, z);
+    shelf.rotation.y = yaw;
+    group.add(shelf);
+
+    const wash = makeBankWashPatch(scale * 0.86, washTone, tone === "warm" ? 0.26 : 0.2);
+    wash.position.set(x + Math.cos(yaw) * 0.6 * scale, y + 0.06, z + Math.sin(yaw) * 0.6 * scale);
+    wash.rotation.y = yaw + 0.16;
+    group.add(wash);
+
+    const pebble = props.transformLocal(0.24 * scale, -0.86 * scale, yaw);
+    props.addBankLipPebbleTrail(
+      x + pebble.x,
+      y + 0.09,
+      z + pebble.z,
+      yaw + 0.28,
+      tone === "alpine" ? 0.58 * scale : 0.52 * scale,
+      tone === "alpine" ? "#b8b8aa" : "#cfbf91",
+    );
+  };
+
+  const addFramingTree = (
+    x: number,
+    z: number,
+    scale: number,
+    kind: "round" | "pine",
+    color: string,
+    yawSeed: number,
+  ) => {
+    if (!isInsideIslandPlayableBounds(x, z)) {
+      return;
+    }
+
+    const y = sampleTerrainHeight(x, z);
+    const habitat = sampleHabitatLayer(x, z, y);
+    const slope = 1 - sampleTerrainNormal(x, z).y;
+    const wetness = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
+    if (wetness > 0.4 || slope > (kind === "pine" ? 0.42 : 0.34) || habitat.meadow > 0.88) {
+      return;
+    }
+
+    const tree = kind === "round" ? makeRoundTree(scale, color) : makePineTree(scale, color);
+    tree.position.set(x, y, z);
+    tree.rotation.y = forestHash(x, z, yawSeed) * Math.PI * 2;
+    group.add(tree);
+  };
+
+  const addUnderstory = (
+    x: number,
+    z: number,
+    scale: number,
+    yaw: number,
+    tone: "meadow" | "shore" | "forest" | "highland" | "shrine",
+  ) => {
+    if (!isInsideIslandPlayableBounds(x, z)) {
+      return;
+    }
+
+    const y = sampleTerrainHeight(x, z);
+    const mossColor =
+      tone === "meadow" ? "#90bf72" :
+      tone === "shore" ? "#7fa268" :
+      tone === "forest" ? "#6f8c5d" :
+      tone === "shrine" ? "#7e8c77" :
+      "#6f8365";
+    const grassColor =
+      tone === "meadow" ? "#82b761" :
+      tone === "shore" ? "#759b5d" :
+      tone === "forest" ? "#6d8759" :
+      tone === "shrine" ? "#77856d" :
+      "#657b5f";
+    const bushColor =
+      tone === "meadow" ? "#8fcf70" :
+      tone === "shore" ? "#7faa68" :
+      tone === "forest" ? "#6f965c" :
+      tone === "shrine" ? "#74836d" :
+      "#617b5b";
+
+    const moss = props.transformLocal(-0.52 * scale, -0.18 * scale, yaw);
+    props.addMossPatch(x + moss.x, y + 0.04, z + moss.z, yaw, 0.7 * scale, mossColor);
+    const grass = props.transformLocal(0.36 * scale, 0.18 * scale, yaw);
+    props.addGrassClump(x + grass.x, y + 0.04, z + grass.z, yaw + 0.18, 0.78 * scale, grassColor);
+
+    if (tone === "forest" || tone === "shore") {
+      const bush = props.transformLocal(0.84 * scale, -0.2 * scale, yaw);
+      props.addBush(x + bush.x, y, z + bush.z, yaw, 0.62 * scale, bushColor);
+    }
+
+    if (tone === "meadow") {
+      const clover = props.transformLocal(-0.08 * scale, 0.8 * scale, yaw);
+      props.addCloverPatch(x + clover.x, y + 0.02, z + clover.z, yaw, 0.34 * scale, "#87c76b");
+      props.addFlower(
+        x + Math.cos(yaw + 0.8) * 0.9 * scale,
+        y,
+        z + Math.sin(yaw + 0.8) * 0.9 * scale,
+        yaw,
+        "#f7d5e8",
+        0.54 * scale,
+        0.68,
+      );
+    }
+
+    if (tone === "shore" || tone === "highland") {
+      const reed = props.transformLocal(0.08 * scale, -0.92 * scale, yaw);
+      props.addReedCluster(
+        x + reed.x,
+        y + 0.04,
+        z + reed.z,
+        yaw,
+        tone === "highland" ? 0.68 * scale : 0.78 * scale,
+        tone === "highland" ? "#667b5d" : "#749c58",
+      );
+    }
+
+    if (tone === "highland" || tone === "shrine") {
+      const rock = props.transformLocal(0.68 * scale, 0.52 * scale, yaw);
+      props.addBankPebbleCluster(
+        x + rock.x,
+        y + 0.08,
+        z + rock.z,
+        yaw + 0.34,
+        0.5 * scale,
+        tone === "shrine" ? "#b5b3a9" : "#aaa99f",
+      );
+    }
+  };
+
+  // 1. Title screen into opening meadow: keep the start readable, with meadow detail at the edges.
+  [
+    [-82, -158, 1.18, 0.2],
+    [-58, -166, 0.94, 1.35],
+    [-38, -146, 1.02, 2.1],
+    [-96, -134, 0.9, 2.9],
+  ].forEach(([x, z, scale, yaw]) => {
+    addUnderstory(x, z, scale, yaw, "meadow");
+  });
+  addShadow(-88, -146, 1.12, "#5f754a", 0.13, 0.22);
+  addShadow(-30, -154, 0.92, "#688452", 0.1, -0.3);
+  addFramingTree(-118, -144, 0.84, "round", "#95d273", 900);
+  addFramingTree(18, -146, 0.7, "round", "#9bd978", 901);
+
+  // 2. Opening lake shore: make the lake edge legible without filling the shallows with props.
+  [
+    [-67, -112, 1.08, -0.1],
+    [-51, -88, 0.96, 0.74],
+    [-17, -88, 0.9, 1.24],
+    [0, -112, 1.02, 2.92],
+    [-44, -140, 0.96, -2.44],
+    [-77, -102, 0.86, -0.7],
+  ].forEach(([x, z, scale, yaw], index) => {
+    addBankRead(x, z, scale, yaw, "warm");
+    addUnderstory(x + Math.sin(index * 1.1) * 1.6, z + Math.cos(index * 0.9) * 1.3, scale * 0.82, yaw + 0.4, "shore");
+  });
+
+  // 3. River bend / creek shore: strengthen both banks at Silver Bend from normal gameplay distance.
+  [12, 24, 36].forEach((z, stationIndex) => {
+    const channel = sampleRiverChannelAt("main", z);
+    const halfWidth = sampleRiverSurfaceHalfWidth(channel);
+    [-1, 1].forEach((side, sideIndex) => {
+      const x = channel.centerX + side * (halfWidth + 4.4 + stationIndex * 0.8);
+      const yaw = side > 0 ? Math.PI * 0.5 : -Math.PI * 0.5;
+      addBankRead(x, z + (sideIndex === 0 ? -1.4 : 1.2), 0.82 + stationIndex * 0.06, yaw, "cool");
+      addUnderstory(
+        x + side * (2.8 + stationIndex * 0.5),
+        z + (stationIndex - 1) * 3.2,
+        0.72,
+        yaw + 0.3,
+        stationIndex === 1 ? "shore" : "meadow",
+      );
+    });
+  });
+  addFramingTree(-44, 30, 0.72, "round", "#89c96c", 930);
+  addFramingTree(54, 28, 0.7, "round", "#84bd68", 931);
+
+  // 4. Forest edge near route: use mature silhouettes at the sides, then understory, not random saplings.
+  [
+    [-44, 80, 0.92, "pine", "#5f804f", 960],
+    [55, 80, 0.96, "pine", "#668a55", 961],
+    [-56, 108, 1.02, "pine", "#58764b", 962],
+    [64, 112, 1.08, "pine", "#58764b", 963],
+    [-24, 70, 0.72, "round", "#86bf69", 964],
+    [36, 74, 0.74, "round", "#83bc66", 965],
+  ].forEach(([x, z, scale, kind, color, seed]) => {
+    addFramingTree(x as number, z as number, scale as number, kind as "round" | "pine", color as string, seed as number);
+  });
+  [
+    [-36, 90, 1.02, 0.2],
+    [44, 92, 1.08, 2.4],
+    [-46, 116, 0.92, -0.8],
+    [54, 118, 0.94, 1.1],
+  ].forEach(([x, z, scale, yaw]) => {
+    addShadow(x, z, scale, "#485943", 0.16, yaw);
+    addUnderstory(x, z, scale * 0.84, yaw + 0.36, "forest");
+  });
+
+  // 5. Highland creek / small waterfalls: add mossy lips and side trickles around existing water.
+  [
+    [25, 89, 0.78, -0.2],
+    [38, 128, 0.96, -0.34],
+    [34, 136, 0.82, 0.6],
+    [-16, 158, 0.72, 0.5],
+    [-28, 174, 0.74, -0.45],
+  ].forEach(([x, z, scale, yaw]) => {
+    addBankRead(x, z, scale, yaw, "alpine");
+    addUnderstory(x, z, scale * 0.86, yaw + 0.2, "highland");
+  });
+  for (const [x, z, width, height, yaw] of [[34, 126, 2.4, 9.2, -0.26], [21, 91, 1.8, 5.8, 0.18]] as const) {
+    const waterfall = makeWaterfallRibbon(height, width);
+    waterfall.name = `anchor-side-waterfall-${Math.round(x)}-${Math.round(z)}`;
+    addTerrainObject(waterfall, x, z, -height * 0.12, yaw);
+  }
+
+  // 6. Shrine approach: pale rocks and restrained greenery frame the final climb.
+  [
+    [-16, 204, 1.08, -0.4],
+    [22, 204, 1.12, 0.34],
+    [-26, 218, 0.92, 1.2],
+    [30, 222, 0.96, -1.1],
+  ].forEach(([x, z, scale, yaw], index) => {
+    addUnderstory(x, z, scale, yaw, "shrine");
+    const rock = makeRockFormation(index % 2 === 0 ? 0.82 * scale : 0.72 * scale, "#b7b5ab");
+    addTerrainObject(rock, x + Math.cos(yaw) * 2.2 * scale, z + Math.sin(yaw) * 2.2 * scale, 0, yaw + 0.4);
+  });
+  addFramingTree(-42, 204, 0.84, "pine", "#4f6845", 990);
+  addFramingTree(48, 210, 0.86, "pine", "#526b47", 991);
+  addShadow(6, 206, 0.86, "#626b5e", 0.1, 0.14);
 
   group.add(props.buildGroup());
   return group;

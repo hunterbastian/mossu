@@ -20,12 +20,17 @@ export function beginVoidFall(player: PlayerState, runtime: PlayerSimulationRunt
   player.grounded = false;
   player.rolling = false;
   player.rollingBoostActive = false;
+  player.rollHoldSeconds = 0;
+  player.rollModeReady = false;
   runtime.rollingChargeSeconds = 0;
+  runtime.rollModeHoldSeconds = 0;
 }
 
 export function updateVoidFall(player: PlayerState, dt: number) {
   player.rolling = false;
   player.rollingBoostActive = false;
+  player.rollHoldSeconds = 0;
+  player.rollModeReady = false;
   player.grounded = false;
   player.voidFallTime += dt;
   player.velocity.x *= Math.pow(VOID_HORIZONTAL_DRAG, dt * 60);
@@ -44,6 +49,8 @@ export function respawnPlayerAtStart(player: PlayerState, runtime: PlayerSimulat
   player.staminaVisible = false;
   player.rolling = false;
   player.rollingBoostActive = false;
+  player.rollHoldSeconds = 0;
+  player.rollModeReady = false;
   player.grounded = true;
   player.swimming = false;
   player.waterDepth = 0;
@@ -57,6 +64,7 @@ export function respawnPlayerAtStart(player: PlayerState, runtime: PlayerSimulat
   runtime.jumpBufferRemaining = 0;
   runtime.staminaRegenDelayRemaining = 0;
   runtime.rollingChargeSeconds = 0;
+  runtime.rollModeHoldSeconds = 0;
   runtime.smoothedMoveX = 0;
   runtime.smoothedMoveY = 0;
 }

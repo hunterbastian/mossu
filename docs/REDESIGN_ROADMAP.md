@@ -1,6 +1,6 @@
 # Redesign Roadmap
 
-Last updated: 2026-04-24
+Last updated: 2026-04-25
 
 This roadmap turns the current full-redesign direction into controlled passes. The goal is to redesign the whole game feel and presentation without breaking the existing playable slice.
 
@@ -35,7 +35,7 @@ Done recently:
 
 Goal: make water read like broad natural rivers across the map instead of overlapping ribbons.
 
-Status: water readability pass landed; Chrome bank-entry visual QA remains.
+Status: water readability pass landed; bank-entry `sampleWaterState()` + surface-mask agreement is covered in contracts (main + all braids) and listed in the playtest checklist; ongoing browser spot-checks still welcome.
 
 Tasks:
 
@@ -52,7 +52,7 @@ Tasks:
 - [x] Tune water shader for darker damp banks, lighter shallow water, deeper swim water, illustrated shoreline milk/foam, and stronger directional ripples.
 - [x] Add flow-map-lite motion from river geometry: bend curl, braid split-current motion, and stronger eddies near banks.
 - [x] Add cheap Mossu/Karu water interaction ripples without adding a full water simulation.
-- [ ] Chrome-check water visuals and `sampleWaterState()` agreement at bank entry points.
+- [x] Chrome-check water visuals and `sampleWaterState()` agreement at bank entry points. (Covered: `tests/contracts/waterContracts.ts` main-river + braid mid-segment bank ladder; `npm run test:contracts`.)
 
 Latest route QA note:
 
@@ -228,6 +228,21 @@ Acceptance:
 
 - New work has a clear place in docs.
 - A future agent can understand game direction in under 10 minutes.
+
+## Phase 9: Map Lookdown Polish
+
+Goal: make the overhead map easier to read without adding new systems.
+
+Status: scroll-to-zoom on map lookdown landed (wheel adjusts `FollowCamera` map height with clamped zoom factor; HUD footer hints “Scroll to zoom the island”).
+
+Tasks:
+
+- [x] Wheel zoom in `map_lookdown` (window listener, `preventDefault` while map open).
+- [x] Trampled **route dirt** pass: `sampleRouteDirtPathMask` + terrain tint + reduced grass; route contracts for segment samples vs river/pools.
+- [x] Starting-pool edge/opacity nudge (opening lake, burrow shoal, sun-mirror, reed cove) for softer/readable banks.
+- [x] Light inventory/profile tab focus and smooth scroll on character screen content.
+- [ ] Optional: map pan or recenter if playtest asks for it.
+- [ ] Optional: perf check on map open with bloom (`?perfDebug=1`).
 
 ## Current Next Priorities
 

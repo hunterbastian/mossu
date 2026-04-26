@@ -1,6 +1,6 @@
 # Playtest Checklist
 
-Last updated: 2026-04-24
+Last updated: 2026-04-25
 
 Use this after major game changes. Start with `npm run build`, then run the game in Chrome or another real browser.
 
@@ -32,7 +32,7 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - `Shift` rolls.
 - `E` interacts with nearby landmarks or fauna.
 - `Tab` opens and closes inventory/profile.
-- `M` opens and closes map mode.
+- `M` opens and closes map mode; while the map is open, scroll wheel zooms the island view; `R` or `Home` resets map zoom.
 - `Esc` opens pause and closes menus.
 
 ## Movement Feel
@@ -52,7 +52,7 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Opening lake is not filled with grass.
 - Mossu swims in deep water.
 - Mossu exits water cleanly at banks.
-- Shoreline reeds, sedges, pebbles, damp rims, and visible swim state agree at every major bank entry.
+- Shoreline reeds, sedges, pebbles, damp rims, and visible swim state agree at every major bank entry (and `npm run test:contracts` should stay green: water-state-agreement).
 - Highland creek ribbons, pools, runoffs, and waterfalls read as intentional water features instead of pale slabs.
 - Water flow direction appears downhill or route-consistent.
 
@@ -84,6 +84,15 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - At each landmark, check that the next intended route still reads from the terrain shape, water edge, tree framing, and HUD/map language.
 - Capture at least one screenshot from the opening meadow, opening lake shore, river bend/creek shore, forest edge, highland creek/waterfall, and shrine approach.
 
+## Visual Anchor Scenes
+
+- Title screen into opening meadow: spawn remains readable, grass/clover detail stays at the edges, and the title transition does not hide Mossu.
+- Opening lake shore: shallow/deep bands, damp lip, reeds, pebbles, and swim state agree from the normal gameplay camera.
+- River bend / creek shore: Silver Bend reads as water with visible bank rims, not a pale translucent slab.
+- Forest edge near route: mature trees frame the route while saplings/shrubs stay in transition areas.
+- Highland creek / small waterfalls: trickles, mossy lips, and creek ribbons read as small island water features.
+- Shrine approach: final climb has pale rock/greenery framing without blocking route readability.
+
 ## UI
 
 - HUD control text matches actual controls.
@@ -91,6 +100,13 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Map route markers match the world route.
 - Pause menu does not stack with map or inventory.
 - Holographic cards, once implemented, remain readable and performant.
+
+## Mossu Handbook (`Tab`)
+
+- Opens and closes without leaving a blank game surface.
+- At **short viewports** (window not maximized, laptop 13″, or browser chrome visible), the shell fits within the viewport: no content is permanently clipped; columns and card grids **scroll** inside the panel.
+- Keepsake and Pouch card grids scroll independently when many cards are populated; preview panel does not steal the entire height.
+- Tabs remain visible and tappable/clickable when the panel is narrow (stacked layout).
 
 ## Fauna
 

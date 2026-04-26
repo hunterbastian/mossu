@@ -33,6 +33,8 @@ export class CharacterPreview {
     staminaVisible: false,
     rolling: false,
     rollingBoostActive: false,
+    rollHoldSeconds: 0,
+    rollModeReady: false,
     grounded: true,
     swimming: false,
     waterDepth: 0,
@@ -102,6 +104,8 @@ export class CharacterPreview {
     this.previewPlayer.heading = Math.sin(this.time * 0.45) * 0.2;
     this.previewPlayer.rolling = Math.sin(this.time * 0.55) > 0.82;
     this.previewPlayer.rollingBoostActive = this.previewPlayer.rolling && Math.sin(this.time * 1.3) > 0.3;
+    this.previewPlayer.rollHoldSeconds = this.previewPlayer.rolling ? 3.2 : 0;
+    this.previewPlayer.rollModeReady = this.previewPlayer.rollHoldSeconds >= 3;
     this.previewPlayer.grounded = true;
     this.previewPlayer.swimming = false;
     this.previewPlayer.waterDepth = 0;

@@ -1,6 +1,6 @@
 # Technical Overview
 
-Last updated: 2026-04-24
+Last updated: 2026-04-25
 
 ## Stack
 
@@ -82,6 +82,8 @@ Do not change these casually. Terrain, water, grass, collectibles, character sta
 
 ## Current Terrain Implementation
 
+Vertex colors mix grass, painted clearings, **route dirt** (`sampleRouteDirtPathMask()` along the same polyline as route terraces), banks, rock, and snow. Dirt thins grass density where the mask is strong.
+
 The terrain mesh is currently a generated `PlaneGeometry` in `WorldRenderer.ts`, with each vertex height taken from `sampleTerrainHeight()`. The sampler uses:
 
 - low-frequency FBM-style rolling terrain
@@ -125,7 +127,7 @@ Current direction:
 - slower, more scenic recentering
 - farther Journey-like follow distance
 - wider upward look range for mountains
-- map mode on `M`
+- map mode on `M` (overhead lookdown; mouse wheel zooms in/out with a clamped factor)
 
 Do not swap to a physics controller unless the movement architecture is intentionally redesigned.
 
@@ -157,7 +159,7 @@ Current performance strategies:
 - use `InstancedMesh` for grass and forest fill
 - keep shadows disabled
 - dynamic pixel ratio adjustment in `GameApp`
-- `?perfDebug=1` panel for FPS, frame time, pixel ratio, draw calls, triangles, memory, and world counts
+- `?perfDebug=1` panel for FPS, frame time, pixel ratio, draw calls, triangles, memory, and world counts (re-check after terrain, grass, or water changes)
 - hide heavy world grass during map lookdown
 - bounded world, no LOD yet
 
@@ -176,9 +178,11 @@ The small recruitable fauna are named Karu. They are currently render-side actor
 Current behavior:
 
 - unrecruited Karu keep ambient rest/wander/curious/shy behavior
-- pressing `E` near Karu recruits a nearby cluster
-- recruited Karu use boids-style separation, alignment, cohesion, and leader-follow slots
+- pressing `E` near the closest recruitable Karu pulls in a **small cluster**: same `herdId`, within cluster radii from that individual, and within range of the player (not a global one-at-a-time recruit)
+- recruited Karu use boids-style separation, alignment, cohesion, and leader-follow slots; non-brave moods **bank-wait** beside deep water instead of following the slot into the channel, with a dry-bank search that prefers shallower water / firmer ground
 - recruitment is not currently saved
+
+Design decision: keep **cluster recruitment** (one interaction can add several followers) rather than strict one-by-one, so meadow pockets still read as small groups. Tighten radii later if packs feel too large.
 
 Keep this render-side until persistence, collision, or quest logic needs them in the simulation layer.
 
@@ -188,6 +192,7 @@ Minimum verification after code changes:
 
 ```bash
 npm run build
+npm run test:contracts
 ```
 
-Visual/gameplay checks should use a real browser when possible. Headless Chromium can be useful for screenshots and state probes, but this project has had WebGL screenshot reliability issues in this environment.
+**Canonical QA path:** use a **real browser** (Chrome, Dia, Safari) for visual and interaction checks. Contract tests cover API and sampling invariants; automated Playwright-style browser runs have been unreliable in some environments, so ship decisions should not depend on headless-only runs until that path is stabilized.

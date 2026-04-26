@@ -1266,6 +1266,112 @@ canvas.is-pointer-locked {
   color: var(--ui-ink);
 }
 
+.roll-mode-hud {
+  --roll-progress: 0;
+  width: min(12rem, calc(100vw - 2rem));
+  min-height: 3.2rem;
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.48rem 0.62rem;
+  border: 1px solid rgba(72, 113, 154, 0.24);
+  border-radius: 0.72rem;
+  background:
+    linear-gradient(135deg, rgba(251, 255, 241, 0.96) 0%, rgba(226, 247, 232, 0.9) 54%, rgba(218, 239, 255, 0.9) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 10px 24px rgba(42, 73, 91, 0.14);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px) scale(0.96);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.roll-mode-hud--visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.roll-mode-hud__badge {
+  width: 2.7rem;
+  height: 2.1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.55rem;
+  font-family: var(--ui-code);
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: #32617c;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.92), transparent 38%),
+    linear-gradient(180deg, #ffffff 0%, #dff5ff 100%);
+  box-shadow:
+    inset 0 -2px 0 rgba(86, 145, 169, 0.16),
+    0 5px 10px rgba(74, 103, 121, 0.12);
+}
+
+.roll-mode-hud--active .roll-mode-hud__badge {
+  color: #356925;
+  background:
+    radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.95), transparent 38%),
+    linear-gradient(180deg, #fbffe8 0%, #bfeea8 100%);
+}
+
+.roll-mode-hud__body {
+  min-width: 0;
+  display: grid;
+  gap: 0.22rem;
+}
+
+.roll-mode-hud__label,
+.roll-mode-hud__value {
+  margin: 0;
+}
+
+.roll-mode-hud__label {
+  font-family: var(--ui-sans);
+  font-size: 0.54rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ui-ink);
+}
+
+.roll-mode-hud__meter {
+  position: relative;
+  width: 100%;
+  height: 0.38rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(64, 105, 134, 0.1);
+}
+
+.roll-mode-hud__meter::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: calc(var(--roll-progress) * 100%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7fd2f0 0%, #bfeea8 100%);
+  box-shadow: 0 0 10px rgba(127, 210, 240, 0.32);
+}
+
+.roll-mode-hud__value {
+  font-family: var(--ui-code);
+  font-size: 0.52rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #477692;
+  text-transform: uppercase;
+}
+
+.roll-mode-hud--active .roll-mode-hud__value {
+  color: #4d7a2f;
+}
+
 .stamina-hud {
   --stamina-ratio: 1;
   position: relative;
@@ -1660,6 +1766,8 @@ canvas.is-pointer-locked {
   max-height: calc(100vh - 2.2rem);
   display: grid;
   grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
   gap: 0.9rem;
   padding: 1.04rem;
   border: 2px solid rgba(255, 246, 213, 0.9);
@@ -1805,8 +1913,8 @@ canvas.is-pointer-locked {
 .character-screen__preview-card {
   position: relative;
   flex: 0 0 auto;
-  height: min(22rem, calc(100vh - 18rem));
-  min-height: 15.5rem;
+  height: min(22rem, calc(100dvh - 18rem));
+  min-height: 12rem;
   border-radius: 0.75rem;
   padding: 0.82rem;
 }
@@ -1869,6 +1977,7 @@ canvas.is-pointer-locked {
   gap: 0.85rem;
   min-height: 0;
   overflow: auto;
+  scroll-behavior: smooth;
   padding: 0.08rem 0.15rem 0.08rem 0.44rem;
 }
 
@@ -1903,6 +2012,16 @@ canvas.is-pointer-locked {
   line-height: 1;
   text-align: center;
   text-transform: uppercase;
+  transition:
+    background 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.character-screen__tab:focus-visible {
+  outline: 2px solid rgba(58, 114, 160, 0.42);
+  outline-offset: 2px;
 }
 
 .character-screen__tab--active {
@@ -2114,7 +2233,7 @@ canvas.is-pointer-locked {
 .gathered-goods-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(11.1rem, 1fr));
-  gap: 0.86rem;
+  gap: 0.92rem;
   overflow: auto;
   padding: 0.62rem;
   perspective: 900px;
@@ -2131,11 +2250,11 @@ canvas.is-pointer-locked {
 }
 
 .collection-list {
-  max-height: min(31rem, calc(100vh - 18rem));
+  max-height: min(31rem, max(10rem, min(50dvh, calc(100dvh - 16rem))));
 }
 
 .gathered-goods-list {
-  max-height: min(18rem, calc(100vh - 30rem));
+  max-height: min(18rem, max(8rem, min(30dvh, calc(100dvh - 28rem))));
 }
 
 .collection-entry,
@@ -3045,9 +3164,10 @@ canvas.is-pointer-locked {
   position: relative;
   z-index: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
+  gap: 0.32rem;
   min-height: 1.2rem;
   margin-top: -0.1rem;
   color: rgba(120, 104, 87, 0.82);
@@ -3058,19 +3178,35 @@ canvas.is-pointer-locked {
   text-transform: uppercase;
 }
 
-.world-map__footer span {
+.world-map__footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+}
+
+.world-map__footer-row span {
   width: 0.82rem;
   height: 0.42rem;
   border-radius: 999px 0;
   background: #9bcf83;
 }
 
-.world-map__footer span:first-child {
+.world-map__footer-row span:first-child {
   transform: rotate(28deg);
 }
 
-.world-map__footer span:last-child {
+.world-map__footer-row span:last-child {
   transform: rotate(-28deg) scaleX(-1);
+}
+
+.world-map__footer-hint {
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  text-transform: none;
+  color: rgba(100, 92, 78, 0.72);
 }
 
 .hud--map .hud-top,
@@ -3118,8 +3254,8 @@ canvas.is-pointer-locked {
   }
 
   .character-screen__column {
-    min-height: auto;
-    overflow: visible;
+    min-height: 0;
+    overflow: auto;
   }
 
   .collection-list,
@@ -3227,7 +3363,8 @@ canvas.is-pointer-locked {
 
   .character-screen__shell {
     grid-template-columns: 1fr;
-    max-height: calc(100vh - 1.6rem);
+    max-height: min(54rem, calc(100dvh - 1.6rem));
+    height: auto;
   }
 
   .character-screen__shell::before {
@@ -3243,7 +3380,9 @@ canvas.is-pointer-locked {
   }
 
   .character-screen__preview-card {
-    min-height: 16rem;
+    min-height: 12rem;
+    max-height: min(20rem, 36vh);
+    height: min(18rem, 32vh);
   }
 
   .pause-menu__actions,
@@ -3267,11 +3406,11 @@ canvas.is-pointer-locked {
   }
 
   .collection-list {
-    max-height: min(16rem, calc(100vh - 22rem));
+    max-height: min(16rem, max(8rem, min(45dvh, calc(100dvh - 14rem))));
   }
 
   .gathered-goods-list {
-    max-height: min(16rem, calc(100vh - 22rem));
+    max-height: min(16rem, max(6rem, min(32dvh, calc(100dvh - 20rem))));
   }
 }
 

@@ -75,7 +75,7 @@ export function buildCharacterScreenData(save: SaveState, frame: FrameState): Ch
         id: "stamina-ring",
         label: "Stamina Ring",
         value: `${Math.round((frame.player.stamina / frame.player.staminaMax) * 100)}%`,
-        detail: "Rolling and Breeze Float draw from the same circular stamina meter.",
+        detail: "Breeze Float uses this meter; rolling stays free so slopes remain playful.",
       },
       {
         id: "glide-status",

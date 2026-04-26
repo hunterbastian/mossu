@@ -46,6 +46,9 @@ const START_SHOULDER = -2.8;
 const MIN_POLAR_ANGLE = 0.58;
 const MAX_POLAR_ANGLE = 2.28;
 const MANUAL_LOOK_COOLDOWN_SECONDS = 3.4;
+const MAP_ZOOM_MIN = 0.72;
+const MAP_ZOOM_MAX = 1.2;
+const MAP_ZOOM_WHEEL_SENSITIVITY = 0.00085;
 
 type CameraProfileName = "walk" | "roll" | "air" | "swim" | "ridge" | "summit" | "void";
 
@@ -272,6 +275,8 @@ export class FollowCamera {
   private pointerLocked = false;
   private viewMode: ViewMode = "third_person";
   private mapBlend = 0;
+  /** Scales the computed map camera height: below 1 zooms in, above 1 zooms out. */
+  private mapZoomFactor = 1;
   private initialized = false;
   private manualLookCooldown = 0;
   private distanceBias = 0;
@@ -440,10 +445,14 @@ export class FollowCamera {
     const mapSpanZ = Math.max(MAP_BOUNDS.maxZ - MAP_BOUNDS.minZ, 420);
     const halfVerticalFov = MathUtils.degToRad(MAP_FOV * 0.5);
     const halfHorizontalFov = Math.atan(Math.tan(halfVerticalFov) * this.camera.aspect);
-    const mapHeight = Math.max(
-      (mapSpanZ * 0.5) / Math.tan(halfVerticalFov),
-      (mapSpanX * 0.5) / Math.tan(halfHorizontalFov),
-    ) * 0.88 + 56;
+    const baseMapHeight =
+      Math.max(
+        (mapSpanZ * 0.5) / Math.tan(halfVerticalFov),
+        (mapSpanX * 0.5) / Math.tan(halfHorizontalFov),
+      ) *
+        0.88 +
+      56;
+    const mapHeight = baseMapHeight * this.mapZoomFactor;
 
     this.mapTarget.set(mapCenterX, 10, mapCenterZ);
     this.mapPosition.set(mapCenterX, mapHeight, mapCenterZ);
@@ -496,6 +505,7 @@ export class FollowCamera {
     return {
       style: "journey-scenic",
       profile: this.activeProfileName,
+      mapZoom: Number(this.mapZoomFactor.toFixed(3)),
       pointerLocked: this.pointerLocked,
       distance: Number(this.currentDistance.toFixed(2)),
       polar: Number(this.currentPolar.toFixed(3)),
@@ -518,6 +528,24 @@ export class FollowCamera {
     if (viewMode === "map_lookdown") {
       this.releasePointerLock();
     }
+  }
+
+  adjustMapZoomFromWheel(deltaY: number) {
+    const next = MathUtils.clamp(
+      this.mapZoomFactor - deltaY * MAP_ZOOM_WHEEL_SENSITIVITY,
+      MAP_ZOOM_MIN,
+      MAP_ZOOM_MAX,
+    );
+    this.mapZoomFactor = next;
+  }
+
+  getMapZoomFactor() {
+    return this.mapZoomFactor;
+  }
+
+  /** Resets world-view zoom to default (after wheel zoom in map mode). */
+  recenterMapView() {
+    this.mapZoomFactor = 1;
   }
 
   isPointerLocked() {

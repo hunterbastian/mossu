@@ -182,7 +182,7 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     flowSpeed: 0.12,
     opacity: 0.9,
     swimAllowed: true,
-    edgeSoftness: 0.44,
+    edgeSoftness: 0.52,
   },
   {
     id: "burrow-shoal",
@@ -197,7 +197,7 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     shoreDepth: 0.78,
     flowStrength: 0.04,
     flowSpeed: 0.08,
-    opacity: 0.82,
+    opacity: 0.84,
     swimAllowed: false,
     edgeSoftness: 0.52,
   },
@@ -214,9 +214,9 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     shoreDepth: 0.95,
     flowStrength: 0.035,
     flowSpeed: 0.07,
-    opacity: 0.8,
+    opacity: 0.86,
     swimAllowed: false,
-    edgeSoftness: 0.56,
+    edgeSoftness: 0.58,
   },
   {
     id: "reed-cove",
@@ -269,14 +269,23 @@ function sampleRiverBranchCenter(segment: RiverBranchSegment, z: number, envelop
 
 function sampleRiverBedCut(x: number, z: number) {
   return sampleRiverChannels(z).reduce((best, channel) => {
+    const halfWidth = sampleRiverSurfaceHalfWidth(channel);
     const coreRadius = Math.max(9, channel.width * 0.36);
     const shelfRadius = Math.max(18, channel.width * 0.72);
     const distance = x - channel.centerX;
+    const dist = Math.abs(distance);
     const coreFalloff = Math.exp(-((distance / coreRadius) ** 2));
     const shelfFalloff = Math.exp(-((distance / shelfRadius) ** 2));
+    // Shallow shelf for gameplay depth; clamp well inside halfWidth so contract dry-bank (1.16×) stays dry.
+    const annulusT = dist / Math.max(0.55, halfWidth);
+    const annulus =
+      dist < halfWidth * 0.88 && dist > coreRadius * 0.4
+        ? (1 - smootherStep(0.5, 0.9, annulusT)) * (0.5 + channel.width * 0.012)
+        : 0;
     const depth = (
       coreFalloff * (8.8 + channel.width * 0.17) +
-      shelfFalloff * (1.5 + channel.width * 0.035)
+      shelfFalloff * (1.5 + channel.width * 0.035) +
+      annulus
     ) * channel.depthScale * channel.envelope;
     return Math.max(best, depth);
   }, 0);
@@ -648,10 +657,20 @@ function sampleStartingWaterBasinCut(x: number, z: number) {
   }, 0);
 }
 
+/** Gameplay and terrain coupling (river terrace, bank lips). Uses pool swim ellipse — do not use render radii here. */
 export function sampleStartingWaterSurfaceMask(x: number, z: number) {
   return STARTING_WATER_POOLS.reduce((best, pool) => {
     const distance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX, pool.radiusZ);
     const surface = 1 - smootherStep(0.9, 1, distance);
+    return Math.max(best, surface);
+  }, 0);
+}
+
+/** Lake mesh / dirt-path fade: same centers as `STARTING_WATER_POOLS` but `renderRadiusX/Z` to match the water disc. */
+export function sampleStartingWaterRenderSurfaceMask(x: number, z: number) {
+  return STARTING_WATER_POOLS.reduce((best, pool) => {
+    const distance = ellipseDistance(x, z, pool.x, pool.z, pool.renderRadiusX, pool.renderRadiusZ);
+    const surface = 1 - smootherStep(0.86, 1, distance);
     return Math.max(best, surface);
   }, 0);
 }
@@ -689,29 +708,31 @@ function sampleIslandContour(x: number, z: number) {
   );
 }
 
+/** Path half-width (world units) per polyline leg — steps up with journey so each zone feels more open. */
 const ROUTE_TERRACE_SEGMENTS = [
-  [-58, -158, -44, -134, 18, 0.55],
-  [-44, -134, -4, -38, 26, 0.42],
-  [-4, -38, riverCenter(24), 24, 24, 0.48],
-  [riverCenter(24), 24, 24, 88, 22, 0.6],
-  [24, 88, 20, 108, 18, 0.72],
-  [20, 108, 42, 134, 20, 0.68],
-  [42, 134, 10, 154, 18, 0.64],
-  [10, 154, -26, 168, 18, 0.52],
-  [-26, 168, 16, 186, 16, 0.46],
-  [16, 186, 2, 214, 15, 0.38],
+  [-58, -158, -44, -134, 20, 0.55],
+  [-44, -134, -4, -38, 22, 0.42],
+  [-4, -38, riverCenter(24), 24, 25, 0.48],
+  [riverCenter(24), 24, 24, 88, 28, 0.6],
+  [24, 88, 20, 108, 30, 0.72],
+  [20, 108, 42, 134, 32, 0.68],
+  [42, 134, 10, 154, 34, 0.64],
+  [10, 154, -26, 168, 36, 0.52],
+  [-26, 168, 16, 186, 38, 0.46],
+  [16, 186, 2, 214, 40, 0.38],
 ] as const;
 
+/** Radial “pocket” glades; radii also rise with z so grass clearings read wider zone-to-zone. */
 const PAINTED_GROUND_CLEARINGS = [
-  [-44, -134, 22, 0.42],
-  [-4, -38, 20, 0.34],
+  [-44, -134, 20, 0.42],
+  [-4, -38, 22, 0.34],
   [24, 88, 24, 0.32],
-  [20, 108, 18, 0.28],
-  [42, 134, 19, 0.28],
-  [10, 154, 20, 0.24],
-  [-26, 168, 18, 0.24],
-  [16, 186, 17, 0.22],
-  [2, 214, 20, 0.26],
+  [20, 108, 26, 0.28],
+  [42, 134, 28, 0.28],
+  [10, 154, 30, 0.24],
+  [-26, 168, 32, 0.24],
+  [16, 186, 34, 0.22],
+  [2, 214, 36, 0.26],
 ] as const;
 
 function sampleRoutePathInfo(x: number, z: number) {
@@ -761,6 +782,30 @@ export function samplePaintedGroundMask(x: number, z: number) {
   const bankShape = sampleWaterBankShape(x, z);
   const shoreWear = Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z), bankShape.dampBand) * 0.46;
   return saturate(route.paint * routeBreakup + route.shoulder * 0.36 + pocketClear + shoreWear);
+}
+
+/**
+ * Worn earth along the same polyline as `ROUTE_TERRACE_SEGMENTS` / `sampleRoutePathInfo`, narrower
+ * than the full painted clearing so the route reads as a trampled path. Used by terrain and grass.
+ */
+export function sampleRouteDirtPathMask(x: number, z: number) {
+  const route = sampleRoutePathInfo(x, z);
+  const grain = fbmNoise(x * 0.071 + 3.1, z * 0.071 - 2.2, 2) * 0.5 + 0.5;
+  const coreLift = Math.pow(saturate(route.core), 1.2);
+  const raw = coreLift * (0.5 + grain * 0.5) + route.paint * 0.2 + route.shoulder * 0.1;
+  const waterBlock = saturate(
+    sampleRiverSurfaceMask(x, z) * 0.98 +
+    Math.max(sampleStartingWaterSurfaceMask(x, z), sampleStartingWaterRenderSurfaceMask(x, z) * 0.96) * 0.99,
+  );
+  return saturate(raw * (1 - waterBlock));
+}
+
+/** Midpoints of route terrace segments (for contract tests; matches `ROUTE_TERRACE_SEGMENTS` order). */
+export function getRouteDirtContractSamples() {
+  return ROUTE_TERRACE_SEGMENTS.map(([ax, az, bx, bz]) => ({
+    x: (ax + bx) * 0.5,
+    z: (az + bz) * 0.5,
+  }));
 }
 
 export function sampleIslandEdgeFactor(x: number, z: number) {
@@ -814,10 +859,10 @@ export function sampleBaseTerrainHeight(x: number, z: number) {
   const hillBand = smootherStep(-170, 10, z) * 10;
   const foothillBand = smootherStep(-10, 95, z) * 18;
   const mountainMass =
-    Math.exp(-(((x + 12) / 110) ** 2) - (((z - 174) / 92) ** 2)) * 96 +
-    Math.exp(-(((x - 84) / 90) ** 2) - (((z - 140) / 88) ** 2)) * 44 +
-    Math.exp(-(((x + 118) / 72) ** 2) - (((z - 118) / 78) ** 2)) * 28;
-  const ridgeWall = smootherStep(78, 182, z) * 26 * (1 - ridgePassCenter(x));
+    Math.exp(-(((x + 12) / 110) ** 2) - (((z - 174) / 92) ** 2)) * 102 +
+    Math.exp(-(((x - 84) / 90) ** 2) - (((z - 140) / 88) ** 2)) * 48 +
+    Math.exp(-(((x + 118) / 72) ** 2) - (((z - 118) / 78) ** 2)) * 32;
+  const ridgeWall = smootherStep(78, 182, z) * 30 * (1 - ridgePassCenter(x));
   const shrineShelf = Math.exp(-(((x + 2) / 28) ** 2) - (((z - 214) / 20) ** 2)) * 18;
   const paintedSteps = quantize(Math.sin((x - z) * 0.028) * 0.5 + 0.5, 7) * 2.4;
   const alpineShelf = smootherStep(118, 195, z) * paintedSteps * (1 - routeSmooth * 0.62);
@@ -1211,6 +1256,7 @@ export function sampleGrassDensity(x: number, z: number) {
   const riverNook = sampleRiverNookMask(x, z);
   const riverBank = sampleRiverBankMask(x, z) * (1 - riverGap);
   const lakeGap = sampleStartingWaterWetness(x, z);
+  const routeDirt = sampleRouteDirtPathMask(x, z);
   const base =
     zone === "plains" ? 1 :
     zone === "hills" ? 0.92 :
@@ -1249,7 +1295,8 @@ export function sampleGrassDensity(x: number, z: number) {
     lakeGap * 1.04 -
     slope * 0.72 -
     startClear -
-    passClear,
+    passClear -
+    routeDirt * 0.4,
   );
 }
 
@@ -1566,6 +1613,13 @@ export const scenicPockets: ScenicPocket[] = [
     zone: "alpine",
     position: new Vector3(10, sampleTerrainHeight(10, 154), 154),
     radius: 18,
+  },
+  {
+    id: "aspen-ledge",
+    kind: "overlook",
+    zone: "alpine",
+    position: new Vector3(-6, sampleTerrainHeight(-6, 160), 160),
+    radius: 16,
   },
   {
     id: "cloudback-overlook",

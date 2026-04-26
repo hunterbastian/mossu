@@ -1,6 +1,10 @@
 import {
+  getRouteDirtContractSamples,
   isInsideIslandPlayableBounds,
   sampleBiomeZone,
+  sampleRiverSurfaceMask,
+  sampleRouteDirtPathMask,
+  sampleStartingWaterSurfaceMask,
   sampleTerrainHeight,
   worldLandmarks,
 } from "../../src/simulation/world";
@@ -59,4 +63,14 @@ export function runRouteContracts() {
 
   assertEqual(route[0].title, "Burrow Hollow", "route starts at Burrow Hollow");
   assertEqual(route[route.length - 1].title, "Moss Crown Shrine", "route ends at Moss Crown Shrine");
+
+  getRouteDirtContractSamples().forEach((point, index) => {
+    const dirt = sampleRouteDirtPathMask(point.x, point.z);
+    const inRiver = sampleRiverSurfaceMask(point.x, point.z) > 0.12;
+    const inStartPool = sampleStartingWaterSurfaceMask(point.x, point.z) > 0.12;
+    assert(
+      dirt > 0.06 || inRiver || inStartPool,
+      `route segment ${index} (${point.x.toFixed(1)}, ${point.z.toFixed(1)}) should read as dirt (dirt=${dirt.toFixed(3)}) or be water-covered (river=${inRiver} pool=${inStartPool})`,
+    );
+  });
 }

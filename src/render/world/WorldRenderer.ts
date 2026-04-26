@@ -36,6 +36,7 @@ import {
   sampleIslandEdgeFactor,
   sampleIslandBoundaryPoint,
   samplePaintedGroundMask,
+  sampleRouteDirtPathMask,
   sampleRiverDampBankMask,
   sampleStartingWaterDampBankMask,
   sampleStartingWaterWetness,
@@ -58,6 +59,7 @@ import {
   updateAmbientBlobs,
 } from "./ambientBlobs";
 import {
+  buildAnchorSceneAccents,
   buildBiomeTransitionAccents,
   buildGroundLayer,
   buildHighlandAccents,
@@ -182,6 +184,7 @@ function colorForTerrain(x: number, y: number, z: number) {
   const sandbarLine = MathUtils.clamp(bankShape.sandbarLift * 0.86 + bankShape.pebbleBand * 0.28, 0, 1);
   const coveShade = MathUtils.clamp(bankShape.coveCut * 0.64 + bankShape.shelfCut * 0.28, 0, 1);
   const paintedGround = samplePaintedGroundMask(x, z) * (1 - waterShoreMask * 0.42);
+  const routeDirt = sampleRouteDirtPathMask(x, z);
   const sunWash = Math.sin(x * 0.018 - z * 0.014 + 1.2) * 0.5 + 0.5;
   const fieldBands = Math.sin(x * 0.022 + z * 0.006 - 1.2) * 0.5 + 0.5;
   const pathBands = Math.sin(x * 0.052 + z * 0.018 + 0.8) * 0.5 + 0.5;
@@ -193,18 +196,17 @@ function colorForTerrain(x: number, y: number, z: number) {
   const altitudeRock = MathUtils.smoothstep(y, 72, 138) * 0.26;
   const zoneRockBoost =
     zone === "foothills" ? 0.1 :
-    zone === "alpine" ? 0.28 :
-    zone === "ridge" ? 0.4 :
+    zone === "alpine" ? 0.3 :
+    zone === "ridge" ? 0.44 :
     zone === "peak_shrine" ? 0.5 :
     0;
   const rockMask = MathUtils.clamp(slopeRock + altitudeRock + zoneRockBoost, 0, 0.92);
-  const snowMask = MathUtils.clamp(
-    MathUtils.smoothstep(y, 132, 178) * 0.86 +
-    MathUtils.smoothstep(z, 184, 232) * 0.2 +
-    (zone === "peak_shrine" ? 0.36 : 0),
-    0,
-    0.88,
-  );
+  const snowBase =
+    MathUtils.smoothstep(y, 124, 168) * 0.86 +
+    MathUtils.smoothstep(z, 176, 232) * 0.24 +
+    (zone === "peak_shrine" ? 0.38 : 0);
+  const rockSnowDampen = 1 - MathUtils.clamp(rockMask * 0.55, 0, 0.45);
+  const snowMask = MathUtils.clamp(snowBase * rockSnowDampen, 0, 0.9);
   const grass = new Color("#53683d")
     .lerp(new Color("#7fa254"), 0.36 + mixValue * 0.34 + heightGrass * 0.12)
     .lerp(new Color("#a9c76b"), openingMask * (0.08 + fieldBands * 0.12) + meadowBloom * 0.9)
@@ -221,12 +223,16 @@ function colorForTerrain(x: number, y: number, z: number) {
   const sandbar = new Color("#b8ad7b")
     .lerp(new Color("#d8c989"), MathUtils.clamp(0.24 + sunWash * 0.22 + pathBands * 0.14, 0, 1))
     .lerp(new Color("#a1a988"), foothillTint * 0.16 + alpineTint * 0.22);
+  const wornDirt = new Color("#6b5a47")
+    .lerp(new Color("#8d7a62"), 0.35 + fieldBands * 0.2)
+    .lerp(new Color("#4f4438"), 0.12 + slope * 0.1);
 
   const terrainColor = grass
     .lerp(new Color("#a6c86f"), habitat.meadow * (0.12 + openingMask * 0.08))
     .lerp(new Color("#4f6b45"), habitat.forest * 0.16)
     .lerp(new Color("#71866f"), habitat.shore * 0.18)
     .lerp(paintedEarth, paintedGround * (0.34 + (1 - slopeRock) * 0.22))
+    .lerp(wornDirt, routeDirt * 0.58 * (1 - rockMask * 0.88))
     .lerp(sandbar, sandbarLine * 0.34)
     .lerp(new Color("#3f6d5c"), wetBankLine * 0.34)
     .lerp(new Color("#5e745e"), coveShade * 0.18)
@@ -786,6 +792,7 @@ export class WorldRenderer {
   private readonly treeClusters = batchStaticDecorations(buildTreeClusters(), "tree-cluster-batch");
   private readonly biomeTransitionAccents = batchStaticDecorations(buildBiomeTransitionAccents(), "biome-transition-batch");
   private readonly waterBankAccents = batchStaticDecorations(buildWaterBankAccents(), "water-bank-batch");
+  private readonly anchorSceneAccents = batchStaticDecorations(buildAnchorSceneAccents(), "anchor-scene-batch");
   private readonly highlandAccents = batchStaticDecorations(buildHighlandAccents(), "highland-accent-batch");
   private readonly highlandWaterways = buildHighlandWaterways();
   private readonly mountainAtmosphere = buildMountainAtmosphere();
@@ -807,6 +814,8 @@ export class WorldRenderer {
     recruitedCount: 0,
     nearestRecruitableDistance: null,
     recruitedThisFrame: 0,
+    rollingCount: 0,
+    mossuCollisionCount: 0,
     dominantMood: "curious",
     regroupActive: false,
     callHeardActive: false,
@@ -868,6 +877,7 @@ export class WorldRenderer {
     scene.add(this.treeClusters);
     scene.add(this.biomeTransitionAccents);
     scene.add(this.waterBankAccents);
+    scene.add(this.anchorSceneAccents);
     scene.add(this.highlandAccents);
     scene.add(this.highlandWaterways.group);
     scene.add(this.mountainAtmosphere);
@@ -902,9 +912,9 @@ export class WorldRenderer {
         rootFillBoost: 0.08,
         selfShadowStrength: 0.92,
         distanceCompressionBoost: 0.04,
-        playerPushRadius: 11.4,
-        playerPushStrength: 1.42,
-        windExaggeration: 1.22,
+        playerPushRadius: 11.6,
+        playerPushStrength: 1.36,
+        windExaggeration: 1.16,
         windTimeScale: 1,
         broadWindScale: 1,
         fineWindScale: 1,
@@ -937,9 +947,9 @@ export class WorldRenderer {
         rootFillBoost: 0.18,
         selfShadowStrength: 0.72,
         distanceCompressionBoost: 0.14,
-        playerPushRadius: 11.8,
-        playerPushStrength: 1.22,
-        windExaggeration: 1.15,
+        playerPushRadius: 12,
+        playerPushStrength: 1.2,
+        windExaggeration: 1.1,
         windTimeScale: 0.72,
         broadWindScale: 0.82,
         fineWindScale: 0.34,
@@ -1000,10 +1010,10 @@ export class WorldRenderer {
         scaleMultiplier: 0.86,
         selfShadowStrength: 0.42,
         distanceCompressionBoost: 0.24,
-        windExaggeration: 1.16,
+        windExaggeration: 1.12,
         windTimeScale: 0.52,
         broadWindScale: 0.86,
-        fineWindScale: 0.12,
+        fineWindScale: 0.13,
         lod: {
           label: "alpine",
           innerRadius: 34,
@@ -1109,6 +1119,7 @@ export class WorldRenderer {
     this.collectCameraColliders(this.shrine);
     this.collectCameraColliders(this.treeClusters);
     this.collectCameraColliders(this.biomeTransitionAccents);
+    this.collectCameraColliders(this.anchorSceneAccents);
     this.collectCameraColliders(this.highlandAccents);
     this.collectCameraColliders(this.landmarkTrees);
     this.collectTreeWindMeshes(this.treeClusters);
@@ -1118,6 +1129,7 @@ export class WorldRenderer {
       this.treeClusters,
       this.biomeTransitionAccents,
       this.waterBankAccents,
+      this.anchorSceneAccents,
       this.highlandAccents,
     ].forEach((object) => this.collectSmallPropMeshes(object));
     [
@@ -1130,6 +1142,7 @@ export class WorldRenderer {
       this.treeClusters,
       this.biomeTransitionAccents,
       this.waterBankAccents,
+      this.anchorSceneAccents,
       this.highlandAccents,
       this.highlandWaterways.group,
       this.shadowVolumes,
@@ -1175,15 +1188,6 @@ export class WorldRenderer {
     if (regroupPressed) {
       this.mossu.triggerKaruCall();
     }
-    this.mossu.update(frame.player, dt);
-    this.skyDome.position.copy(frame.player.position);
-    this.updateSceneMood(frame, dt);
-    this.scene.fog = mapLookdown ? null : this.gameplayFog;
-    if (!mapLookdown) {
-      this.updateWind(frame, elapsed);
-      this.updateClouds(elapsed);
-      this.updateValleyMist(elapsed);
-    }
     this.faunaStats = updateAmbientBlobs(
       this.ambientBlobs,
       this.ambientBlobGroup,
@@ -1194,6 +1198,15 @@ export class WorldRenderer {
       recruitPressed,
       regroupPressed,
     );
+    this.mossu.update(frame.player, dt);
+    this.skyDome.position.copy(frame.player.position);
+    this.updateSceneMood(frame, dt);
+    this.scene.fog = mapLookdown ? null : this.gameplayFog;
+    if (!mapLookdown) {
+      this.updateWind(frame, elapsed);
+      this.updateClouds(elapsed);
+      this.updateValleyMist(elapsed);
+    }
     this.updateWaterInteractions(frame, elapsed, mapLookdown);
     this.updateWater(elapsed, mapLookdown);
     this.updateLandingSplash(frame, dt);

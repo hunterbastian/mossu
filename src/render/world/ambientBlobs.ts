@@ -10,6 +10,7 @@ import {
   Vector3,
 } from "three";
 import { FrameState } from "../../simulation/gameState";
+import { PLAYER_RADIUS } from "../../simulation/playerSimulationConstants";
 import { sampleTerrainHeight, sampleWaterState, scenicPockets, startingLookTarget, startingPosition } from "../../simulation/world";
 import { scatterAroundPocket } from "./sceneHelpers";
 
@@ -54,6 +55,9 @@ export interface AmbientBlob {
   poseSeed: number;
   facingYaw: number;
   creatureScale: number;
+  rolling: boolean;
+  rollBlend: number;
+  rollSpin: number;
 }
 
 export interface AmbientBlobBuildOptions {
@@ -65,6 +69,8 @@ export interface AmbientBlobUpdateStats {
   recruitedCount: number;
   nearestRecruitableDistance: number | null;
   recruitedThisFrame: number;
+  rollingCount: number;
+  mossuCollisionCount: number;
   dominantMood: KaruMood;
   regroupActive: boolean;
   callHeardActive: boolean;
@@ -82,6 +88,13 @@ const FAUNA_CALL_LISTEN_SECONDS = 0.58;
 const FAUNA_CALL_WAVE_STAGGER = 0.13;
 const FAUNA_DEEP_WATER_DEPTH = 2.4;
 const FAUNA_SHALLOW_WATER_DEPTH = 0.25;
+const FAUNA_ROLL_STAGGER_SECONDS = 0.045;
+const FAUNA_ROLL_SPEED_MULTIPLIER = 1.34;
+const FAUNA_IDLE_COLLISION_RADIUS = 1.08;
+const FAUNA_RECRUITED_COLLISION_RADIUS = 1.26;
+const FAUNA_ROLL_COLLISION_RADIUS = 1.48;
+const FAUNA_COLLISION_MAX_CORRECTION = 0.82;
+const FAUNA_COLLISION_VELOCITY_RESPONSE = 0.42;
 
 const ambientPlayerMotion = new Vector3();
 const ambientToPlayer = new Vector3();
@@ -99,6 +112,7 @@ const ambientAlignment = new Vector3();
 const ambientFollowSteer = new Vector3();
 const ambientPlayerSpace = new Vector3();
 const ambientBoidSteer = new Vector3();
+const ambientCollisionNormal = new Vector3();
 let karuTexture: CanvasTexture | null = null;
 
 function moodForBlob(pocketIndex: number, index: number): KaruMood {
@@ -123,7 +137,8 @@ function moodFollowTuning(mood: KaruMood) {
 function findNearestDryBank(point: Vector3, fallback: Vector3) {
   const candidate = new Vector3();
   const best = new Vector3();
-  let bestDistance = Number.POSITIVE_INFINITY;
+  let bestScore = Number.POSITIVE_INFINITY;
+  let found = false;
 
   for (let radius = 4; radius <= 24; radius += 4) {
     for (let step = 0; step < 16; step += 1) {
@@ -134,16 +149,20 @@ function findNearestDryBank(point: Vector3, fallback: Vector3) {
         continue;
       }
 
+      const depth = water ? water.depth : 0;
       const distance = Math.hypot(candidate.x - fallback.x, candidate.z - fallback.z);
-      if (distance < bestDistance) {
-        bestDistance = distance;
+      // Prefer standable bank: shallower water first, then closer to the player path.
+      const score = distance * 0.55 + depth * 9.5;
+      if (score < bestScore) {
+        bestScore = score;
         best.set(candidate.x, sampleTerrainHeight(candidate.x, candidate.z), candidate.z);
+        found = true;
       }
     }
+  }
 
-    if (bestDistance < Number.POSITIVE_INFINITY) {
-      return best;
-    }
+  if (found) {
+    return best;
   }
 
   best.set(fallback.x, sampleTerrainHeight(fallback.x, fallback.z), fallback.z);
@@ -162,6 +181,65 @@ function dominantMood(blobs: AmbientBlob[]): KaruMood {
 
 function planarDistance(a: Vector3, b: Vector3) {
   return Math.hypot(a.x - b.x, a.z - b.z);
+}
+
+function collisionRadiusForBlob(blob: AmbientBlob) {
+  const baseRadius =
+    blob.rolling ? FAUNA_ROLL_COLLISION_RADIUS :
+    blob.recruited ? FAUNA_RECRUITED_COLLISION_RADIUS :
+    FAUNA_IDLE_COLLISION_RADIUS;
+  return baseRadius * MathUtils.clamp(blob.creatureScale / 1.22, 0.92, 1.18);
+}
+
+function resolveMossuKaruCollision(blob: AmbientBlob, frame: FrameState) {
+  const player = frame.player;
+  if (player.fallingToVoid) {
+    return false;
+  }
+
+  const blobRadius = collisionRadiusForBlob(blob);
+  const playerRadius = PLAYER_RADIUS * (player.rolling ? 0.82 : 0.74);
+  const minDistance = blobRadius + playerRadius;
+  const dx = blob.group.position.x - player.position.x;
+  const dz = blob.group.position.z - player.position.z;
+  const distanceSq = dx * dx + dz * dz;
+  if (distanceSq >= minDistance * minDistance) {
+    return false;
+  }
+
+  const distance = Math.sqrt(distanceSq);
+  if (distance > 0.001) {
+    ambientCollisionNormal.set(dx / distance, 0, dz / distance);
+  } else {
+    ambientCollisionNormal.set(Math.sin(blob.poseSeed), 0, Math.cos(blob.poseSeed)).normalize();
+  }
+
+  const overlap = minDistance - Math.max(distance, 0.001);
+  const correction = Math.min(overlap, FAUNA_COLLISION_MAX_CORRECTION);
+  const playerPushShare = player.swimming ? 0 : blob.recruited ? (player.rolling ? 0.18 : 0.1) : 0.04;
+  const blobPushShare = 1 - playerPushShare;
+
+  blob.group.position.addScaledVector(ambientCollisionNormal, correction * blobPushShare);
+  if (playerPushShare > 0) {
+    player.position.addScaledVector(ambientCollisionNormal, -correction * playerPushShare);
+    if (player.grounded && !player.swimming) {
+      player.position.y = sampleTerrainHeight(player.position.x, player.position.z);
+    }
+  }
+
+  const relativeVelocity =
+    (blob.velocity.x - player.velocity.x) * ambientCollisionNormal.x +
+    (blob.velocity.z - player.velocity.z) * ambientCollisionNormal.z;
+  if (relativeVelocity < 0) {
+    const impulse = -relativeVelocity * FAUNA_COLLISION_VELOCITY_RESPONSE;
+    blob.velocity.addScaledVector(ambientCollisionNormal, impulse * blobPushShare);
+    if (playerPushShare > 0) {
+      player.velocity.x -= ambientCollisionNormal.x * impulse * playerPushShare;
+      player.velocity.z -= ambientCollisionNormal.z * impulse * playerPushShare;
+    }
+  }
+
+  return true;
 }
 
 function findNearestRecruitable(blobs: AmbientBlob[], playerPosition: Vector3) {
@@ -186,6 +264,7 @@ function findNearestRecruitable(blobs: AmbientBlob[], playerPosition: Vector3) {
   };
 }
 
+/** One press recruits the nearest Karu plus same-herd mates nearby (small-cluster). */
 function recruitNearbyBlobs(blobs: AmbientBlob[], sourceBlob: AmbientBlob, playerPosition: Vector3, elapsed: number) {
   let recruitedCount = 0;
 
@@ -484,6 +563,9 @@ export function buildAmbientBlobs(options: AmbientBlobBuildOptions = {}) {
         poseSeed: pocketIndex * 2.2 + index * 1.4,
         facingYaw,
         creatureScale,
+        rolling: false,
+        rollBlend: 0,
+        rollSpin: 0,
       };
     }),
   );
@@ -508,6 +590,8 @@ export function updateAmbientBlobs(
       recruitedCount: blobs.filter((blob) => blob.recruited).length,
       nearestRecruitableDistance: null,
       recruitedThisFrame: 0,
+      rollingCount: blobs.filter((blob) => blob.recruited && blob.rolling).length,
+      mossuCollisionCount: 0,
       dominantMood: dominantMood(blobs),
       regroupActive: false,
       callHeardActive: false,
@@ -516,6 +600,7 @@ export function updateAmbientBlobs(
 
   const playerPosition = frame.player.position;
   const playerPlanarSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
+  const playerRolling = frame.player.rolling && !frame.player.swimming;
   ambientPlayerMotion.set(frame.player.velocity.x, 0, frame.player.velocity.z);
   const nearestBeforeRecruit = findNearestRecruitable(blobs, playerPosition);
   const recruitedThisFrame =
@@ -525,6 +610,7 @@ export function updateAmbientBlobs(
     nearestBeforeRecruit.distance <= FAUNA_RECRUIT_RADIUS
       ? recruitNearbyBlobs(blobs, nearestBeforeRecruit.blob, playerPosition, elapsed)
       : 0;
+  let mossuCollisionCount = 0;
   if (regroupPressed) {
     blobs.forEach((blob) => {
       if (blob.recruited) {
@@ -636,10 +722,18 @@ export function updateAmbientBlobs(
       const slotJitter = Math.sin(blob.poseSeed * 1.7) * 0.45;
       const regroupTighten = regroupActive ? 0.62 : 1;
       const callWaveTighten = waitingForCallWave ? 1.18 : 1;
+      const rollFollowTighten = playerRolling ? 0.8 : 1;
       const followBackDistance =
-        (5.6 + slotRow * 2.45 + (blob.leaderSlot % 2) * 0.45 + tuning.backOffset) * regroupTighten * callWaveTighten;
+        (5.6 + slotRow * 2.45 + (blob.leaderSlot % 2) * 0.45 + tuning.backOffset)
+        * regroupTighten
+        * callWaveTighten
+        * rollFollowTighten;
       const followSideDistance =
-        (slotColumn * (3.25 + slotRow * 0.28) + slotJitter) * tuning.sideScale * regroupTighten * callWaveTighten;
+        (slotColumn * (3.25 + slotRow * 0.28) + slotJitter)
+        * tuning.sideScale
+        * regroupTighten
+        * callWaveTighten
+        * rollFollowTighten;
       ambientLeaderSlot
         .copy(playerPosition)
         .addScaledVector(ambientFollowDirection, -followBackDistance)
@@ -718,6 +812,18 @@ export function updateAmbientBlobs(
         ambientFollowSteer.multiplyScalar(1 / followDistance);
       }
 
+      const rollStagger = Math.min(0.42, blob.leaderSlot * FAUNA_ROLL_STAGGER_SECONDS);
+      const canRollWithMossu =
+        blob.waterReaction !== "float" &&
+        blob.waterReaction !== "bank_wait" &&
+        !listeningForCall &&
+        !waitingForCallWave;
+      blob.rolling =
+        canRollWithMossu &&
+        playerRolling &&
+        frame.player.rollHoldSeconds >= rollStagger &&
+        (playerPlanarSpeed > 2.6 || followDistance > 3.2);
+
       ambientPlayerSpace.set(0, 0, 0);
       if (planarToPlayer < FAUNA_PLAYER_PERSONAL_SPACE && planarToPlayer > 0.001) {
         ambientPlayerSpace
@@ -742,7 +848,11 @@ export function updateAmbientBlobs(
         ambientBoidSteer.copy(ambientFollowSteer);
       }
 
-      const targetLead = MathUtils.clamp(followDistance * 0.3 + 2.4, 2.2, 7.4);
+      const targetLead = MathUtils.clamp(
+        followDistance * (blob.rolling ? 0.36 : playerRolling ? 0.34 : 0.3) + (blob.rolling ? 3.35 : playerRolling ? 3.1 : 2.4),
+        2.2,
+        blob.rolling ? 8.8 : playerRolling ? 8.2 : 7.4,
+      );
       blob.target
         .copy(blob.group.position)
         .addScaledVector(ambientBoidSteer, targetLead);
@@ -752,7 +862,11 @@ export function updateAmbientBlobs(
         followDistance > 9 ? 4.1 :
         followDistance > 3.4 ? 2.55 :
         1.15;
-      recruitedMoveStrength *= tuning.speedScale * (regroupActive && !waitingForCallWave ? 1.12 : 1);
+      recruitedMoveStrength *=
+        tuning.speedScale *
+        (regroupActive && !waitingForCallWave ? 1.12 : 1) *
+        (playerRolling ? 1.12 : 1) *
+        (blob.rolling ? FAUNA_ROLL_SPEED_MULTIPLIER : 1);
       if (blob.waterReaction === "bank_wait") {
         recruitedMoveStrength *= 0.82;
       } else if (blob.waterReaction === "float") {
@@ -768,6 +882,7 @@ export function updateAmbientBlobs(
         recruitedMoveStrength = 0;
       }
     } else if (playerTooClose || playerApproaching || stillAvoidingPlayer) {
+      blob.rolling = false;
       blob.mode = "shy";
       const away = planarToPlayer > 0.001 ? toPlayer.multiplyScalar(-1 / planarToPlayer) : toPlayer.set(1, 0, 0);
       ambientDesiredTarget.copy(blob.group.position).addScaledVector(away, playerApproaching ? 6.6 : 4.8);
@@ -793,6 +908,7 @@ export function updateAmbientBlobs(
       elapsed >= blob.avoidPlayerUntil &&
       elapsed >= blob.investigateAgainAt
     ) {
+      blob.rolling = false;
       blob.mode = "curious";
       blob.target.set(
         playerPosition.x - toPlayer.x * 0.35,
@@ -801,6 +917,7 @@ export function updateAmbientBlobs(
       );
       blob.restUntil = elapsed + 1.3;
     } else if (blob.restUntil < elapsed) {
+      blob.rolling = false;
       if (separatedFromHerd && elapsed >= blob.avoidPlayerUntil) {
         blob.mode = "wander";
         const regroupAngle = blob.poseSeed + elapsed * 0.2;
@@ -909,7 +1026,7 @@ export function updateAmbientBlobs(
       const distance = ambientTrailDirection.length();
       if (distance > 0.12) {
         ambientTrailDirection.normalize();
-        blob.velocity.lerp(ambientTrailDirection.multiplyScalar(moveStrength), 1 - Math.exp(-dt * 2.6));
+        blob.velocity.lerp(ambientTrailDirection.multiplyScalar(moveStrength), 1 - Math.exp(-dt * (blob.rolling ? 4.1 : 2.6)));
         blob.group.position.addScaledVector(blob.velocity, dt);
       } else {
         blob.velocity.multiplyScalar(0.72);
@@ -919,6 +1036,10 @@ export function updateAmbientBlobs(
       }
     } else {
       blob.velocity.multiplyScalar(0.84);
+    }
+
+    if (resolveMossuKaruCollision(blob, frame)) {
+      mossuCollisionCount += 1;
     }
 
   const currentWater = sampleWaterState(blob.group.position.x, blob.group.position.z);
@@ -934,8 +1055,18 @@ export function updateAmbientBlobs(
   } else if (!blob.recruited || !currentWater || currentWater.depth <= FAUNA_SHALLOW_WATER_DEPTH) {
     blob.waterReaction = "dry";
   }
+  if (!blob.recruited || blob.waterReaction === "float" || blob.waterReaction === "bank_wait") {
+    blob.rolling = false;
+  }
 
   const planarSpeed = blob.velocity.length();
+  const wantsRollMimic = blob.rolling;
+  blob.rollBlend = MathUtils.damp(blob.rollBlend, wantsRollMimic ? 1 : 0, wantsRollMimic ? 8.5 : 6.5, dt);
+  if (blob.rollBlend > 0.02) {
+    blob.rollSpin = (blob.rollSpin + (playerPlanarSpeed * 0.16 + planarSpeed * 0.36 + 1.6 + index * 0.08) * dt) % (Math.PI * 2);
+  }
+  const rollMimicT = blob.rollBlend;
+  const rollBounce = Math.max(0, Math.sin(blob.rollSpin * 2 + blob.poseSeed)) * rollMimicT;
   const scale = blob.creatureScale;
   const restPulse = Math.sin(elapsed * 2.3 + blob.poseSeed);
   const curiousSway = Math.sin(elapsed * 2.1 + blob.poseSeed * 1.4);
@@ -973,22 +1104,24 @@ export function updateAmbientBlobs(
       : 0;
   const groundedBob = Math.max(0, Math.sin(elapsed * 4.2 + blob.bobOffset)) * planarSpeed * 0.08;
   const poseLift =
-      blob.mode === "wander" ? Math.max(wanderHop * 0.2 * scale, idleHop * 0.15 * scale, waterHop, callWaveT * 0.34 * scale) :
-      blob.mode === "shy" ? shyHop * 0.16 * scale :
-      idleHop * 0.15 * scale;
+    (blob.mode === "wander" ? Math.max(wanderHop * 0.2 * scale, idleHop * 0.15 * scale, waterHop, callWaveT * 0.34 * scale) :
+    blob.mode === "shy" ? shyHop * 0.16 * scale :
+    idleHop * 0.15 * scale) + rollBounce * 0.14 * scale;
     const poseDrop =
     blob.mode === "rest" ? (0.03 + restPulse * 0.012 + idleHopSettle * 0.028 + idleSettle * 0.022) * scale :
     blob.mode === "shy" ? (0.05 + (1 - shyHop) * 0.04) * scale :
     (idleHopSettle * 0.024 + idleSettle * 0.016) * scale;
-  const stretch =
+  const baseStretch =
     blob.mode === "wander" ? 1 + wanderHop * 0.08 + idleHop * 0.03 + (blob.mood === "sleepy" ? 0.025 : 0) :
     blob.mode === "shy" ? 1 + shyHop * 0.05 :
     1 + Math.max(0, restPulse) * 0.02 + idleHop * 0.05 + idleSniff * 0.03;
-  const squash =
+  const stretch = MathUtils.lerp(baseStretch, 0.92 + rollBounce * 0.04, rollMimicT * 0.68);
+  const baseSquash =
     blob.mode === "rest" ? 1 - (0.06 + Math.max(0, -restPulse) * 0.04 + idleHopSettle * 0.05 + idleSettle * 0.05) :
     blob.mode === "shy" ? 1 - (0.08 + (1 - shyHop) * 0.06) :
     blob.mode === "wander" ? 1 - (wanderHop * 0.06 + idleHopSettle * 0.04 + idleSettle * 0.03 + (blob.waterReaction === "splash" ? 0.035 : 0)) :
     1 - idleHop * 0.04;
+  const squash = MathUtils.lerp(baseSquash, 1.15 - rollBounce * 0.04, rollMimicT * 0.68);
     const desiredYaw =
       callListenT > 0.001 && planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) :
       planarSpeed > 0.05 ? Math.atan2(blob.velocity.x, blob.velocity.z) :
@@ -1005,16 +1138,18 @@ export function updateAmbientBlobs(
     blob.group.position.y = visualWaterY + groundedBob;
   blob.group.rotation.y = blob.facingYaw;
   blob.root.position.y = poseLift - poseDrop;
-  blob.root.rotation.x =
+  const baseRootX =
     callListenT > 0 ? -0.18 - callListenT * 0.08 :
     blob.mode === "curious" ? -0.12 + curiousSway * 0.03 :
     blob.mode === "shy" ? -0.08 :
     blob.mode === "wander" ? -0.03 + wanderHop * 0.02 - idleSniff * 0.07 - idleSettle * 0.05 :
     -0.02 + restPulse * 0.015 - idleHop * 0.03 - idleSniff * 0.12 - idleSettle * 0.06;
-  blob.root.rotation.z =
+  const baseRootZ =
     blob.mode === "curious" ? curiousSway * 0.08 :
     blob.mode === "wander" ? Math.sin(elapsed * 3.6 + blob.poseSeed) * 0.04 + idleLookYaw * 0.18 :
     restPulse * 0.02 + idleLookYaw * 0.22;
+  blob.root.rotation.x = baseRootX + rollMimicT * blob.rollSpin;
+  blob.root.rotation.z = baseRootZ + rollMimicT * Math.sin(blob.rollSpin * 0.7 + blob.poseSeed) * 0.16;
 
   blob.body.scale.set(1.12 * squash, 1.42 * stretch, 1.08 * squash);
   blob.body.position.y =
@@ -1035,11 +1170,12 @@ export function updateAmbientBlobs(
     (blob.mode === "shy" ? -0.03 * scale : 0) +
     idleSniff * 0.035 * scale;
 
-  const eyeSquish =
+  const baseEyeSquish =
     callListenT > 0 ? 0.08 + blink * 0.4 :
     blob.mode === "rest" ? 0.35 + Math.max(0, -restPulse) * 0.22 + idleSettle * 0.16 + blink * 1.35 :
     blob.mode === "shy" ? 0.24 :
     blink * 1.35 + idleSniff * 0.08;
+  const eyeSquish = baseEyeSquish + rollMimicT * 0.12;
   blob.leftEye.scale.set(0.86 + eyeSquish * 0.18, 1.34 - eyeSquish * 0.56, 0.68);
   blob.rightEye.scale.copy(blob.leftEye.scale);
 
@@ -1048,21 +1184,26 @@ export function updateAmbientBlobs(
         blob.mode === "wander" ? Math.max(0, Math.sin(elapsed * 6.8 + blob.poseSeed + footIndex * Math.PI * 0.65)) * 0.05 * scale :
         blob.mode === "shy" ? Math.max(0, Math.sin(elapsed * 9.6 + blob.poseSeed + footIndex * Math.PI * 0.75)) * 0.04 * scale :
         idleHop * 0.02 * scale;
+    const footTuck = rollMimicT;
+    foot.visible = footTuck < 0.86;
+    const footSide = MathUtils.lerp((footIndex === 0 ? -0.18 : 0.18) * scale, (footIndex === 0 ? -0.06 : 0.06) * scale, footTuck);
+    const footHeight = MathUtils.lerp(0.1 * scale + footHop - idleSettle * 0.015 * scale, 0.17 * scale, footTuck);
+    const footForward = MathUtils.lerp((blob.mode === "shy" ? 0.18 : 0.26) * scale - idleSniff * 0.015 * scale, 0.08 * scale, footTuck);
     foot.position.set(
-      (footIndex === 0 ? -0.18 : 0.18) * scale,
-      0.1 * scale + footHop - idleSettle * 0.015 * scale,
-      (blob.mode === "shy" ? 0.18 : 0.26) * scale - idleSniff * 0.015 * scale,
+      footSide,
+      footHeight,
+      footForward,
     );
       foot.scale.set(
-        1.08 - eyeSquish * 0.08,
-        0.72 - eyeSquish * 0.08 + footHop / Math.max(0.001, scale),
-        0.9,
+        MathUtils.lerp(1.08 - eyeSquish * 0.08, 0.38, footTuck),
+        MathUtils.lerp(0.72 - eyeSquish * 0.08 + footHop / Math.max(0.001, scale), 0.28, footTuck),
+        MathUtils.lerp(0.9, 0.34, footTuck),
       );
     });
 
     blob.fluffPuffs.forEach((puff, puffIndex) => {
       const sway = Math.sin(elapsed * 2.8 + blob.poseSeed + puffIndex * 0.8);
-      const puffScale = 1 + sway * 0.03 + (blob.mode === "wander" ? wanderHop * 0.02 : 0);
+      const puffScale = 1 + sway * 0.03 + (blob.mode === "wander" ? wanderHop * 0.02 : 0) + rollMimicT * 0.04;
       if (puffIndex < 4) {
         puff.scale.set(0.42 * scale * puffScale, 0.4 * scale * (1 - sway * 0.02), 0.38 * scale);
       } else if (puffIndex < 7) {
@@ -1079,6 +1220,8 @@ export function updateAmbientBlobs(
     recruitedCount: blobs.filter((blob) => blob.recruited).length,
     nearestRecruitableDistance: nearestAfterRecruit.distance,
     recruitedThisFrame,
+    rollingCount: blobs.filter((blob) => blob.recruited && blob.rolling).length,
+    mossuCollisionCount,
     dominantMood: dominantMood(blobs),
     regroupActive: blobs.some((blob) => blob.recruited && elapsed < blob.regroupUntil),
     callHeardActive: blobs.some((blob) => blob.recruited && elapsed < blob.callRespondUntil),

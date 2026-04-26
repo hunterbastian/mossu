@@ -2,7 +2,6 @@ import type { PlayerState, SaveState } from "./gameState";
 import type { PlayerSimulationRuntime } from "./playerSimulationRuntime";
 import {
   FLOAT_STAMINA_DRAIN,
-  ROLL_STAMINA_DRAIN,
   STAMINA_REGEN_AIR,
   STAMINA_REGEN_DELAY,
   STAMINA_REGEN_GROUND,
@@ -22,10 +21,9 @@ export function updateStaminaAndAbilityState(
   player: PlayerState,
   dt: number,
   runtime: PlayerSimulationRuntime,
-  sustainedRolling: boolean,
   isFloating: boolean,
 ) {
-  const staminaDrainRate = (sustainedRolling ? ROLL_STAMINA_DRAIN : 0) + (isFloating ? FLOAT_STAMINA_DRAIN : 0);
+  const staminaDrainRate = isFloating ? FLOAT_STAMINA_DRAIN : 0;
   if (staminaDrainRate > 0) {
     player.stamina = Math.max(0, player.stamina - staminaDrainRate * dt);
     runtime.staminaRegenDelayRemaining = STAMINA_REGEN_DELAY;
