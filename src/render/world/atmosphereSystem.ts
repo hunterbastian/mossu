@@ -2,6 +2,7 @@ import {
   BackSide,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   ShaderMaterial,
   SphereGeometry,
@@ -69,8 +70,20 @@ export function buildClouds() {
   return clouds;
 }
 
-export function buildSkyDome() {
+export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
   const geometry = new SphereGeometry(520, 40, 28);
+  if (options.webGpuCompatible) {
+    return new Mesh(
+      geometry,
+      new MeshBasicMaterial({
+        color: "#aeeeff",
+        side: BackSide,
+        depthWrite: false,
+        fog: false,
+      }),
+    );
+  }
+
   const material = new ShaderMaterial({
     side: BackSide,
     depthWrite: false,

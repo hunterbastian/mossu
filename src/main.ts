@@ -14,7 +14,13 @@ if (!container) {
   throw new Error("Missing #app container");
 }
 
-const game = new GameApp(container);
-window.advanceTime = (ms) => game.advanceTime(ms);
-window.render_game_to_text = () => game.renderGameToText();
-game.start();
+void GameApp.create(container)
+  .then((game) => {
+    window.advanceTime = (ms) => game.advanceTime(ms);
+    window.render_game_to_text = () => game.renderGameToText();
+    game.start();
+  })
+  .catch((error: unknown) => {
+    console.error("Mossu failed to start.", error);
+    container.textContent = "Mossu could not start. Check the browser console for details.";
+  });

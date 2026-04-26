@@ -133,6 +133,7 @@ interface WaterRippleActorState {
 
 interface WorldRendererOptions {
   debugSpiritCloseup?: boolean;
+  webGpuCompatibleMaterials?: boolean;
 }
 
 export interface WorldPerfStats {
@@ -764,7 +765,7 @@ function countInstancedTriangles(meshes: readonly InstancedMesh[]) {
 export class WorldRenderer {
   readonly mossu = new MossuAvatar();
   readonly terrain = makeTerrainMesh();
-  readonly skyDome = buildSkyDome();
+  readonly skyDome: Mesh;
   readonly clouds = buildClouds();
   readonly windMeshes: Array<InstancedMesh> = [];
   private readonly treeWindMeshes: Array<InstancedMesh> = [];
@@ -843,6 +844,9 @@ export class WorldRenderer {
   private readonly landmarkMapMarkers: Array<MapMarker> = [];
 
   constructor(private readonly scene: Scene, options: WorldRendererOptions = {}) {
+    this.skyDome = buildSkyDome({
+      webGpuCompatible: options.webGpuCompatibleMaterials ?? false,
+    });
     this.ambientBlobs = buildAmbientBlobs(options);
     scene.background = this.lowlandBackground.clone();
     scene.fog = this.gameplayFog;

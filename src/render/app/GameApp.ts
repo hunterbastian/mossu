@@ -5,6 +5,7 @@ import {
   Vector2,
   WebGLRenderer,
 } from "three";
+import type { WebGPURenderer as ThreeWebGpuRenderer } from "three/webgpu";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
@@ -29,6 +30,18 @@ const BLOOM_RADIUS = 0.48;
 const BLOOM_THRESHOLD = 0.82;
 const BLOOM_MIN_PIXEL_RATIO = 0.74;
 
+type RequestedRendererBackend = "webgl" | "webgpu" | "auto";
+type ActiveRendererBackend = "webgl" | "webgpu" | "webgpu-webgl2";
+type GameRenderer = WebGLRenderer | ThreeWebGpuRenderer;
+
+type RendererBundle = {
+  renderer: GameRenderer;
+  requestedBackend: RequestedRendererBackend;
+  activeBackend: ActiveRendererBackend;
+  webGpuAvailable: boolean;
+  fallbackReason: string | null;
+};
+
 const PAUSED_INPUT: InputSnapshot = {
   moveX: 0,
   moveY: 0,
@@ -44,10 +57,80 @@ const PAUSED_INPUT: InputSnapshot = {
   escapePressed: false,
 };
 
+function getRequestedRendererBackend(params: URLSearchParams): RequestedRendererBackend {
+  const rendererParam = params.get("renderer")?.toLowerCase();
+  if (rendererParam === "webgpu" || params.has("webgpu")) {
+    return "webgpu";
+  }
+  if (rendererParam === "auto") {
+    return "auto";
+  }
+  return "webgl";
+}
+
+function hasNavigatorWebGpu() {
+  return typeof navigator !== "undefined" && "gpu" in navigator;
+}
+
+function createWebGlRendererBundle(
+  requestedBackend: RequestedRendererBackend,
+  webGpuAvailable: boolean,
+  fallbackReason: string | null = null,
+): RendererBundle {
+  return {
+    renderer: new WebGLRenderer({ antialias: true }),
+    requestedBackend,
+    activeBackend: "webgl",
+    webGpuAvailable,
+    fallbackReason,
+  };
+}
+
+function getWebGpuBackendName(renderer: ThreeWebGpuRenderer): ActiveRendererBackend {
+  const backend = renderer.backend as unknown as { isWebGPUBackend?: boolean };
+  return backend.isWebGPUBackend ? "webgpu" : "webgpu-webgl2";
+}
+
+async function createRendererBundle(params: URLSearchParams): Promise<RendererBundle> {
+  const requestedBackend = getRequestedRendererBackend(params);
+  const webGpuAvailable = hasNavigatorWebGpu();
+  const shouldTryWebGpu =
+    requestedBackend === "webgpu" || (requestedBackend === "auto" && webGpuAvailable);
+
+  if (!shouldTryWebGpu) {
+    return createWebGlRendererBundle(requestedBackend, webGpuAvailable);
+  }
+
+  try {
+    const { WebGPURenderer } = await import("three/webgpu");
+    const renderer = new WebGPURenderer({ alpha: false, antialias: true });
+    await renderer.init();
+    return {
+      renderer,
+      requestedBackend,
+      activeBackend: getWebGpuBackendName(renderer),
+      webGpuAvailable,
+      fallbackReason: null,
+    };
+  } catch (error) {
+    const fallbackReason =
+      error instanceof Error ? error.message : "WebGPU renderer could not be initialized.";
+    return createWebGlRendererBundle(requestedBackend, webGpuAvailable, fallbackReason);
+  }
+}
+
+function isWebGlRenderer(renderer: GameRenderer): renderer is WebGLRenderer {
+  return renderer instanceof WebGLRenderer;
+}
+
 export class GameApp {
-  private readonly renderer: WebGLRenderer;
-  private readonly composer: EffectComposer;
-  private readonly bloomPass: UnrealBloomPass;
+  private readonly renderer: GameRenderer;
+  private readonly composer: EffectComposer | null;
+  private readonly bloomPass: UnrealBloomPass | null;
+  private readonly requestedRendererBackend: RequestedRendererBackend;
+  private readonly activeRendererBackend: ActiveRendererBackend;
+  private readonly webGpuAvailable: boolean;
+  private readonly rendererFallbackReason: string | null;
   private readonly scene = new Scene();
   private readonly state = new GameState();
   private readonly input = new InputController(window);
@@ -82,12 +165,25 @@ export class GameApp {
 
   private raf = 0;
 
-  constructor(private readonly container: HTMLElement) {
+  static async create(container: HTMLElement) {
     const params = new URLSearchParams(window.location.search);
+    const rendererBundle = await createRendererBundle(params);
+    return new GameApp(container, params, rendererBundle);
+  }
+
+  private constructor(
+    private readonly container: HTMLElement,
+    params: URLSearchParams,
+    rendererBundle: RendererBundle,
+  ) {
     const debugSpiritCloseup = params.has("spiritCloseup");
     this.cameraDebugEnabled = params.has("cameraDebug");
     this.perfDebugEnabled = params.has("perfDebug");
-    this.renderer = new WebGLRenderer({ antialias: true });
+    this.renderer = rendererBundle.renderer;
+    this.requestedRendererBackend = rendererBundle.requestedBackend;
+    this.activeRendererBackend = rendererBundle.activeBackend;
+    this.webGpuAvailable = rendererBundle.webGpuAvailable;
+    this.rendererFallbackReason = rendererBundle.fallbackReason;
     this.renderer.setPixelRatio(this.activePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = SRGBColorSpace;
@@ -95,19 +191,27 @@ export class GameApp {
     this.container.appendChild(this.renderer.domElement);
 
     this.followCamera = new FollowCamera(this.renderer.domElement);
-    this.world = new WorldRenderer(this.scene, { debugSpiritCloseup });
+    this.world = new WorldRenderer(this.scene, {
+      debugSpiritCloseup,
+      webGpuCompatibleMaterials: this.activeRendererBackend !== "webgl",
+    });
     this.followCamera.setCollisionMeshes(this.world.getCameraCollisionMeshes());
-    this.composer = new EffectComposer(this.renderer);
-    this.composer.setPixelRatio(this.activePixelRatio);
-    this.composer.setSize(window.innerWidth, window.innerHeight);
-    this.composer.addPass(new RenderPass(this.scene, this.followCamera.camera));
-    this.bloomPass = new UnrealBloomPass(
-      new Vector2(window.innerWidth, window.innerHeight),
-      BLOOM_STRENGTH,
-      BLOOM_RADIUS,
-      BLOOM_THRESHOLD,
-    );
-    this.composer.addPass(this.bloomPass);
+    if (isWebGlRenderer(this.renderer)) {
+      this.composer = new EffectComposer(this.renderer);
+      this.composer.setPixelRatio(this.activePixelRatio);
+      this.composer.setSize(window.innerWidth, window.innerHeight);
+      this.composer.addPass(new RenderPass(this.scene, this.followCamera.camera));
+      this.bloomPass = new UnrealBloomPass(
+        new Vector2(window.innerWidth, window.innerHeight),
+        BLOOM_STRENGTH,
+        BLOOM_RADIUS,
+        BLOOM_THRESHOLD,
+      );
+      this.composer.addPass(this.bloomPass);
+    } else {
+      this.composer = null;
+      this.bloomPass = null;
+    }
     this.hud = new HudShell(this.characterPreview.element);
     this.container.appendChild(this.hud.element);
     this.hud.element.classList.add("hud--title-hidden");
@@ -157,7 +261,7 @@ export class GameApp {
     this.input.dispose();
     this.followCamera.dispose();
     this.characterPreview.dispose();
-    this.composer.dispose();
+    this.composer?.dispose();
     this.cameraDebugPanel?.remove();
     this.perfDebugPanel?.remove();
     this.titleScreen.remove();
@@ -334,8 +438,10 @@ export class GameApp {
 
   private renderScene() {
     const bloomEnabled = this.shouldUseBloom();
-    this.bloomPass.enabled = bloomEnabled;
-    if (bloomEnabled) {
+    if (this.bloomPass) {
+      this.bloomPass.enabled = bloomEnabled;
+    }
+    if (bloomEnabled && this.composer) {
       this.composer.render();
       return;
     }
@@ -344,7 +450,11 @@ export class GameApp {
   }
 
   private shouldUseBloom() {
-    return this.viewMode !== "map_lookdown" && this.activePixelRatio >= BLOOM_MIN_PIXEL_RATIO;
+    return (
+      this.composer !== null &&
+      this.viewMode !== "map_lookdown" &&
+      this.activePixelRatio >= BLOOM_MIN_PIXEL_RATIO
+    );
   }
 
   private syncHudForFrame(dt: number) {
@@ -424,7 +534,7 @@ export class GameApp {
 
     this.activePixelRatio = nextPixelRatio;
     this.renderer.setPixelRatio(this.activePixelRatio);
-    this.composer.setPixelRatio(this.activePixelRatio);
+    this.composer?.setPixelRatio(this.activePixelRatio);
   }
 
   private trackFrameTiming(rawDt: number) {
@@ -467,6 +577,10 @@ export class GameApp {
       maxPixelRatio: Number(this.maxPixelRatio.toFixed(2)),
       minPixelRatio: Number(this.minPixelRatio.toFixed(2)),
       bloomEnabled: this.shouldUseBloom(),
+      requestedBackend: this.requestedRendererBackend,
+      activeBackend: this.activeRendererBackend,
+      webGpuAvailable: this.webGpuAvailable,
+      rendererFallbackReason: this.rendererFallbackReason,
       mapZoom: this.followCamera.getMapZoomFactor(),
       renderer: {
         calls: rendererInfo.render.calls,
@@ -491,6 +605,7 @@ export class GameApp {
     this.perfDebugPanel.textContent = [
       `perf ${perf.fps}fps  avg ${perf.frameMs}ms  raw ${perf.latestFrameMs}ms`,
       `quality avg ${perf.qualitySampleFrameMs}ms  pixelRatio ${perf.pixelRatio} (${perf.minPixelRatio}-${perf.maxPixelRatio})  bloom ${perf.bloomEnabled ? "on" : "off"}  mapZoom ${perf.mapZoom.toFixed(2)}`,
+      `backend ${perf.activeBackend}  requested ${perf.requestedBackend}  webgpu ${perf.webGpuAvailable ? "available" : "unavailable"}${perf.rendererFallbackReason ? `  fallback ${perf.rendererFallbackReason}` : ""}`,
       `renderer calls ${perf.renderer.calls}  tris ${perf.renderer.triangles}  lines ${perf.renderer.lines}  points ${perf.renderer.points}`,
       `memory geometries ${perf.memory.geometries}  textures ${perf.memory.textures}`,
       `terrain ${perf.world.terrainVertices}v / ${perf.world.terrainTriangles}t`,
@@ -504,7 +619,7 @@ export class GameApp {
 
   private handleResize = () => {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.composer.setSize(window.innerWidth, window.innerHeight);
+    this.composer?.setSize(window.innerWidth, window.innerHeight);
     this.followCamera.resize(window.innerWidth, window.innerHeight);
   };
 
