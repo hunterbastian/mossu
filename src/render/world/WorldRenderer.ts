@@ -2,6 +2,7 @@ import {
   AmbientLight,
   BufferAttribute,
   BufferGeometry,
+  Camera,
   CircleGeometry,
   Color,
   ConeGeometry,
@@ -31,7 +32,6 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { FrameState } from "../../simulation/gameState";
 import {
   ForageableKind,
-  MOSSU_PLAYFIELD_EXTENT,
   sampleBaseTerrainHeight,
   sampleBiomeZone,
   sampleHabitatLayer,
@@ -43,7 +43,7 @@ import {
   sampleStartingWaterDampBankMask,
   sampleStartingWaterWetness,
   sampleTerrainHeight,
-  sampleTerrainNormalInto,
+  sampleTerrainNormal,
   sampleWaterBankShape,
   sampleWaterState,
   shadowPockets,
@@ -63,7 +63,7 @@ import {
   sampleOpeningMeadowMask,
   updateGrassMeshLod,
 } from "./grassSystem";
-import { buildClouds, buildMountainAtmosphere, buildSkyDome } from "./atmosphereSystem";
+import { buildClouds, buildMountainAtmosphere, buildSkyDome, syncAtmosphereLighting } from "./atmosphereSystem";
 import {
   AMBIENT_BLOB_SPECIES_NAME,
   AmbientBlob,
@@ -92,8 +92,7 @@ import {
   WaterRippleSource,
 } from "./waterSystem";
 
-const scratchTerrainNormal = new Vector3();
-
+const WORLD_SIZE = 560;
 const TERRAIN_SEGMENTS = 160;
 const GRASS_COUNT = 5600;
 const FAR_GRASS_PATCH_COUNT = 520;
@@ -193,8 +192,8 @@ function colorForTerrain(x: number, y: number, z: number) {
   const zone = sampleBiomeZone(x, z, y);
   const habitat = sampleHabitatLayer(x, z, y);
   const islandEdge = sampleIslandEdgeFactor(x, z);
-  sampleTerrainNormalInto(scratchTerrainNormal, x, z);
-  const slope = 1 - scratchTerrainNormal.y;
+  const normal = sampleTerrainNormal(x, z);
+  const slope = 1 - normal.y;
   const painterlyNoise = Math.sin(x * 0.07) * 0.04 + Math.cos(z * 0.05) * 0.03 + Math.sin((x - z) * 0.03) * 0.05;
   const patch = Math.round((Math.sin(x * 0.12 + z * 0.08) * 0.5 + 0.5) * 5) / 5;
   const mixValue = MathUtils.clamp(patch * 0.5 + painterlyNoise + y / 220, 0, 1);
@@ -257,12 +256,12 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color("#65864f"), habitat.forest * 0.12)
     .lerp(new Color("#7f9b78"), habitat.shore * 0.14)
     .lerp(paintedEarth, paintedGround * (0.34 + (1 - slopeRock) * 0.22))
-    .lerp(wornDirt, routeDirt * 0.64 * (1 - rockMask * 0.88))
+    .lerp(wornDirt, routeDirt * 0.58 * (1 - rockMask * 0.88))
     .lerp(sandbar, sandbarLine * 0.34)
-    .lerp(new Color("#4a8576"), wetBankLine * 0.32)
+    .lerp(new Color("#5d9581"), wetBankLine * 0.24)
     .lerp(new Color("#748b69"), coveShade * 0.13)
-    .lerp(new Color("#8aac7a"), waterShoreMask * 0.22)
-    .lerp(new Color("#c6b987"), dryLipLine * 0.34)
+    .lerp(new Color("#86a978"), waterShoreMask * 0.16)
+    .lerp(new Color("#c6b987"), dryLipLine * 0.28)
     .lerp(new Color("#f0d985"), meadowBloom * (0.36 + openingMask * 0.2))
     .lerp(rock, rockMask * (1 - snowMask * 0.46))
     .lerp(snow, snowMask);
@@ -270,7 +269,7 @@ function colorForTerrain(x: number, y: number, z: number) {
 }
 
 function makeTerrainMesh() {
-  const geometry = new PlaneGeometry(MOSSU_PLAYFIELD_EXTENT, MOSSU_PLAYFIELD_EXTENT, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
+  const geometry = new PlaneGeometry(WORLD_SIZE, WORLD_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
   geometry.rotateX(-Math.PI / 2);
 
   const positions = geometry.attributes.position as BufferAttribute;
@@ -354,8 +353,7 @@ function buildTerrainFormStrokes() {
     const x = band.x + localX * c - localZ * s;
     const z = band.z + localX * s + localZ * c;
     const y = sampleTerrainHeight(x, z);
-    sampleTerrainNormalInto(scratchTerrainNormal, x, z);
-    const slope = 1 - scratchTerrainNormal.y;
+    const slope = 1 - sampleTerrainNormal(x, z).y;
     const size = MathUtils.lerp(3.8, 10.4, terrainFormHash(i + 71)) * MathUtils.lerp(1, 1.36, slope);
     const flatten = MathUtils.lerp(0.16, 0.38, terrainFormHash(i + 97));
     dummy.position.set(x, y + 0.052 + slope * 0.05, z);
@@ -621,11 +619,11 @@ function buildShadowPockets() {
 function buildValleyMist() {
   const group = new Group();
   const patches = [
-    [-54, -118, 54, 20, 3.6, 0.052, -0.08],
-    [-8, -28, 112, 34, 7.2, 0.078, 0.04],
-    [26, 72, 92, 26, 10.2, 0.062, -0.14],
-    [18, 134, 84, 28, 13.4, 0.052, 0.1],
-    [-18, 190, 134, 40, 17, 0.078, -0.02],
+    [-54, -118, 54, 20, 3.6, 0.045, -0.08],
+    [-8, -28, 112, 34, 7.2, 0.07, 0.04],
+    [26, 72, 92, 26, 10.2, 0.055, -0.14],
+    [18, 134, 84, 28, 13.4, 0.045, 0.1],
+    [-18, 190, 134, 40, 17, 0.07, -0.02],
   ] as const;
 
   patches.forEach(([x, z, width, depth, lift, opacity, rotation], index) => {
@@ -1062,11 +1060,11 @@ export class WorldRenderer {
   private readonly waterRipples: WaterRippleSource[] = [];
   private readonly waterRippleActorStates = new Map<string, WaterRippleActorState>();
   private readonly cameraCollisionMeshes: Mesh[] = [];
-  private readonly gameplayFog = new FogExp2("#e8f1ec", 0.0011);
+  private readonly gameplayFog = new FogExp2("#e6f1ec", 0.00118);
   private readonly lowlandBackground = new Color("#e7fbff");
   private readonly highlandBackground = new Color("#dceff8");
-  private readonly lowlandFogColor = new Color("#e9f1ea");
-  private readonly highlandFogColor = new Color("#dbe8ec");
+  private readonly lowlandFogColor = new Color("#e4f0ea");
+  private readonly highlandFogColor = new Color("#d8e6eb");
   private readonly lowlandSunColor = new Color("#fff1c8");
   private readonly highlandSunColor = new Color("#e8f2ff");
   private readonly lowlandSkyFillColor = new Color("#c7f5ff");
@@ -1506,6 +1504,7 @@ export class WorldRenderer {
     mapLookdown = false,
     recruitPressed = false,
     regroupPressed = false,
+    viewCamera: Camera,
   ) {
     if (regroupPressed) {
       this.mossu.triggerKaruCall();
@@ -1523,7 +1522,7 @@ export class WorldRenderer {
     this.mossu.update(frame.player, dt);
     this.updateMossuContactShadow(frame, mapLookdown);
     this.skyDome.position.copy(frame.player.position);
-    this.updateSceneMood(frame, dt);
+    this.updateSceneMood(frame, dt, viewCamera);
     this.scene.fog = mapLookdown ? null : this.gameplayFog;
     if (!mapLookdown) {
       this.updateWind(frame, elapsed);
@@ -1710,7 +1709,7 @@ export class WorldRenderer {
     });
   }
 
-  private updateSceneMood(frame: FrameState, dt: number) {
+  private updateSceneMood(frame: FrameState, dt: number, viewCamera: Camera) {
     const playerHeight = sampleTerrainHeight(frame.player.position.x, frame.player.position.z);
     const heightMood = MathUtils.smoothstep(playerHeight, 34, 128);
     const routeMood = MathUtils.smoothstep(frame.player.position.z, 64, 202);
@@ -1724,7 +1723,7 @@ export class WorldRenderer {
     }
 
     this.gameplayFog.color.copy(this.lowlandFogColor).lerp(this.highlandFogColor, this.elevationMood);
-    this.gameplayFog.density = MathUtils.lerp(0.00102, 0.0013, this.elevationMood);
+    this.gameplayFog.density = MathUtils.lerp(0.00108, 0.00136, this.elevationMood);
     this.sun.color.copy(this.lowlandSunColor).lerp(this.highlandSunColor, this.elevationMood);
     this.sun.intensity = MathUtils.lerp(3.42, 2.92, this.elevationMood);
     this.ambientLight.intensity = MathUtils.lerp(0.86, 0.76, this.elevationMood);
@@ -1734,6 +1733,7 @@ export class WorldRenderer {
     this.skyBounce.intensity = MathUtils.lerp(0.42, 0.5, this.elevationMood);
     this.meadowGlow.intensity = MathUtils.lerp(0.66, 0.28, this.elevationMood);
     this.alpineGlow.intensity = MathUtils.lerp(0.38, 0.72, this.elevationMood);
+    syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera);
   }
 
   private updateWaterInteractions(frame: FrameState, elapsed: number, mapLookdown: boolean) {
@@ -1897,7 +1897,7 @@ export class WorldRenderer {
       const x = origin.x + Math.cos(angle) * radius;
       const z = origin.z + Math.sin(angle) * radius;
       const y = sampleTerrainHeight(x, z) + 0.04;
-      sampleTerrainNormalInto(this.landingNormal, x, z);
+      this.landingNormal.copy(sampleTerrainNormal(x, z));
 
       particle.origin.set(x, y, z);
       particle.normal.copy(this.landingNormal);

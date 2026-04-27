@@ -552,6 +552,7 @@ export class GameApp {
       this.viewMode === "map_lookdown",
       faunaRecruitPressed,
       faunaRegroupPressed,
+      this.followCamera.camera,
     );
     this.characterPreview.update(dt, this.characterScreenOpen);
     this.syncHudForFrame(dt);

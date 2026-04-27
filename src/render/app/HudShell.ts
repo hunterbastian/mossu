@@ -177,9 +177,24 @@ export class HudShell {
     prompt: document.createElement("div"),
     hint: document.createElement("div"),
   };
+  private readonly flavorPingToast = document.createElement("p");
+  private flavorPingHideTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(previewElement: HTMLElement) {
     this.element = this.buildHud(previewElement);
+  }
+
+  showFlavorPing(text: string) {
+    if (this.flavorPingHideTimer !== null) {
+      clearTimeout(this.flavorPingHideTimer);
+      this.flavorPingHideTimer = null;
+    }
+    this.flavorPingToast.textContent = text;
+    this.flavorPingToast.classList.add("hud-flavor-ping--visible");
+    this.flavorPingHideTimer = setTimeout(() => {
+      this.flavorPingToast.classList.remove("hud-flavor-ping--visible");
+      this.flavorPingHideTimer = null;
+    }, 3600);
   }
 
   update({
@@ -797,6 +812,10 @@ export class HudShell {
 
     top.append(objective, status);
 
+    this.flavorPingToast.className = "hud-flavor-ping";
+    this.flavorPingToast.setAttribute("role", "status");
+    this.flavorPingToast.setAttribute("aria-live", "polite");
+
     const buildMeta = document.createElement("div");
     buildMeta.className = "hud-build-meta";
     buildMeta.textContent = `v${__MOSSU_VERSION__} · ${__MOSSU_BUILD_TIME__.slice(0, 10)}`;
@@ -805,6 +824,7 @@ export class HudShell {
 
     hud.append(
       top,
+      this.flavorPingToast,
       bottom,
       buildMeta,
       this.buildPickupCard(),

@@ -47,6 +47,8 @@ export interface WorldLandmark {
   type: LandmarkType;
   position: Vector3;
   title: string;
+  /** Short one-line toast when the player first enters the landmark's ping radius (session-scoped). */
+  flavorPing?: string;
   interactionRadius?: number;
   inventoryEntry?: {
     title: string;
@@ -1446,6 +1448,7 @@ export const worldLandmarks: WorldLandmark[] = [
     type: "burrow",
     position: new Vector3(-44, sampleTerrainHeight(-44, -134), -134),
     title: "Burrow Hollow",
+    flavorPing: "The hollow still hums with the memory of first shelter.",
     interactionRadius: 16,
     inventoryEntry: {
       title: "Moss Quilt Scrap",
@@ -1457,6 +1460,7 @@ export const worldLandmarks: WorldLandmark[] = [
     type: "lone_tree",
     position: new Vector3(-4, sampleTerrainHeight(-4, -38), -38),
     title: "Amber Tree Knoll",
+    flavorPing: "Sun pools here; the meadow opens below.",
     interactionRadius: 15,
     inventoryEntry: {
       title: "Amber Seed",
@@ -1468,6 +1472,7 @@ export const worldLandmarks: WorldLandmark[] = [
     type: "river_bend",
     position: new Vector3(sampleRiverCenter(24), sampleTerrainHeight(sampleRiverCenter(24), 24), 24),
     title: "Silver Bend",
+    flavorPing: "The river slows and gathers light.",
     interactionRadius: 15,
     inventoryEntry: {
       title: "River Glass",
@@ -1479,6 +1484,7 @@ export const worldLandmarks: WorldLandmark[] = [
     type: "pass",
     position: new Vector3(24, sampleTerrainHeight(24, 88), 88),
     title: "Fir Gate",
+    flavorPing: "Fir shade begins; the climb finds its rhythm.",
     interactionRadius: 15,
     inventoryEntry: {
       title: "Fir Tassel",
@@ -1490,6 +1496,7 @@ export const worldLandmarks: WorldLandmark[] = [
     type: "pass",
     position: new Vector3(20, sampleTerrainHeight(20, 108), 108),
     title: "Whisper Pass",
+    flavorPing: "The wind tugs toward the high shelves.",
     interactionRadius: 15,
     inventoryEntry: {
       title: "Pass Thread",
@@ -1501,6 +1508,7 @@ export const worldLandmarks: WorldLandmark[] = [
     type: "cliff_path",
     position: new Vector3(42, sampleTerrainHeight(42, 134), 134),
     title: "Mistfall Basin",
+    flavorPing: "Spray and cold air—the basin listens upstream.",
     interactionRadius: 15,
     inventoryEntry: {
       title: "Mistdrop Vial",
@@ -1512,6 +1520,7 @@ export const worldLandmarks: WorldLandmark[] = [
     type: "cliff_path",
     position: new Vector3(10, sampleTerrainHeight(10, 154), 154),
     title: "Windstep Shelf",
+    flavorPing: "Updrafts braid along the shelf stones.",
     interactionRadius: 15,
     inventoryEntry: {
       title: "Shelf Chime",
@@ -1523,6 +1532,7 @@ export const worldLandmarks: WorldLandmark[] = [
     type: "overlook",
     position: new Vector3(-26, sampleTerrainHeight(-26, 168), 168),
     title: "Cloudback Ridge",
+    flavorPing: "Cloudback spills open to the sky.",
     interactionRadius: 15,
     inventoryEntry: {
       title: "Cloudback Feather",
@@ -1534,6 +1544,7 @@ export const worldLandmarks: WorldLandmark[] = [
     type: "cliff_path",
     position: new Vector3(16, sampleTerrainHeight(16, 186), 186),
     title: "Ridge Saddle",
+    flavorPing: "Alpine lichen marks the seam before the crown.",
     interactionRadius: 15,
     inventoryEntry: {
       title: "Lichen Knot",
@@ -1545,6 +1556,7 @@ export const worldLandmarks: WorldLandmark[] = [
     type: "ridge_shrine",
     position: new Vector3(2, sampleTerrainHeight(2, 214), 214),
     title: "Moss Crown Shrine",
+    flavorPing: "The crown waits—soft moss on sunlit stone.",
     interactionRadius: 18,
     inventoryEntry: {
       title: "Shrine Crown Moss",
