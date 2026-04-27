@@ -1560,14 +1560,15 @@ export function buildGroundLayer() {
       for (let j = 0; j < bloomCount; j += 1) {
         const localAngle = (j / Math.max(1, bloomCount)) * Math.PI * 2;
         const localRadius = 0.35 + (j % 3) * 0.16;
+        const flowerJitter = forestHash(x, z, i * 17 + j * 23);
         props.addFlower(
           x + Math.cos(localAngle) * localRadius,
           y,
           z + Math.sin(localAngle) * localRadius,
           forestHash(x, z, i * 17 + j) * Math.PI * 2,
           flowerPalette[(i + j) % flowerPalette.length],
-          0.66 + ((i + j) % 3) * 0.08,
-          pocket.zone === "foothills" ? 0.9 : 0.72 + (j % 2) * 0.08,
+          0.58 + ((i + j) % 3) * 0.1 + flowerJitter * 0.14,
+          pocket.zone === "foothills" ? 0.9 : 0.7 + (j % 2) * 0.1 + flowerJitter * 0.06,
         );
       }
     }

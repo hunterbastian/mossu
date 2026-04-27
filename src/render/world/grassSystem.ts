@@ -19,6 +19,7 @@ import {
   sampleBiomeZone,
   sampleGrassDensity,
   sampleHabitatLayer,
+  sampleRiverDampBankMask,
   sampleRiverNookMask,
   sampleRiverWetness,
   sampleTerrainHeight,
@@ -235,6 +236,7 @@ export function createGrassMesh(
     const openingMask = sampleOpeningMeadowMask(x, z);
     const riverNookMask = sampleRiverNookMask(x, z);
     const riverWetness = sampleRiverWetness(x, z);
+    const dampBankMask = sampleRiverDampBankMask(x, z);
     const fieldCluster = Math.sin(x * 0.016 + z * 0.009 - 0.8) * 0.5 + 0.5;
     const placementBias =
       zone === "plains" || zone === "hills"
@@ -299,7 +301,9 @@ export function createGrassMesh(
     color
       .lerp(new Color("#b7df75"), habitat.meadow * 0.16)
       .lerp(new Color("#6f8a5c"), habitat.forest * 0.18)
-      .lerp(new Color("#7f9d69"), habitat.shore * 0.18);
+      .lerp(new Color("#7f9d69"), habitat.shore * 0.18)
+      .lerp(new Color("#5d7a62"), dampBankMask * 0.22)
+      .lerp(new Color("#6a9080"), dampBankMask * 0.12);
     tints[placed * 3] = color.r;
     tints[placed * 3 + 1] = color.g;
     tints[placed * 3 + 2] = color.b;

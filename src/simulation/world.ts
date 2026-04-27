@@ -1245,19 +1245,29 @@ export function sampleWindField(x: number, z: number, height: number): WindField
 }
 
 export function sampleBiomeZone(x: number, z: number, height = sampleTerrainHeight(x, z)): BiomeZone {
-  if (height > 178 || z > 206) {
+  // Summit: require deep north progress (gate) and enough lift — avoids ridge overlooks reading as shrine.
+  const peakGate = smootherStep(198, 222, z);
+  const peakLift = smootherStep(92, 158, height);
+  const peakScore = peakGate * (0.52 + 0.48 * peakLift);
+  if (peakScore > 0.52) {
     return "peak_shrine";
   }
-  if (height > 150 || z > 166) {
+
+  // Wide height ramp + damped north — long foothills↔alpine blend without z alone jumping tiers.
+  const byHeight = smootherStep(12, 185, height);
+  const byNorth = smootherStep(-102, 218, z) * 0.65;
+  const journey = Math.max(byHeight, byNorth);
+
+  if (journey > 0.88) {
     return "ridge";
   }
-  if (height > 118 || z > 122) {
+  if (journey > 0.54) {
     return "alpine";
   }
-  if (height > 48 || z > 42) {
+  if (journey > 0.3) {
     return "foothills";
   }
-  if (z > -70) {
+  if (journey > 0.1) {
     return "hills";
   }
   return "plains";

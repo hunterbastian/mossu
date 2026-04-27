@@ -98,6 +98,137 @@ canvas.is-pointer-locked {
   min-width: 19rem;
 }
 
+.hud-build-meta {
+  position: fixed;
+  right: clamp(0.55rem, 1vw, 0.85rem);
+  bottom: clamp(0.45rem, 0.9vw, 0.72rem);
+  z-index: 12;
+  margin: 0;
+  padding: 0.22rem 0.42rem;
+  border-radius: 0.45rem;
+  background: rgba(231, 249, 255, 0.42);
+  border: 1px solid rgba(166, 224, 244, 0.52);
+  color: rgba(30, 70, 100, 0.55);
+  font-family: var(--ui-code);
+  font-size: 0.58rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  pointer-events: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.mossu-error-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 4vw, 2.2rem);
+  background:
+    radial-gradient(circle at 50% 80%, rgba(255, 230, 230, 0.35), transparent 42%),
+    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.5), transparent 38%),
+    linear-gradient(180deg, rgba(167, 236, 255, 0.72) 0%, rgba(239, 255, 222, 0.55) 100%);
+  backdrop-filter: blur(10px) saturate(1.05);
+  pointer-events: auto;
+}
+
+.mossu-error-overlay__panel {
+  width: min(26rem, 100%);
+  padding: clamp(1.1rem, 3vw, 1.55rem);
+  border-radius: 1rem;
+  border: 1px solid rgba(232, 180, 180, 0.55);
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.92), transparent 46%),
+    linear-gradient(165deg, rgba(255, 248, 248, 0.94) 0%, rgba(235, 249, 255, 0.88) 100%);
+  box-shadow: var(--ui-shadow), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  color: var(--ui-ink);
+  font-family: var(--ui-sans);
+}
+
+.mossu-error-overlay__title {
+  margin: 0 0 0.55rem;
+  font-size: clamp(1.05rem, 2.4vw, 1.28rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: rgba(55, 28, 32, 0.92);
+}
+
+.mossu-error-overlay__body {
+  margin: 0 0 0.85rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--ui-ink-soft);
+}
+
+.mossu-error-overlay__technical {
+  margin: 0 0 1rem;
+  max-height: 9rem;
+  overflow: auto;
+  padding: 0.55rem 0.62rem;
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(166, 224, 244, 0.65);
+  font-family: var(--ui-code);
+  font-size: 0.62rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: rgba(33, 73, 100, 0.88);
+}
+
+.mossu-error-overlay__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.mossu-error-overlay__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.35rem;
+  padding: 0 1.05rem;
+  border-radius: 0.72rem;
+  font-family: var(--ui-sans);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 120ms ease;
+}
+
+.mossu-error-overlay__btn--primary {
+  border-color: rgba(56, 171, 232, 0.65);
+  background: linear-gradient(180deg, rgba(131, 215, 255, 0.95), rgba(56, 171, 232, 0.88));
+  color: rgba(18, 52, 72, 0.96);
+  box-shadow: 0 0.35rem 0 rgba(32, 114, 171, 0.22);
+}
+
+.mossu-error-overlay__btn--primary:hover {
+  filter: brightness(1.03);
+}
+
+.mossu-error-overlay__btn--primary:active {
+  transform: translateY(1px);
+}
+
+.mossu-error-overlay__btn--ghost {
+  border-color: rgba(166, 224, 244, 0.85);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ui-blue-dark);
+}
+
+.mossu-error-overlay__btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.78);
+}
+
 .hud {
   position: fixed;
   inset: 0;
@@ -4608,21 +4739,22 @@ canvas.is-pointer-locked {
 }
 
 .world-map__region-patch {
-  opacity: 0.72;
-  stroke: rgba(255, 255, 255, 0.2);
-  stroke-width: 2;
+  opacity: 0.82;
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1.35;
+  paint-order: stroke fill;
 }
 
 .world-map__region-patch--forest {
-  fill: rgba(77, 140, 72, 0.68);
+  fill: rgba(62, 124, 108, 0.5);
 }
 
 .world-map__region-patch--meadow {
-  fill: rgba(225, 238, 130, 0.48);
+  fill: rgba(186, 212, 152, 0.38);
 }
 
 .world-map__region-patch--ridge {
-  fill: rgba(223, 231, 208, 0.62);
+  fill: rgba(148, 184, 182, 0.45);
 }
 
 .world-map__route-pocket {

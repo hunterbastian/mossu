@@ -20,8 +20,9 @@ import { FollowCamera } from "./FollowCamera";
 import { HudShell } from "./HudShell";
 import { InterfaceAudio, isButtonLikeUiTarget } from "./InterfaceAudio";
 import { MovementAudio } from "./MovementAudio";
+import { GameplayFeedbackAudio } from "./GameplayFeedbackAudio";
 import { routeLandmarks } from "./worldMap";
-import { WorldRenderer } from "../world/WorldRenderer";
+import type { WorldRenderer as WorldRendererType } from "../world/WorldRenderer";
 
 const QUALITY_SAMPLE_SECONDS = 0.55;
 const QUALITY_MIN_SAMPLE_FRAMES = 12;
@@ -66,6 +67,11 @@ const PAUSED_INPUT: InputSnapshot = {
   mapFocusNextPressed: false,
   escapePressed: false,
 };
+
+function isLowQuality(params: URLSearchParams): boolean {
+  const q = params.get("quality")?.toLowerCase();
+  return q === "low" || params.has("lowQuality");
+}
 
 function getRequestedRendererBackend(params: URLSearchParams): RequestedRendererBackend {
   const rendererParam = params.get("renderer")?.toLowerCase();
@@ -145,11 +151,13 @@ export class GameApp {
   private readonly state = new GameState();
   private readonly input = new InputController(window);
   private readonly followCamera: FollowCamera;
-  private readonly world: WorldRenderer;
+  private readonly world: WorldRendererType;
   private readonly characterPreview = new CharacterPreview();
   private readonly interfaceAudio = new InterfaceAudio();
   private readonly movementAudio = new MovementAudio();
+  private readonly gameplayFeedback = new GameplayFeedbackAudio();
   private readonly waterAudio = new AmbientWaterAudio();
+  private readonly qualityLow: boolean;
   private readonly clock = new Clock();
   private readonly hud: HudShell;
   private readonly titleScreen: HTMLDivElement;
@@ -164,9 +172,9 @@ export class GameApp {
   private focusedCollectionId: string | null = null;
   private suppressPauseOnPointerUnlock = false;
   private suppressPointerUnlockPauseUntil = 0;
-  private readonly maxPixelRatio = Math.min(window.devicePixelRatio, 1.1);
-  private readonly minPixelRatio = Math.min(this.maxPixelRatio, 0.6);
-  private activePixelRatio = Math.min(this.maxPixelRatio, 1);
+  private readonly maxPixelRatio: number;
+  private readonly minPixelRatio: number;
+  private activePixelRatio: number;
   private frameTimeAccumulator = 0;
   private frameSampleAccumulator = 0;
   private hudUpdateAccumulator = 0;
@@ -188,17 +196,24 @@ export class GameApp {
   static async create(container: HTMLElement) {
     const params = new URLSearchParams(window.location.search);
     const rendererBundle = await createRendererBundle(params);
-    return new GameApp(container, params, rendererBundle);
+    const { WorldRenderer } = await import("../world/WorldRenderer");
+    return new GameApp(container, params, rendererBundle, WorldRenderer);
   }
 
   private constructor(
     private readonly container: HTMLElement,
     params: URLSearchParams,
     rendererBundle: RendererBundle,
+    WorldRendererCtor: typeof import("../world/WorldRenderer").WorldRenderer,
   ) {
     const debugSpiritCloseup = params.has("spiritCloseup");
     this.cameraDebugEnabled = params.has("cameraDebug");
     this.perfDebugEnabled = params.has("perfDebug");
+    this.qualityLow = isLowQuality(params);
+    const pixelCap = this.qualityLow ? 0.85 : 1.1;
+    this.maxPixelRatio = Math.min(window.devicePixelRatio, pixelCap);
+    this.minPixelRatio = Math.min(this.maxPixelRatio, this.qualityLow ? 0.5 : 0.6);
+    this.activePixelRatio = Math.min(this.maxPixelRatio, 1);
     this.renderer = rendererBundle.renderer;
     this.requestedRendererBackend = rendererBundle.requestedBackend;
     this.activeRendererBackend = rendererBundle.activeBackend;
@@ -213,12 +228,12 @@ export class GameApp {
     this.container.appendChild(this.renderer.domElement);
 
     this.followCamera = new FollowCamera(this.renderer.domElement);
-    this.world = new WorldRenderer(this.scene, {
+    this.world = new WorldRendererCtor(this.scene, {
       debugSpiritCloseup,
       webGpuCompatibleMaterials: this.activeRendererBackend !== "webgl",
     });
     this.followCamera.setCollisionMeshes(this.world.getCameraCollisionMeshes());
-    if (isWebGlRenderer(this.renderer)) {
+    if (isWebGlRenderer(this.renderer) && !this.qualityLow) {
       this.composer = new EffectComposer(this.renderer);
       this.composer.setPixelRatio(this.activePixelRatio);
       this.composer.setSize(window.innerWidth, window.innerHeight);
@@ -304,6 +319,7 @@ export class GameApp {
     this.characterPreview.dispose();
     this.interfaceAudio.dispose();
     this.movementAudio.dispose();
+    this.gameplayFeedback.dispose();
     this.waterAudio.dispose();
     this.composer?.dispose();
     this.cameraDebugPanel?.remove();
@@ -436,6 +452,8 @@ export class GameApp {
     const input = this.input.sample();
     let faunaRecruitPressed = false;
     let faunaRegroupPressed = false;
+    let preZoneForFeedback: (typeof this.state.frame.currentZone) | null = null;
+    let preSwimForFeedback: boolean | null = null;
 
     if (this.titleScreenOpen) {
       this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
@@ -492,7 +510,28 @@ export class GameApp {
         if (!input.interactHeld) {
           this.faunaRegroupReady = true;
         }
+        preZoneForFeedback = this.state.frame.currentZone;
+        preSwimForFeedback = this.state.frame.player.swimming;
         this.state.update(dt, input, this.followCamera.getYaw());
+      }
+    }
+
+    if (preZoneForFeedback !== null && preSwimForFeedback !== null) {
+      const frame = this.state.frame;
+      if (preZoneForFeedback !== frame.currentZone) {
+        this.gameplayFeedback.playZoneChange();
+        this.followCamera.kickPolar(0.022);
+      }
+      if (preSwimForFeedback !== frame.player.swimming) {
+        this.gameplayFeedback.playSwimSurface(frame.player.swimming);
+      }
+      if (frame.player.justLanded) {
+        this.gameplayFeedback.playLand(frame.player.landingImpact);
+        this.followCamera.kickPolar(-0.055 * Math.min(1.2, frame.player.landingImpact));
+      }
+      if (frame.lastCatalogedLandmarkId || frame.lastGatheredForageableId) {
+        this.gameplayFeedback.playInteract();
+        this.followCamera.kickPolar(0.018);
       }
     }
 
@@ -694,6 +733,7 @@ export class GameApp {
       maxPixelRatio: Number(this.maxPixelRatio.toFixed(2)),
       minPixelRatio: Number(this.minPixelRatio.toFixed(2)),
       bloomEnabled: this.shouldUseBloom(),
+      qualityLow: this.qualityLow,
       requestedBackend: this.requestedRendererBackend,
       activeBackend: this.activeRendererBackend,
       webGpuAvailable: this.webGpuAvailable,
@@ -721,7 +761,7 @@ export class GameApp {
     const perf = this.getPerformanceSnapshot();
     this.perfDebugPanel.textContent = [
       `perf ${perf.fps}fps  avg ${perf.frameMs}ms  raw ${perf.latestFrameMs}ms`,
-      `quality avg ${perf.qualitySampleFrameMs}ms  pixelRatio ${perf.pixelRatio} (${perf.minPixelRatio}-${perf.maxPixelRatio})  bloom ${perf.bloomEnabled ? "on" : "off"}  mapZoom ${perf.mapZoom.toFixed(2)}`,
+      `quality avg ${perf.qualitySampleFrameMs}ms  pixelRatio ${perf.pixelRatio} (${perf.minPixelRatio}-${perf.maxPixelRatio})  bloom ${perf.bloomEnabled ? "on" : "off"}  lowQuality ${this.qualityLow ? "yes" : "no"}  mapZoom ${perf.mapZoom.toFixed(2)}`,
       `backend ${perf.activeBackend}  requested ${perf.requestedBackend}  webgpu ${perf.webGpuAvailable ? "available" : "unavailable"}${perf.rendererFallbackReason ? `  fallback ${perf.rendererFallbackReason}` : ""}`,
       `renderer calls ${perf.renderer.calls}  tris ${perf.renderer.triangles}  lines ${perf.renderer.lines}  points ${perf.renderer.points}`,
       `memory geometries ${perf.memory.geometries}  textures ${perf.memory.textures}`,
@@ -1012,6 +1052,7 @@ export class GameApp {
     this.pauseMenuOpen = false;
     this.characterScreenOpen = false;
     this.movementAudio.unlock();
+    this.gameplayFeedback.unlock();
     this.waterAudio.unlock();
     this.titleScreen.classList.add("title-screen--hidden");
     this.titleScreen.setAttribute("aria-hidden", "true");

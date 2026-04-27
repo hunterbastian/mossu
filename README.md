@@ -35,3 +35,5 @@ npm run build
 ```
 
 Use `npm run build` before treating a pass as complete.
+
+For **run commands, `?perfDebug=1`, `?modelViewer`, WebGPU, and `quality=low`**, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).

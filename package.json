@@ -8,6 +8,7 @@
     "test:contracts": "tsc -p tsconfig.contracts.json && esbuild tests/contracts/runContracts.ts --bundle --platform=node --format=esm --outfile=.contract-test-build/runContracts.mjs && node .contract-test-build/runContracts.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "test:e2e": "playwright test",
     "qa": "npm run test:contracts && npm run build"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
     "three-mesh-bvh": "^0.9.9"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/three": "^0.184.0",
     "playwright": "^1.59.1",
     "typescript": "^5.9.3",

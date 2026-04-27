@@ -1,14 +1,59 @@
 {
   "version": 1,
   "transcripts": {
-    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/760b4534-e52b-4937-a20e-90afa02b0a0d/760b4534-e52b-4937-a20e-90afa02b0a0d.jsonl": {
-      "mtimeMs": 1777147731687.28
-    },
     "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/df601a5e-1b41-45e6-893b-0ba7ed559268/df601a5e-1b41-45e6-893b-0ba7ed559268.jsonl": {
-      "mtimeMs": 1777186219353.7542
+      "mtimeMs": 1777188078747.5535
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/df601a5e-1b41-45e6-893b-0ba7ed559268/subagents/1ce12037-b8a4-45df-bbbe-549be1321b8c.jsonl": {
+      "mtimeMs": 1777186473881.3022
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/df601a5e-1b41-45e6-893b-0ba7ed559268/subagents/80e77459-12bd-426a-b732-8c83ea9162dc.jsonl": {
+      "mtimeMs": 1777186569518.9954
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/df601a5e-1b41-45e6-893b-0ba7ed559268/subagents/c817f27e-8694-446a-bddb-fbd6b26df4b9.jsonl": {
+      "mtimeMs": 1777186644497.8916
     },
     "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/df601a5e-1b41-45e6-893b-0ba7ed559268/subagents/7d10d8a4-2ca9-4cdc-9ff9-51023423ff34.jsonl": {
       "mtimeMs": 1777171723665.5886
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/df601a5e-1b41-45e6-893b-0ba7ed559268/subagents/f7598d0d-65bd-4f29-b2bd-8df496448584.jsonl": {
+      "mtimeMs": 1777186679662.6023
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/df601a5e-1b41-45e6-893b-0ba7ed559268/subagents/d2798833-fc93-4a04-8604-2192adb9125e.jsonl": {
+      "mtimeMs": 1777186693927.9265
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/3af0e7df-fe13-490c-abaa-b9eb07ae9ba6/3af0e7df-fe13-490c-abaa-b9eb07ae9ba6.jsonl": {
+      "mtimeMs": 1777272645285.7607
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/3af0e7df-fe13-490c-abaa-b9eb07ae9ba6/subagents/41a51beb-7b65-4774-94d3-f75717cf473d.jsonl": {
+      "mtimeMs": 1777272373117.16
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/3af0e7df-fe13-490c-abaa-b9eb07ae9ba6/subagents/a2cd822e-c674-4344-85ef-e21d1b5a6d09.jsonl": {
+      "mtimeMs": 1777272702761.0842
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/3af0e7df-fe13-490c-abaa-b9eb07ae9ba6/subagents/91455f4e-9ec7-4f97-b74e-d9393a765811.jsonl": {
+      "mtimeMs": 1777272399544.313
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/3af0e7df-fe13-490c-abaa-b9eb07ae9ba6/subagents/5b783755-6bfb-49cb-89eb-9ba796d27a9c.jsonl": {
+      "mtimeMs": 1777272413012.8083
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/3af0e7df-fe13-490c-abaa-b9eb07ae9ba6/subagents/db615587-09b7-4ca8-8453-58310b986d20.jsonl": {
+      "mtimeMs": 1777272658738.8489
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/3af0e7df-fe13-490c-abaa-b9eb07ae9ba6/subagents/c7511407-db16-4ca8-aaef-6e87415cbb01.jsonl": {
+      "mtimeMs": 1777271325178.6
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/3af0e7df-fe13-490c-abaa-b9eb07ae9ba6/subagents/a5854cc7-bb43-408c-acb2-939daaa6c2d8.jsonl": {
+      "mtimeMs": 1777272569624.0762
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/3af0e7df-fe13-490c-abaa-b9eb07ae9ba6/subagents/3afa4800-8d00-4d5b-a6ca-f5871abb4fc0.jsonl": {
+      "mtimeMs": 1777272352799.531
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/3af0e7df-fe13-490c-abaa-b9eb07ae9ba6/subagents/2fce86f6-fa4b-4050-9f04-48d6adeabab6.jsonl": {
+      "mtimeMs": 1777272340924.0454
+    },
+    "/Users/hunterbastian/.cursor/projects/Users-hunterbastian-Desktop-mossu/agent-transcripts/760b4534-e52b-4937-a20e-90afa02b0a0d/760b4534-e52b-4937-a20e-90afa02b0a0d.jsonl": {
+      "mtimeMs": 1777147731687.28
     }
   }
 }

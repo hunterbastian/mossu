@@ -51,7 +51,14 @@ export interface MapAtlasMarker {
 export interface MapRegionPatch {
   id: string;
   kind: "forest" | "meadow" | "ridge";
-  path: string;
+  /** Map viewBox-space center for the silhouette `<use>`. */
+  center: MapPoint;
+  /** Rendered width of the silhouette (viewBox units). */
+  width: number;
+  /** Rendered height of the silhouette (viewBox units). */
+  height: number;
+  /** Small rotation in degrees for organic variety. */
+  rotationDeg: number;
 }
 
 const MAP_LABEL_LAYOUT: Record<string, { dx: number; dy: number; anchor: MapTextAnchor }> = {
@@ -91,16 +98,23 @@ function buildPath(points: MapPoint[], closed = false) {
   return `${commands.join(" ")}${closed ? " Z" : ""}`;
 }
 
-function buildBlobPath(center: MapPoint, radiusX: number, radiusY: number, phase: number) {
-  const points = Array.from({ length: 18 }, (_, index) => {
-    const angle = (index / 18) * Math.PI * 2;
-    const wobble = 0.92 + Math.sin(angle * 3 + phase) * 0.07 + Math.cos(angle * 5 - phase) * 0.035;
-    return {
-      x: center.x + Math.cos(angle) * radiusX * wobble,
-      y: center.y + Math.sin(angle) * radiusY * wobble,
-    };
-  });
-  return buildPath(points, true);
+/** Map-space size for a world XZ ellipse (for scaling reusable silhouettes). */
+function patchFrameFromWorldEllipse(
+  x: number,
+  z: number,
+  radiusX: number,
+  radiusY: number,
+): { center: MapPoint; width: number; height: number } {
+  const center = projectWorldToMap(x, z);
+  const east = projectWorldToMap(x + radiusX, z);
+  const north = projectWorldToMap(x, z + radiusY);
+  const width = 2 * Math.abs(east.x - center.x);
+  const height = 2 * Math.abs(north.y - center.y);
+  return {
+    center,
+    width: Math.max(width, 28),
+    height: Math.max(height, 22),
+  };
 }
 
 export const routeLandmarks = MAP_ROUTE_IDS
@@ -143,11 +157,17 @@ const mapRegionDefinitions = [
 ] as const;
 
 export const mapRegionPatches: readonly MapRegionPatch[] = mapRegionDefinitions.map(
-  ([id, kind, x, z, radiusX, radiusY, phase]) => ({
-    id,
-    kind,
-    path: buildBlobPath(projectWorldToMap(x, z), radiusX, radiusY, phase),
-  }),
+  ([id, kind, x, z, radiusX, radiusY, phase]) => {
+    const { center, width, height } = patchFrameFromWorldEllipse(x, z, radiusX, radiusY);
+    return {
+      id,
+      kind,
+      center,
+      width,
+      height,
+      rotationDeg: phase * 6.5 - 3.25,
+    };
+  },
 );
 
 export function createSvgElement<K extends keyof SVGElementTagNameMap>(tag: K) {

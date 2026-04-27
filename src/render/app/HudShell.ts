@@ -796,7 +796,22 @@ export class HudShell {
     bottom.append(bottomStack, utilityStack);
 
     top.append(objective, status);
-    hud.append(top, bottom, this.buildPickupCard(), this.buildMapOverlay(), this.buildPauseMenu(), this.buildCharacterScreen(previewElement));
+
+    const buildMeta = document.createElement("div");
+    buildMeta.className = "hud-build-meta";
+    buildMeta.textContent = `v${__MOSSU_VERSION__} · ${__MOSSU_BUILD_TIME__.slice(0, 10)}`;
+    buildMeta.title = `Build ${__MOSSU_BUILD_TIME__}`;
+    buildMeta.setAttribute("aria-hidden", "true");
+
+    hud.append(
+      top,
+      bottom,
+      buildMeta,
+      this.buildPickupCard(),
+      this.buildMapOverlay(),
+      this.buildPauseMenu(),
+      this.buildCharacterScreen(previewElement),
+    );
     return hud;
   }
 
@@ -1283,6 +1298,30 @@ export class HudShell {
 
     const defs = createSvgElement("defs");
 
+    const regionSilhouettePaths: readonly { id: string; d: string }[] = [
+      {
+        id: "map-region-silhouette-forest",
+        d: "M 20 60 C 8 40 18 15 42 12 C 60 10 82 22 88 42 C 94 58 82 82 58 88 C 38 92 22 82 20 60 Z",
+      },
+      {
+        id: "map-region-silhouette-meadow",
+        d: "M 12 50 C 12 28 32 15 50 15 C 72 15 88 32 88 52 C 88 75 68 88 48 86 C 26 84 12 72 12 50 Z",
+      },
+      {
+        id: "map-region-silhouette-ridge",
+        d: "M 8 55 Q 22 28 48 22 Q 78 18 90 42 Q 88 62 62 78 Q 32 86 10 68 Q 6 58 8 55 Z",
+      },
+    ];
+    regionSilhouettePaths.forEach(({ id, d }) => {
+      const sym = createSvgElement("symbol");
+      sym.id = id;
+      sym.setAttribute("viewBox", "0 0 100 100");
+      const path = createSvgElement("path");
+      path.setAttribute("d", d);
+      sym.append(path);
+      defs.append(sym);
+    });
+
     const islandGradient = createSvgElement("linearGradient");
     islandGradient.id = "world-map-island-gradient";
     islandGradient.setAttribute("x1", "0%");
@@ -1339,10 +1378,22 @@ export class HudShell {
     regionLayer.classList.add("world-map__region-layer");
     regionLayer.setAttribute("clip-path", "url(#world-map-island-clip)");
     mapRegionPatches.forEach((region) => {
-      const patch = createSvgElement("path");
-      patch.classList.add("world-map__region-patch", `world-map__region-patch--${region.kind}`);
-      patch.setAttribute("d", region.path);
-      regionLayer.append(patch);
+      const patchGroup = createSvgElement("g");
+      patchGroup.classList.add("world-map__region-patch", `world-map__region-patch--${region.kind}`);
+      patchGroup.setAttribute(
+        "transform",
+        `translate(${region.center.x.toFixed(1)} ${region.center.y.toFixed(1)}) rotate(${region.rotationDeg.toFixed(2)})`,
+      );
+      const usePatch = createSvgElement("use");
+      usePatch.setAttribute("href", `#map-region-silhouette-${region.kind}`);
+      const w = region.width;
+      const h = region.height;
+      usePatch.setAttribute("x", (-w / 2).toFixed(1));
+      usePatch.setAttribute("y", (-h / 2).toFixed(1));
+      usePatch.setAttribute("width", w.toFixed(1));
+      usePatch.setAttribute("height", h.toFixed(1));
+      patchGroup.append(usePatch);
+      regionLayer.append(patchGroup);
     });
 
     const pocketGroup = createSvgElement("g");

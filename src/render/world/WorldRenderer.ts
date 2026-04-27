@@ -255,12 +255,12 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color("#65864f"), habitat.forest * 0.12)
     .lerp(new Color("#7f9b78"), habitat.shore * 0.14)
     .lerp(paintedEarth, paintedGround * (0.34 + (1 - slopeRock) * 0.22))
-    .lerp(wornDirt, routeDirt * 0.58 * (1 - rockMask * 0.88))
+    .lerp(wornDirt, routeDirt * 0.64 * (1 - rockMask * 0.88))
     .lerp(sandbar, sandbarLine * 0.34)
-    .lerp(new Color("#5d9581"), wetBankLine * 0.24)
+    .lerp(new Color("#4a8576"), wetBankLine * 0.32)
     .lerp(new Color("#748b69"), coveShade * 0.13)
-    .lerp(new Color("#86a978"), waterShoreMask * 0.16)
-    .lerp(new Color("#c6b987"), dryLipLine * 0.28)
+    .lerp(new Color("#8aac7a"), waterShoreMask * 0.22)
+    .lerp(new Color("#c6b987"), dryLipLine * 0.34)
     .lerp(new Color("#f0d985"), meadowBloom * (0.36 + openingMask * 0.2))
     .lerp(rock, rockMask * (1 - snowMask * 0.46))
     .lerp(snow, snowMask);
@@ -618,11 +618,11 @@ function buildShadowPockets() {
 function buildValleyMist() {
   const group = new Group();
   const patches = [
-    [-54, -118, 54, 20, 3.6, 0.045, -0.08],
-    [-8, -28, 112, 34, 7.2, 0.07, 0.04],
-    [26, 72, 92, 26, 10.2, 0.055, -0.14],
-    [18, 134, 84, 28, 13.4, 0.045, 0.1],
-    [-18, 190, 134, 40, 17, 0.07, -0.02],
+    [-54, -118, 54, 20, 3.6, 0.052, -0.08],
+    [-8, -28, 112, 34, 7.2, 0.078, 0.04],
+    [26, 72, 92, 26, 10.2, 0.062, -0.14],
+    [18, 134, 84, 28, 13.4, 0.052, 0.1],
+    [-18, 190, 134, 40, 17, 0.078, -0.02],
   ] as const;
 
   patches.forEach(([x, z, width, depth, lift, opacity, rotation], index) => {
@@ -1059,11 +1059,11 @@ export class WorldRenderer {
   private readonly waterRipples: WaterRippleSource[] = [];
   private readonly waterRippleActorStates = new Map<string, WaterRippleActorState>();
   private readonly cameraCollisionMeshes: Mesh[] = [];
-  private readonly gameplayFog = new FogExp2("#e6f1ec", 0.00118);
+  private readonly gameplayFog = new FogExp2("#e8f1ec", 0.0011);
   private readonly lowlandBackground = new Color("#e7fbff");
   private readonly highlandBackground = new Color("#dceff8");
-  private readonly lowlandFogColor = new Color("#e4f0ea");
-  private readonly highlandFogColor = new Color("#d8e6eb");
+  private readonly lowlandFogColor = new Color("#e9f1ea");
+  private readonly highlandFogColor = new Color("#dbe8ec");
   private readonly lowlandSunColor = new Color("#fff1c8");
   private readonly highlandSunColor = new Color("#e8f2ff");
   private readonly lowlandSkyFillColor = new Color("#c7f5ff");
@@ -1721,7 +1721,7 @@ export class WorldRenderer {
     }
 
     this.gameplayFog.color.copy(this.lowlandFogColor).lerp(this.highlandFogColor, this.elevationMood);
-    this.gameplayFog.density = MathUtils.lerp(0.00108, 0.00136, this.elevationMood);
+    this.gameplayFog.density = MathUtils.lerp(0.00102, 0.0013, this.elevationMood);
     this.sun.color.copy(this.lowlandSunColor).lerp(this.highlandSunColor, this.elevationMood);
     this.sun.intensity = MathUtils.lerp(3.42, 2.92, this.elevationMood);
     this.ambientLight.intensity = MathUtils.lerp(0.86, 0.76, this.elevationMood);

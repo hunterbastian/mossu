@@ -142,24 +142,24 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
   },
   swim: {
     name: "swim",
-    distance: 34,
-    speedDistanceBoost: 0.55,
-    terrainDistanceBoost: 0.7,
+    distance: 32,
+    speedDistanceBoost: 0.62,
+    terrainDistanceBoost: 0.75,
     focusHeight: 4.75,
     terrainFocusLift: 0.25,
-    lookAheadBase: 0.045,
-    lookAheadSpeed: 0.06,
+    lookAheadBase: 0.052,
+    lookAheadSpeed: 0.07,
     polar: 1.42,
     terrainPolarLift: 0,
     speedPolarLift: 0.02,
     fov: 50,
     shoulder: 0.1,
-    yawResponsiveness: 0.52,
-    focusDamping: 3.8,
-    distanceDamping: 3.4,
-    profileDamping: 3.2,
-    positionDamping: 5.2,
-    targetDamping: 4.2,
+    yawResponsiveness: 0.58,
+    focusDamping: 4.1,
+    distanceDamping: 3.65,
+    profileDamping: 3.35,
+    positionDamping: 5.45,
+    targetDamping: 4.35,
   },
   ridge: {
     name: "ridge",
@@ -285,6 +285,8 @@ export class FollowCamera {
   private initialized = false;
   private manualLookCooldown = 0;
   private distanceBias = 0;
+  private lastProfileName: CameraProfileName = "walk";
+  private polarFeedbackKick = 0;
   private activeProfileName: CameraProfileName = "walk";
   private autoRecenterEligible = false;
   private currentDistance = DEFAULT_DISTANCE;
@@ -368,7 +370,12 @@ export class FollowCamera {
     const speedBoost = MathUtils.clamp(speed / 24, 0, 1);
     const profile = this.selectCameraProfile(player, terrainLift);
     this.activeProfileName = profile.name;
+    if (profile.name !== this.lastProfileName) {
+      this.distanceBias = 0;
+      this.lastProfileName = profile.name;
+    }
     this.manualLookCooldown = Math.max(0, this.manualLookCooldown - dt);
+    this.polarFeedbackKick = MathUtils.damp(this.polarFeedbackKick, 0, 11, dt);
 
     const focusHeightTarget = profile.focusHeight + terrainLift * profile.terrainFocusLift;
     const lookAheadTarget = profile.lookAheadBase + speedBoost * profile.lookAheadSpeed;
@@ -419,7 +426,11 @@ export class FollowCamera {
       );
 
       if (this.manualLookCooldown <= 0 && !player.fallingToVoid) {
-        const targetPolar = profile.polar + terrainLift * profile.terrainPolarLift + speedBoost * profile.speedPolarLift;
+        const targetPolar =
+          profile.polar
+          + terrainLift * profile.terrainPolarLift
+          + speedBoost * profile.speedPolarLift
+          + this.polarFeedbackKick;
         this.currentPolar = MathUtils.damp(this.currentPolar, targetPolar, profile.profileDamping, dt);
         controls._sphericalEnd.phi = MathUtils.clamp(
           this.currentPolar,
@@ -442,7 +453,11 @@ export class FollowCamera {
           const desiredCameraYaw = movementYawToTrailingCameraYaw(desiredYaw);
           const currentYaw = controls._sphericalEnd.theta;
           const delta = Math.atan2(Math.sin(desiredCameraYaw - currentYaw), Math.cos(desiredCameraYaw - currentYaw));
-          controls._sphericalEnd.theta = currentYaw + delta * (1 - Math.exp(-dt * profile.yawResponsiveness));
+          const tightFollow =
+            profile.name === "walk" && this.currentDistance <= MIN_DISTANCE + 1.35 && !player.swimming;
+          const yawGain = tightFollow ? 1.28 : 1;
+          controls._sphericalEnd.theta =
+            currentYaw + delta * (1 - Math.exp(-dt * profile.yawResponsiveness * yawGain));
         }
       }
 
@@ -584,6 +599,11 @@ export class FollowCamera {
 
   getMapZoomFactor() {
     return this.mapZoomFactor;
+  }
+
+  /** Brief polar nudge for landing / interact / zone feedback (decays automatically). */
+  kickPolar(radians: number) {
+    this.polarFeedbackKick += radians;
   }
 
   setOpeningSequenceProgress(progress: number | null) {

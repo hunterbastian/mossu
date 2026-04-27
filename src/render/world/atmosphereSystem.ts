@@ -176,7 +176,7 @@ export function buildMountainAtmosphere() {
         const puff = makeMistPuff(
           pocket.zone === "peak_shrine" ? 14 + i * 2 : pocket.zone === "ridge" ? 12 + i * 1.9 : 10 + i * 1.8,
           pocket.zone === "peak_shrine" ? "#eef6ff" : "#e2eef6",
-          pocket.zone === "peak_shrine" ? 0.16 - i * 0.02 : 0.14 - i * 0.02,
+          pocket.zone === "peak_shrine" ? 0.18 - i * 0.02 : 0.16 - i * 0.02,
         );
         const puffBaseY = i * (pocket.zone === "peak_shrine" ? 3.4 : pocket.zone === "ridge" ? 3 : 2.8);
         puff.position.set(

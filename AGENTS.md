@@ -2,9 +2,11 @@
 
 - When a model is selectable for Mossu or other multi-step work, prefer **ChatGPT 5.5 High** (GPT-5.5 High).
 - Uses **Cursor** for implementation and **OpenAI Codex** in parallel (e.g. review or second opinion).
-- For transitions between world zones, prefers **wider clearings**; when feature priority is unclear, optimize for **visual quality** (“as long as it looks good”).
+- For transitions between world zones, prefers **wider clearings** and **longer mixed transition bands** between biomes (so changes feel like travel, not a sharp line on the heightfield); when feature priority is unclear, optimize for **visual quality** (“as long as it looks good”).
 
 ## Learned Workspace Facts
 
+- `npm run qa` runs contract tests and the production Vite build—use it as the bar before treating changes as shippable.
+- Visual, shader, and interaction validation should be checked in a **real desktop browser**, not only headless or embedded automation.
 - Focused playtesting can follow `docs/PLAYTEST_CHECKLIST.md` (e.g. a walk from Burrow to Moss Crown).
 - Project-level Three.js skill files from `cloudai-x/threejs-skills` are installed under `.claude/skills/`. For Three.js rendering, lighting, materials, shaders, postprocessing, loaders, animation, geometry, textures, or interaction work, consult the matching skill before changing code. Mossu's current TypeScript setup resolves Three.js add-ons through `three/examples/jsm/...`; do not switch those imports to `three/addons/...` unless the module resolution/types are updated and `tsc --noEmit` passes.
