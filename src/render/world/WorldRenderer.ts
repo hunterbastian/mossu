@@ -1059,11 +1059,11 @@ export class WorldRenderer {
   private readonly waterRipples: WaterRippleSource[] = [];
   private readonly waterRippleActorStates = new Map<string, WaterRippleActorState>();
   private readonly cameraCollisionMeshes: Mesh[] = [];
-  private readonly gameplayFog = new FogExp2("#dff3f2", 0.00118);
+  private readonly gameplayFog = new FogExp2("#e6f1ec", 0.00118);
   private readonly lowlandBackground = new Color("#e7fbff");
   private readonly highlandBackground = new Color("#dceff8");
-  private readonly lowlandFogColor = new Color("#def4ef");
-  private readonly highlandFogColor = new Color("#d5e4ed");
+  private readonly lowlandFogColor = new Color("#e4f0ea");
+  private readonly highlandFogColor = new Color("#d8e6eb");
   private readonly lowlandSunColor = new Color("#fff1c8");
   private readonly highlandSunColor = new Color("#e8f2ff");
   private readonly lowlandSkyFillColor = new Color("#c7f5ff");

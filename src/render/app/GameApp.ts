@@ -1,4 +1,5 @@
 import {
+  ACESFilmicToneMapping,
   Clock,
   Scene,
   SRGBColorSpace,
@@ -206,6 +207,8 @@ export class GameApp {
     this.renderer.setPixelRatio(this.activePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = SRGBColorSpace;
+    this.renderer.toneMapping = ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = false;
     this.container.appendChild(this.renderer.domElement);
 

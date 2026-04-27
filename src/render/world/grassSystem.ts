@@ -532,12 +532,12 @@ export function createGrassMesh(
         meadowColor += vec3(0.07, 0.105, 0.024) * gustHighlight * (0.42 + nearDetail * 0.54);
         float rootBand = 1.0 - smoothstep(0.28, 0.34, vBladeMix);
         float tipBand = smoothstep(0.68, 0.76, vBladeMix);
-        vec3 bladeRootBand = vTint * vec3(0.3, 0.58, 0.28);
+        vec3 bladeRootBand = vTint * vec3(0.27, 0.56, 0.265);
         vec3 bladeMidBand = vTint * vec3(0.74, 1.02, 0.48) + vec3(0.025, 0.055, 0.0) * vPatchLight;
-        vec3 bladeTipBand = vTint * vec3(1.03, 1.22, 0.64) + vec3(0.05, 0.08, 0.015) * (vPatchLight + vHeroField * 0.5);
+        vec3 bladeTipBand = vTint * vec3(1.02, 1.17, 0.615) + vec3(0.048, 0.076, 0.014) * (vPatchLight + vHeroField * 0.5);
         vec3 painterBands = mix(bladeMidBand, bladeRootBand, rootBand);
         painterBands = mix(painterBands, bladeTipBand, tipBand);
-        float bandInfluence = mix(0.52, 0.24, vDistanceBlend) * (0.86 + vHeroField * 0.14);
+        float bandInfluence = mix(0.58, 0.26, vDistanceBlend) * (0.86 + vHeroField * 0.14);
         meadowColor = mix(meadowColor, painterBands, bandInfluence);
         vec3 lowlandLush = mix(meadowColor, vTint * vec3(0.72, 1.08, 0.5), (1.0 - vElevationMood) * nearDetail * 0.28);
         vec3 highlandSage = mix(vTint * vec3(0.62, 0.74, 0.58), vec3(0.63, 0.72, 0.66), vElevationMood * 0.48);

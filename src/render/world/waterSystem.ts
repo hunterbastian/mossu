@@ -780,7 +780,9 @@ function createWebGLWaterController(
           0.68
         );
         vec3 viewDir = normalize(vWaterViewDirection);
-        float fresnel = pow(1.0 - abs(viewDir.y), 2.3);
+        float ndotV = clamp(abs(viewDir.y), 0.035, 1.0);
+        float fresnelBase = pow(1.0 - ndotV, 2.52);
+        float fresnel = min(1.0, fresnelBase * (1.0 + shallowMask * 0.12 + (1.0 - channelDepth) * 0.06));
         vec3 reflectionTint = mix(uReflectionColor, uHighlightColor, smoothstep(0.48, 1.0, broadFlow * 0.4 + sideShimmer * 0.38 + sparkleNoise * 0.22));
         float highlightRibbon = smoothstep(0.5, 1.0, currentBands * 0.28 + directionalRipple * 0.22 + detailFlow * 0.24 + sideShimmer * 0.18 + sparkleNoise * 0.16 + actorRipple * 0.24);
         float highlightMask = fresnel * highlightRibbon * (0.35 + slopeBoost * 0.65) * uHighlightStrength;
