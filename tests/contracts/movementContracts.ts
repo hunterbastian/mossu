@@ -29,6 +29,8 @@ const baseInput: InputSnapshot = {
   moveY: 0,
   jumpHeld: false,
   jumpPressed: false,
+  abilityHeld: false,
+  abilityPressed: false,
   interactHeld: false,
   interactHoldSeconds: 0,
   rollHeld: false,
@@ -36,6 +38,7 @@ const baseInput: InputSnapshot = {
   inventoryTogglePressed: false,
   mapTogglePressed: false,
   mapViewResetPressed: false,
+  mapFocusNextPressed: false,
   escapePressed: false,
 };
 
@@ -51,6 +54,7 @@ function makePlayer(): PlayerState {
     rollingBoostActive: false,
     rollHoldSeconds: 0,
     rollModeReady: false,
+    floating: false,
     grounded: true,
     swimming: false,
     waterDepth: 0,
@@ -167,7 +171,38 @@ export function runMovementContracts() {
     updateStaminaAndAbilityState(floatPlayer, dt, floatRuntime, result.isFloating);
   }
   assert(!floatPlayer.grounded, "roll jump can transition into air control");
+  assert(floatPlayer.floating, "Breeze Float exposes an explicit player floating state while held in air");
   assert(floatPlayer.stamina < floatPlayer.staminaMax, "Breeze Float, not rolling, consumes stamina while Space is held in air");
+
+  const dedicatedFloatPlayer = makePlayer();
+  const dedicatedFloatRuntime = createPlayerSimulationRuntime();
+  const dedicatedFloatScratch = createMovementScratch();
+  dedicatedFloatPlayer.grounded = false;
+  dedicatedFloatPlayer.velocity.y = 0;
+  for (let i = 0; i < 8; i += 1) {
+    const dt = 1 / 60;
+    const abilityInput = {
+      ...baseInput,
+      abilityHeld: i < 4,
+      abilityPressed: i === 0,
+    };
+    tickMovementTimers(dedicatedFloatPlayer, abilityInput, dt, dedicatedFloatRuntime);
+    const result = applyMovementPhysics(dedicatedFloatPlayer, save, abilityInput, 0, dt, dedicatedFloatRuntime, dedicatedFloatScratch);
+    updateStaminaAndAbilityState(dedicatedFloatPlayer, dt, dedicatedFloatRuntime, result.isFloating);
+  }
+  assert(dedicatedFloatPlayer.floating, "Q works as a dedicated Breeze Float hold without requiring Space");
+  assert(dedicatedFloatPlayer.stamina < dedicatedFloatPlayer.staminaMax, "dedicated Breeze Float input consumes stamina while active");
+
+  const bufferedFloatPlayer = makePlayer();
+  const bufferedFloatRuntime = createPlayerSimulationRuntime();
+  const bufferedFloatScratch = createMovementScratch();
+  bufferedFloatPlayer.grounded = false;
+  bufferedFloatPlayer.velocity.y = -1.2;
+  tickMovementTimers(bufferedFloatPlayer, { ...baseInput, abilityPressed: true }, 1 / 60, bufferedFloatRuntime);
+  applyMovementPhysics(bufferedFloatPlayer, save, { ...baseInput, abilityPressed: true }, 0, 1 / 60, bufferedFloatRuntime, bufferedFloatScratch);
+  tickMovementTimers(bufferedFloatPlayer, baseInput, 1 / 60, bufferedFloatRuntime);
+  const bufferedResult = applyMovementPhysics(bufferedFloatPlayer, save, baseInput, 0, 1 / 60, bufferedFloatRuntime, bufferedFloatScratch);
+  assert(bufferedResult.isFloating, "a tapped Q buffers Breeze Float briefly after release");
 
   const flatNormal = new Vector3(0, 1, 0);
   const slopeNormal = new Vector3(0.28, 0.96, 0).normalize();

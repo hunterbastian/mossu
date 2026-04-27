@@ -22,6 +22,7 @@ export const AIR_DECELERATION = 10;
 export const JUMP_VELOCITY = 24.5;
 export const COYOTE_TIME = 0.12;
 export const JUMP_BUFFER_TIME = 0.14;
+export const BREEZE_FLOAT_BUFFER_TIME = 0.24;
 export const STAMINA_MAX = 100;
 export const STAMINA_REGEN_DELAY = 0.55;
 export const STAMINA_REGEN_GROUND = 26;

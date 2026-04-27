@@ -11,11 +11,15 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { GameState } from "../../simulation/gameState";
 import { InputController, InputSnapshot } from "../../simulation/input";
-import { sampleRiverEdgeState, sampleWindStrength } from "../../simulation/world";
+import { sampleRiverEdgeState, sampleTerrainHeight, sampleWaterAmbience, sampleWindStrength } from "../../simulation/world";
 import { ViewMode } from "../../simulation/viewMode";
+import { AmbientWaterAudio } from "./AmbientWaterAudio";
 import { CharacterPreview } from "./CharacterPreview";
 import { FollowCamera } from "./FollowCamera";
 import { HudShell } from "./HudShell";
+import { InterfaceAudio, isButtonLikeUiTarget } from "./InterfaceAudio";
+import { MovementAudio } from "./MovementAudio";
+import { routeLandmarks } from "./worldMap";
 import { WorldRenderer } from "../world/WorldRenderer";
 
 const QUALITY_SAMPLE_SECONDS = 0.55;
@@ -29,6 +33,8 @@ const BLOOM_STRENGTH = 0.14;
 const BLOOM_RADIUS = 0.48;
 const BLOOM_THRESHOLD = 0.82;
 const BLOOM_MIN_PIXEL_RATIO = 0.74;
+const OPENING_SEQUENCE_SECONDS = 4.8;
+const OPENING_SEQUENCE_SKIP_AFTER_SECONDS = 1.05;
 
 type RequestedRendererBackend = "webgl" | "webgpu" | "auto";
 type ActiveRendererBackend = "webgl" | "webgpu" | "webgpu-webgl2";
@@ -47,6 +53,8 @@ const PAUSED_INPUT: InputSnapshot = {
   moveY: 0,
   jumpHeld: false,
   jumpPressed: false,
+  abilityHeld: false,
+  abilityPressed: false,
   interactHeld: false,
   interactHoldSeconds: 0,
   rollHeld: false,
@@ -54,6 +62,7 @@ const PAUSED_INPUT: InputSnapshot = {
   inventoryTogglePressed: false,
   mapTogglePressed: false,
   mapViewResetPressed: false,
+  mapFocusNextPressed: false,
   escapePressed: false,
 };
 
@@ -137,10 +146,16 @@ export class GameApp {
   private readonly followCamera: FollowCamera;
   private readonly world: WorldRenderer;
   private readonly characterPreview = new CharacterPreview();
+  private readonly interfaceAudio = new InterfaceAudio();
+  private readonly movementAudio = new MovementAudio();
+  private readonly waterAudio = new AmbientWaterAudio();
   private readonly clock = new Clock();
   private readonly hud: HudShell;
   private readonly titleScreen: HTMLDivElement;
+  private readonly openingSequenceOverlay: HTMLDivElement;
   private titleScreenOpen = true;
+  private openingSequenceActive = false;
+  private openingSequenceStartedAt = 0;
   private viewMode: ViewMode = "third_person";
   private pauseMenuOpen = false;
   private characterScreenOpen = false;
@@ -162,6 +177,10 @@ export class GameApp {
   private cameraDebugPanel: HTMLDivElement | null = null;
   private perfDebugPanel: HTMLDivElement | null = null;
   private faunaRegroupReady = true;
+  private mapFocusedRouteIndex = -1;
+  private mapDragPointerId: number | null = null;
+  private mapDragX = 0;
+  private mapDragY = 0;
 
   private raf = 0;
 
@@ -218,6 +237,8 @@ export class GameApp {
 
     this.titleScreen = this.createTitleScreen();
     this.container.appendChild(this.titleScreen);
+    this.openingSequenceOverlay = this.createOpeningSequenceOverlay();
+    this.container.appendChild(this.openingSequenceOverlay);
 
     if (this.cameraDebugEnabled) {
       this.cameraDebugPanel = document.createElement("div");
@@ -234,8 +255,18 @@ export class GameApp {
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("keydown", this.handleTitleKeyDown);
     window.addEventListener("wheel", this.handleMapWheel, { passive: false });
+    window.addEventListener("pointermove", this.handleMapPointerMove);
+    window.addEventListener("pointerup", this.handleMapPointerUp);
+    window.addEventListener("pointercancel", this.handleMapPointerUp);
     document.addEventListener("pointerlockchange", this.handlePointerLockChange);
+    this.renderer.domElement.addEventListener("pointerdown", this.handleMapPointerDown);
+    this.container.addEventListener("pointerdown", this.handleUiPointerDown, true);
+    this.container.addEventListener("click", this.handleUiCommandClick);
+    this.container.addEventListener("keydown", this.handleUiKeyboardActivate, true);
     this.handleResize();
+    window.setTimeout(() => {
+      this.titleScreen.querySelector<HTMLButtonElement>(".title-screen__button")?.focus();
+    }, 0);
   }
 
   start() {
@@ -257,14 +288,25 @@ export class GameApp {
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.handleTitleKeyDown);
     window.removeEventListener("wheel", this.handleMapWheel);
+    window.removeEventListener("pointermove", this.handleMapPointerMove);
+    window.removeEventListener("pointerup", this.handleMapPointerUp);
+    window.removeEventListener("pointercancel", this.handleMapPointerUp);
     document.removeEventListener("pointerlockchange", this.handlePointerLockChange);
+    this.renderer.domElement.removeEventListener("pointerdown", this.handleMapPointerDown);
+    this.container.removeEventListener("pointerdown", this.handleUiPointerDown, true);
+    this.container.removeEventListener("click", this.handleUiCommandClick);
+    this.container.removeEventListener("keydown", this.handleUiKeyboardActivate, true);
     this.input.dispose();
     this.followCamera.dispose();
     this.characterPreview.dispose();
+    this.interfaceAudio.dispose();
+    this.movementAudio.dispose();
+    this.waterAudio.dispose();
     this.composer?.dispose();
     this.cameraDebugPanel?.remove();
     this.perfDebugPanel?.remove();
     this.titleScreen.remove();
+    this.openingSequenceOverlay.remove();
     this.renderer.dispose();
   }
 
@@ -275,6 +317,25 @@ export class GameApp {
       this.elapsed += dt;
       this.tick(dt, this.elapsed);
     }
+  }
+
+  debugCompleteOpeningSequence() {
+    this.completeOpeningSequence();
+  }
+
+  debugTeleportPlayerTo(x: number, z: number) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) {
+      return;
+    }
+
+    const player = this.state.frame.player;
+    player.position.set(x, sampleTerrainHeight(x, z) + 2.2, z);
+    player.velocity.set(0, 0, 0);
+    player.grounded = true;
+    player.swimming = false;
+    player.fallingToVoid = false;
+    this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
+    this.syncHud();
   }
 
   renderGameToText() {
@@ -297,6 +358,10 @@ export class GameApp {
       coordinateSystem: "x right, y up, z forward across the island",
       mode: this.viewMode,
       titleScreenOpen: this.titleScreenOpen,
+      openingSequence: {
+        active: this.openingSequenceActive,
+        progress: Number(this.getOpeningSequenceProgress().toFixed(3)),
+      },
       pauseMenuOpen: this.pauseMenuOpen,
       characterScreenOpen: this.characterScreenOpen,
       player: {
@@ -308,6 +373,7 @@ export class GameApp {
         rolling: frame.player.rolling,
         rollHoldSeconds: Number(frame.player.rollHoldSeconds.toFixed(2)),
         rollModeReady: frame.player.rollModeReady,
+        floating: frame.player.floating,
         grounded: frame.player.grounded,
         swimming: frame.player.swimming,
         waterDepth: Number(frame.player.waterDepth.toFixed(1)),
@@ -353,6 +419,10 @@ export class GameApp {
         regroupActive: faunaStats.regroupActive,
         callHeardActive: faunaStats.callHeardActive,
       },
+      audio: {
+        ...this.movementAudio.getState(),
+        waterAmbience: this.waterAudio.getState(),
+      },
       camera: this.followCamera.getDebugState(),
       performance: this.getPerformanceSnapshot(),
       qa: this.world.getQaStats(),
@@ -365,6 +435,10 @@ export class GameApp {
     let faunaRegroupPressed = false;
 
     if (this.titleScreenOpen) {
+      this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
+    } else if (this.openingSequenceActive) {
+      const progress = this.updateOpeningSequence(input);
+      this.followCamera.setOpeningSequenceProgress(this.openingSequenceActive ? progress : null);
       this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
     } else if (this.pauseMenuOpen) {
       if (input.escapePressed) {
@@ -385,7 +459,11 @@ export class GameApp {
     } else if (this.viewMode === "map_lookdown") {
       if (input.mapViewResetPressed) {
         this.followCamera.recenterMapView();
+        this.mapFocusedRouteIndex = -1;
+      } else if (input.mapFocusNextPressed) {
+        this.focusNextRouteMapMarker();
       }
+      this.followCamera.panMapViewFromInput(input.moveX, input.moveY, dt);
       if (input.escapePressed || input.mapTogglePressed) {
         this.closeMap();
       } else if (input.inventoryTogglePressed) {
@@ -415,6 +493,9 @@ export class GameApp {
       }
     }
 
+    this.updateMovementAudio(dt);
+    this.updateWaterAudio(dt);
+
     if (this.state.frame.lastCatalogedLandmarkId) {
       this.focusedCollectionId = this.state.frame.lastCatalogedLandmarkId;
     } else if (!this.focusedCollectionId && this.state.frame.interactionTarget) {
@@ -434,6 +515,37 @@ export class GameApp {
     this.syncHudForFrame(dt);
     this.renderScene();
     this.updateDebugPanels();
+  }
+
+  private updateMovementAudio(dt: number) {
+    const player = this.state.frame.player;
+    const speed = Math.hypot(player.velocity.x, player.velocity.z);
+    const shouldPlay =
+      !this.titleScreenOpen &&
+      !this.openingSequenceActive &&
+      !this.pauseMenuOpen &&
+      !this.characterScreenOpen &&
+      this.viewMode === "third_person" &&
+      player.grounded &&
+      !player.swimming &&
+      !player.fallingToVoid &&
+      speed > 1.25;
+
+    this.movementAudio.update({
+      dt,
+      shouldPlay,
+      speed,
+      rolling: player.rolling,
+    });
+  }
+
+  private updateWaterAudio(dt: number) {
+    const player = this.state.frame.player;
+    this.waterAudio.update({
+      dt,
+      ambience: sampleWaterAmbience(player.position.x, player.position.z),
+      muted: this.titleScreenOpen,
+    });
   }
 
   private renderScene() {
@@ -462,6 +574,7 @@ export class GameApp {
     const faunaStats = this.world.getFaunaStats();
     const overlayActive =
       this.titleScreenOpen ||
+      this.openingSequenceActive ||
       this.pauseMenuOpen ||
       this.characterScreenOpen ||
       this.viewMode === "map_lookdown";
@@ -470,6 +583,7 @@ export class GameApp {
       frame.player.rolling ||
       frame.player.rollHoldSeconds > 0 ||
       frame.player.rollModeReady ||
+      frame.player.floating ||
       frame.forageableTarget !== null ||
       frame.interactionTarget !== null ||
       frame.lastCatalogedLandmarkId !== null ||
@@ -490,7 +604,7 @@ export class GameApp {
   }
 
   private syncHud() {
-    this.hud.element.classList.toggle("hud--title-hidden", this.titleScreenOpen);
+    this.hud.element.classList.toggle("hud--title-hidden", this.titleScreenOpen || this.openingSequenceActive);
     this.hud.update({
       frame: this.state.frame,
       characterData: this.state.getCharacterScreenData(),
@@ -610,6 +724,8 @@ export class GameApp {
       `memory geometries ${perf.memory.geometries}  textures ${perf.memory.textures}`,
       `terrain ${perf.world.terrainVertices}v / ${perf.world.terrainTriangles}t`,
       `grass ${perf.world.grassMeshes} meshes / ${perf.world.grassInstances} inst / est ${perf.world.grassEstimatedTriangles}t`,
+      `grass impostors ${perf.world.grassImpostorMeshes} meshes / ${perf.world.grassImpostorInstances} patches / est ${perf.world.grassImpostorEstimatedTriangles}t`,
+      `grass lod ${perf.world.grassLodVisitedCells}/${perf.world.grassLodCells} cells / ${perf.world.grassLodVisitedSources}/${perf.world.grassLodSourceInstances} src`,
       `forest ${perf.world.forestMeshes} meshes / ${perf.world.forestInstances} inst / est ${perf.world.forestEstimatedTriangles}t`,
       `small props ${perf.world.smallPropMeshes} meshes / ${perf.world.smallPropInstances} inst / est ${perf.world.smallPropEstimatedTriangles}t`,
       `water ${perf.world.waterSurfaces} surfaces / ${perf.world.waterVertices}v / ${perf.world.waterTriangles}t`,
@@ -629,6 +745,75 @@ export class GameApp {
     }
     event.preventDefault();
     this.followCamera.adjustMapZoomFromWheel(event.deltaY);
+  };
+
+  private handleMapPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0 || this.viewMode !== "map_lookdown" || this.titleScreenOpen) {
+      return;
+    }
+    event.preventDefault();
+    this.mapDragPointerId = event.pointerId;
+    this.mapDragX = event.clientX;
+    this.mapDragY = event.clientY;
+    this.renderer.domElement.setPointerCapture?.(event.pointerId);
+  };
+
+  private handleMapPointerMove = (event: PointerEvent) => {
+    if (this.mapDragPointerId !== event.pointerId || this.viewMode !== "map_lookdown") {
+      return;
+    }
+    const deltaX = event.clientX - this.mapDragX;
+    const deltaY = event.clientY - this.mapDragY;
+    this.mapDragX = event.clientX;
+    this.mapDragY = event.clientY;
+    this.followCamera.panMapViewFromDrag(deltaX, deltaY);
+  };
+
+  private handleMapPointerUp = (event: PointerEvent) => {
+    if (this.mapDragPointerId !== event.pointerId) {
+      return;
+    }
+    this.mapDragPointerId = null;
+    try {
+      this.renderer.domElement.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer capture can already be released if the browser cancels a drag.
+    }
+  };
+
+  private handleUiPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0 || !isButtonLikeUiTarget(event.target)) {
+      return;
+    }
+    this.interfaceAudio.playClick();
+  };
+
+  private handleUiKeyboardActivate = (event: KeyboardEvent) => {
+    if (event.repeat || (event.key !== "Enter" && event.key !== " ") || !isButtonLikeUiTarget(event.target)) {
+      return;
+    }
+    this.interfaceAudio.playClick();
+  };
+
+  private handleUiCommandClick = (event: MouseEvent) => {
+    const commandTarget =
+      event.target instanceof Element ? event.target.closest<HTMLElement>("[data-ui-command]") : null;
+    if (!commandTarget) {
+      return;
+    }
+
+    switch (commandTarget.dataset.uiCommand) {
+      case "resume":
+        this.closePauseMenu();
+        this.focusGameplaySurface();
+        break;
+      case "handbook":
+        this.openCharacterScreen();
+        break;
+      case "map":
+        this.openMap();
+        break;
+    }
   };
 
   private handlePointerLockChange = () => {
@@ -655,34 +840,69 @@ export class GameApp {
     this.pauseMenuOpen = false;
     this.characterScreenOpen = true;
     this.closeMap();
+    this.movementAudio.stop();
     this.releaseGameplayPointerLock();
+    this.syncHud();
+    this.focusHudElement(".character-screen__tab--active");
   }
 
   private closeCharacterScreen() {
     this.characterScreenOpen = false;
+    this.syncHud();
+    this.focusGameplaySurface();
   }
 
   private openPauseMenu() {
     this.characterScreenOpen = false;
     this.pauseMenuOpen = true;
     this.closeMap();
+    this.movementAudio.stop();
     this.releaseGameplayPointerLock();
+    this.syncHud();
+    this.focusHudElement("[data-ui-command='resume']");
   }
 
   private closePauseMenu() {
     this.pauseMenuOpen = false;
+    this.syncHud();
   }
 
   private openMap() {
     this.pauseMenuOpen = false;
     this.characterScreenOpen = false;
     this.setViewMode("map_lookdown");
+    this.movementAudio.stop();
+    this.focusGameplaySurface();
   }
 
   private closeMap() {
+    this.mapDragPointerId = null;
     if (this.viewMode !== "third_person") {
       this.setViewMode("third_person");
     }
+  }
+
+  private focusNextRouteMapMarker() {
+    if (routeLandmarks.length === 0) {
+      return;
+    }
+    this.mapFocusedRouteIndex = (this.mapFocusedRouteIndex + 1) % routeLandmarks.length;
+    const landmark = routeLandmarks[this.mapFocusedRouteIndex];
+    this.followCamera.focusMapOnWorldPoint(landmark.position.x, landmark.position.z);
+  }
+
+  private focusHudElement(selector: string) {
+    window.requestAnimationFrame(() => {
+      this.hud.element.querySelector<HTMLElement>(selector)?.focus();
+    });
+  }
+
+  private focusGameplaySurface() {
+    window.requestAnimationFrame(() => {
+      if (!this.titleScreenOpen && !this.pauseMenuOpen && !this.characterScreenOpen) {
+        this.renderer.domElement.focus();
+      }
+    });
   }
 
   private releaseGameplayPointerLock() {
@@ -733,6 +953,20 @@ export class GameApp {
           <span>Begin Trail</span>
           <small>Enter / Space</small>
         </button>
+        <div class="title-screen__tool-flow" aria-label="Workshop flow">
+          <button class="title-screen__tool-step title-screen__tool-step--active title-screen__tool-step--play" type="button">
+            <span>Play</span>
+            <small>trail</small>
+          </button>
+          <a class="title-screen__tool-step title-screen__tool-step--active" href="?modelViewer=1">
+            <span>Model Editor</span>
+            <small>Mossu + Karu</small>
+          </a>
+          <span class="title-screen__tool-step title-screen__tool-step--locked" aria-disabled="true">
+            <span>Map Editor</span>
+            <small>next</small>
+          </span>
+        </div>
         <div class="title-screen__starter-row" aria-hidden="true">
           <span>collect</span>
           <span>float</span>
@@ -742,9 +976,26 @@ export class GameApp {
       </div>
     `;
     titleScreen
-      .querySelector<HTMLButtonElement>(".title-screen__button")
-      ?.addEventListener("click", this.startFromTitle);
+      .querySelectorAll<HTMLButtonElement>(".title-screen__button, .title-screen__tool-step--play")
+      .forEach((button) => {
+        button.addEventListener("click", this.startFromTitle);
+      });
     return titleScreen;
+  }
+
+  private createOpeningSequenceOverlay() {
+    const overlay = document.createElement("div");
+    overlay.className = "opening-sequence";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.innerHTML = `
+      <div class="opening-sequence__panel">
+        <p class="opening-sequence__kicker">Meadow Nest</p>
+        <strong>Mossu wakes up</strong>
+        <span>the river path opens ahead</span>
+      </div>
+      <p class="opening-sequence__skip">Press any move key to begin</p>
+    `;
+    return overlay;
   }
 
   private startFromTitle = () => {
@@ -753,12 +1004,67 @@ export class GameApp {
     }
 
     this.titleScreenOpen = false;
+    this.openingSequenceActive = true;
+    this.openingSequenceStartedAt = this.elapsed;
     this.pauseMenuOpen = false;
     this.characterScreenOpen = false;
+    this.movementAudio.unlock();
+    this.waterAudio.unlock();
     this.titleScreen.classList.add("title-screen--hidden");
     this.titleScreen.setAttribute("aria-hidden", "true");
+    this.openingSequenceOverlay.classList.add("opening-sequence--visible");
+    this.openingSequenceOverlay.setAttribute("aria-hidden", "false");
+    this.followCamera.setOpeningSequenceProgress(0);
+    this.renderer.domElement.tabIndex = -1;
     this.syncHud();
+    this.focusGameplaySurface();
   };
+
+  private getOpeningSequenceProgress() {
+    if (!this.openingSequenceActive) {
+      return 1;
+    }
+    return Math.min(1, Math.max(0, (this.elapsed - this.openingSequenceStartedAt) / OPENING_SEQUENCE_SECONDS));
+  }
+
+  private updateOpeningSequence(input: InputSnapshot) {
+    const progress = this.getOpeningSequenceProgress();
+    const sequenceAge = this.elapsed - this.openingSequenceStartedAt;
+    const skipRequested =
+      sequenceAge >= OPENING_SEQUENCE_SKIP_AFTER_SECONDS &&
+      (
+        Math.abs(input.moveX) > 0.01 ||
+        Math.abs(input.moveY) > 0.01 ||
+        input.jumpPressed ||
+        input.abilityPressed ||
+        input.abilityHeld ||
+        input.rollHeld ||
+        input.interactPressed ||
+        input.inventoryTogglePressed ||
+        input.mapTogglePressed ||
+        input.escapePressed
+      );
+
+    this.openingSequenceOverlay.style.setProperty("--opening-progress", progress.toFixed(3));
+    if (progress >= 1 || skipRequested) {
+      this.completeOpeningSequence();
+      return 1;
+    }
+
+    return progress;
+  }
+
+  private completeOpeningSequence() {
+    if (!this.openingSequenceActive) {
+      return;
+    }
+    this.openingSequenceActive = false;
+    this.followCamera.setOpeningSequenceProgress(null);
+    this.openingSequenceOverlay.classList.remove("opening-sequence--visible");
+    this.openingSequenceOverlay.setAttribute("aria-hidden", "true");
+    this.syncHud();
+    this.focusGameplaySurface();
+  }
 
   private handleTitleKeyDown = (event: KeyboardEvent) => {
     if (!this.titleScreenOpen) {
@@ -767,6 +1073,9 @@ export class GameApp {
 
     if (event.code === "Enter" || event.code === "Space") {
       event.preventDefault();
+      if (!isButtonLikeUiTarget(event.target)) {
+        this.interfaceAudio.playClick();
+      }
       this.startFromTitle();
     }
   };

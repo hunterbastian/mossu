@@ -7,3 +7,4 @@
 ## Learned Workspace Facts
 
 - Focused playtesting can follow `docs/PLAYTEST_CHECKLIST.md` (e.g. a walk from Burrow to Moss Crown).
+- Project-level Three.js skill files from `cloudai-x/threejs-skills` are installed under `.claude/skills/`. For Three.js rendering, lighting, materials, shaders, postprocessing, loaders, animation, geometry, textures, or interaction work, consult the matching skill before changing code. Mossu's current TypeScript setup resolves Three.js add-ons through `three/examples/jsm/...`; do not switch those imports to `three/addons/...` unless the module resolution/types are updated and `tsc --noEmit` passes.

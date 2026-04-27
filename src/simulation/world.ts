@@ -60,6 +60,16 @@ export interface WorldForageable {
   interactionRadius?: number;
 }
 
+export type WorldMapMarkerKind = "bridge" | "poi" | "special";
+
+export interface WorldMapMarker {
+  id: string;
+  kind: WorldMapMarkerKind;
+  title: string;
+  position: Vector3;
+  landmarkId?: string;
+}
+
 export interface ShadowPocket {
   id: string;
   position: Vector3;
@@ -83,6 +93,14 @@ export interface WaterState {
   flowDirection: Vector2;
   flowStrength: number;
   swimAllowed: boolean;
+}
+
+export interface WaterAmbienceSample {
+  kind: WaterState["kind"] | null;
+  proximity: number;
+  distanceToWater: number;
+  flowStrength: number;
+  insideWater: boolean;
 }
 
 export type RiverChannelId = "main" | "meadow-braid" | "silver-braid" | "fir-gate-braid" | "alpine-braid";
@@ -151,9 +169,9 @@ const riverCenter = (z: number) => (
   Math.exp(-(((z + 112) / 44) ** 2)) * 28
 );
 export const RIVER_BRANCH_SEGMENTS: readonly RiverBranchSegment[] = [
-  { id: "meadow-braid", startZ: -74, endZ: 18, offset: 64, width: 24, depthScale: 0.66, flowStrength: 0.34 },
-  { id: "fir-gate-braid", startZ: 52, endZ: 132, offset: -78, width: 26, depthScale: 0.72, flowStrength: 0.46 },
-  { id: "alpine-braid", startZ: 134, endZ: 214, offset: 68, width: 21, depthScale: 0.64, flowStrength: 0.54 },
+  { id: "meadow-braid", startZ: -82, endZ: 22, offset: 70, width: 25, depthScale: 0.66, flowStrength: 0.34 },
+  { id: "fir-gate-braid", startZ: 48, endZ: 136, offset: -82, width: 28, depthScale: 0.72, flowStrength: 0.46 },
+  { id: "alpine-braid", startZ: 132, endZ: 216, offset: 72, width: 22, depthScale: 0.64, flowStrength: 0.54 },
 ] as const;
 // Total rendered-water footprint scale. Keep this aligned with waterSystem ribbon width.
 export const MAIN_RIVER_RENDER_WIDTH_SCALE = 1.0608;
@@ -180,9 +198,9 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     shoreDepth: 1.4,
     flowStrength: 0.08,
     flowSpeed: 0.12,
-    opacity: 0.9,
+    opacity: 0.82,
     swimAllowed: true,
-    edgeSoftness: 0.52,
+    edgeSoftness: 0.44,
   },
   {
     id: "burrow-shoal",
@@ -197,9 +215,9 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     shoreDepth: 0.78,
     flowStrength: 0.04,
     flowSpeed: 0.08,
-    opacity: 0.84,
+    opacity: 0.78,
     swimAllowed: false,
-    edgeSoftness: 0.52,
+    edgeSoftness: 0.46,
   },
   {
     id: "sun-mirror-pond",
@@ -214,9 +232,9 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     shoreDepth: 0.95,
     flowStrength: 0.035,
     flowSpeed: 0.07,
-    opacity: 0.86,
+    opacity: 0.8,
     swimAllowed: false,
-    edgeSoftness: 0.58,
+    edgeSoftness: 0.5,
   },
   {
     id: "reed-cove",
@@ -231,9 +249,9 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     shoreDepth: 1.1,
     flowStrength: 0.045,
     flowSpeed: 0.09,
-    opacity: 0.82,
+    opacity: 0.78,
     swimAllowed: false,
-    edgeSoftness: 0.54,
+    edgeSoftness: 0.48,
   },
 ] as const;
 const ridgePassCenter = (x: number) => Math.exp(-(((x - 12) / 46) ** 2));
@@ -710,29 +728,41 @@ function sampleIslandContour(x: number, z: number) {
 
 /** Path half-width (world units) per polyline leg — steps up with journey so each zone feels more open. */
 const ROUTE_TERRACE_SEGMENTS = [
-  [-58, -158, -44, -134, 20, 0.55],
-  [-44, -134, -4, -38, 22, 0.42],
-  [-4, -38, riverCenter(24), 24, 25, 0.48],
-  [riverCenter(24), 24, 24, 88, 28, 0.6],
-  [24, 88, 20, 108, 30, 0.72],
-  [20, 108, 42, 134, 32, 0.68],
-  [42, 134, 10, 154, 34, 0.64],
-  [10, 154, -26, 168, 36, 0.52],
-  [-26, 168, 16, 186, 38, 0.46],
-  [16, 186, 2, 214, 40, 0.38],
+  [-58, -158, -44, -134, 23, 0.58],
+  [-44, -134, -4, -38, 25, 0.44],
+  [-4, -38, riverCenter(24), 24, 29, 0.5],
+  [riverCenter(24), 24, 24, 88, 32, 0.64],
+  [24, 88, 20, 108, 34, 0.76],
+  [20, 108, 42, 134, 36, 0.72],
+  [42, 134, 10, 154, 38, 0.68],
+  [10, 154, -26, 168, 40, 0.56],
+  [-26, 168, 16, 186, 42, 0.5],
+  [16, 186, 2, 214, 44, 0.42],
 ] as const;
 
 /** Radial “pocket” glades; radii also rise with z so grass clearings read wider zone-to-zone. */
 const PAINTED_GROUND_CLEARINGS = [
-  [-44, -134, 20, 0.42],
-  [-4, -38, 22, 0.34],
-  [24, 88, 24, 0.32],
-  [20, 108, 26, 0.28],
-  [42, 134, 28, 0.28],
-  [10, 154, 30, 0.24],
-  [-26, 168, 32, 0.24],
-  [16, 186, 34, 0.22],
-  [2, 214, 36, 0.26],
+  [-44, -134, 28, 0.48],
+  [-4, -38, 32, 0.42],
+  [24, 88, 38, 0.42],
+  [20, 108, 39, 0.38],
+  [42, 134, 38, 0.36],
+  [10, 154, 40, 0.34],
+  [-26, 168, 42, 0.32],
+  [16, 186, 44, 0.32],
+  [2, 214, 44, 0.34],
+] as const;
+
+const ROUTE_TRANSITION_CLEARINGS = [
+  [-4, -38, 48, 0.5],
+  [riverCenter(24), 24, 52, 0.58],
+  [24, 88, 52, 0.66],
+  [20, 108, 54, 0.62],
+  [42, 134, 52, 0.56],
+  [10, 154, 52, 0.54],
+  [-26, 168, 54, 0.54],
+  [16, 186, 54, 0.56],
+  [2, 214, 56, 0.58],
 ] as const;
 
 function sampleRoutePathInfo(x: number, z: number) {
@@ -784,6 +814,18 @@ export function samplePaintedGroundMask(x: number, z: number) {
   return saturate(route.paint * routeBreakup + route.shoulder * 0.36 + pocketClear + shoreWear);
 }
 
+export function sampleRouteReadabilityClearing(x: number, z: number) {
+  const route = sampleRoutePathInfo(x, z);
+  const ribbon = saturate(route.core * 0.62 + route.paint * 0.38 + route.shoulder * 0.42);
+  const transitionGlade = ROUTE_TRANSITION_CLEARINGS.reduce((best, [cx, cz, radius, strength]) => {
+    const distance = Math.hypot(x - cx, z - cz);
+    const clear = 1 - smootherStep(radius * 0.34, radius, distance);
+    return Math.max(best, clear * strength);
+  }, 0);
+  const shoreWindow = Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z)) * 0.28;
+  return saturate(Math.max(ribbon, transitionGlade) + shoreWindow);
+}
+
 /**
  * Worn earth along the same polyline as `ROUTE_TERRACE_SEGMENTS` / `sampleRoutePathInfo`, narrower
  * than the full painted clearing so the route reads as a trampled path. Used by terrain and grass.
@@ -824,10 +866,16 @@ export function sampleIslandBoundaryPoint(angle: number) {
     1 / ISLAND_SUPERELLIPSE_EXPONENT,
   );
   const scale = denom > 0 ? 1 / denom : 1;
+  const scallop =
+    1 +
+    Math.sin(angle * 3.1 + 0.4) * 0.025 +
+    Math.sin(angle * 5.2 - 1.1) * 0.018 -
+    Math.exp(-(((angle - Math.PI * 1.52) / 0.34) ** 2)) * 0.07 +
+    Math.exp(-(((angle - Math.PI * 0.08) / 0.4) ** 2)) * 0.035;
   return new Vector3(
-    ISLAND_CENTER_X + cos * ISLAND_RADIUS_X * scale,
+    ISLAND_CENTER_X + cos * ISLAND_RADIUS_X * scale * scallop,
     0,
-    ISLAND_CENTER_Z + sin * ISLAND_RADIUS_Z * scale,
+    ISLAND_CENTER_Z + sin * ISLAND_RADIUS_Z * scale * scallop,
   );
 }
 
@@ -1091,6 +1139,75 @@ export function sampleWaterState(x: number, z: number): WaterState | null {
   return best;
 }
 
+export function sampleWaterAmbience(x: number, z: number): WaterAmbienceSample {
+  let best: WaterAmbienceSample = {
+    kind: null,
+    proximity: 0,
+    distanceToWater: Number.POSITIVE_INFINITY,
+    flowStrength: 0,
+    insideWater: false,
+  };
+
+  const consider = (
+    kind: WaterState["kind"],
+    edgeDistance: number,
+    audibleRadius: number,
+    flowStrength: number,
+    weight = 1,
+  ) => {
+    const distanceToWater = Math.max(0, edgeDistance);
+    const proximity = edgeDistance <= 0
+      ? 1
+      : (1 - smootherStep(0, audibleRadius, edgeDistance)) * weight;
+    if (proximity <= best.proximity) {
+      return;
+    }
+
+    best = {
+      kind,
+      proximity: saturate(proximity),
+      distanceToWater,
+      flowStrength,
+      insideWater: edgeDistance <= 0,
+    };
+  };
+
+  for (const channel of sampleRiverChannels(z)) {
+    const halfWidth = sampleRiverSurfaceHalfWidth(channel);
+    const edgeDistance = Math.abs(x - channel.centerX) - halfWidth;
+    consider("river", edgeDistance, channel.id === "main" ? 50 : 38, channel.flowStrength, channel.envelope);
+  }
+
+  for (const creek of creekPaths) {
+    const creekWeight = "opacity" in creek && typeof creek.opacity === "number" ? creek.opacity : 0.58;
+    for (let index = 0; index < creek.points.length - 1; index += 1) {
+      const [ax, az] = creek.points[index];
+      const [bx, bz] = creek.points[index + 1];
+      const segment = distanceToSegment2D(x, z, ax, az, bx, bz);
+      consider("creek", segment.distance - creek.width, 30, creek.flowStrength, creekWeight);
+    }
+  }
+
+  for (const pool of STARTING_WATER_POOLS) {
+    const distance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX, pool.radiusZ);
+    const edgeDistance = (distance - 1) * Math.min(pool.radiusX, pool.radiusZ);
+    consider("pool", edgeDistance, pool.id === "opening-lake" ? 38 : 28, pool.flowStrength, pool.id === "opening-lake" ? 0.9 : 0.72);
+  }
+
+  const currentWater = sampleWaterState(x, z);
+  if (currentWater && best.proximity < 1) {
+    best = {
+      kind: currentWater.kind,
+      proximity: 1,
+      distanceToWater: 0,
+      flowStrength: currentWater.flowStrength,
+      insideWater: true,
+    };
+  }
+
+  return best;
+}
+
 export function sampleRiverEdgeState(x: number, z: number): RiverEdgeSample {
   const water = sampleWaterState(x, z);
   const surfaceMask = Math.max(sampleRiverSurfaceMask(x, z), sampleStartingWaterSurfaceMask(x, z));
@@ -1168,6 +1285,7 @@ export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainH
   const biome = sampleBiomeZone(x, z, height);
   const slope = 1 - sampleTerrainNormal(x, z).y;
   const route = sampleRoutePathInfo(x, z);
+  const routeReadability = sampleRouteReadabilityClearing(x, z);
   const edgeState = sampleRiverEdgeState(x, z);
   const bankShape = sampleWaterBankShape(x, z);
   const pocketMeadow = sampleScenicMeadowMask(x, z);
@@ -1192,6 +1310,7 @@ export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainH
     openingMeadow * 0.52 +
     route.paint * 0.28 +
     route.shoulder * 0.2 +
+    routeReadability * 0.16 +
     lowlandOpen * (0.3 + meadowNoise * 0.18) -
     shore * 0.42 -
     slope * 0.5,
@@ -1208,12 +1327,13 @@ export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainH
     Math.exp(-(((x + 86) / 70) ** 2) - (((z - 132) / 78) ** 2)),
     Math.exp(-(((x - 84) / 68) ** 2) - (((z - 144) / 78) ** 2)),
   );
-  const clearing = saturate(meadow * 0.72 + shore * 0.44 + route.core * 0.56 + route.paint * 0.18);
+  const clearing = saturate(meadow * 0.72 + shore * 0.44 + route.core * 0.56 + route.paint * 0.18 + routeReadability * 0.38);
   const forest = saturate(
     Math.max(lowlandRim * 0.74, firGate * 0.52, highlandPocket * 0.58, authoredGroves * 0.82) +
     smootherStep(0.46, 0.72, forestNoise) * 0.42 +
     forestBreakup * 0.12 -
     clearing * 0.72 -
+    routeReadability * 0.34 -
     openingMeadow * 0.4 -
     shore * 0.52 -
     slope * 0.18,
@@ -1412,6 +1532,71 @@ export const worldLandmarks: WorldLandmark[] = [
     },
   },
 ];
+
+export const worldMapMarkers: readonly WorldMapMarker[] = [
+  {
+    id: "bridge-meadow-planks",
+    kind: "bridge",
+    title: "Meadow Planks",
+    position: new Vector3(sampleRiverCenter(-54), sampleTerrainHeight(sampleRiverCenter(-54), -54), -54),
+  },
+  {
+    id: "bridge-silver-bend",
+    kind: "bridge",
+    title: "Silver Bend Bridge",
+    position: new Vector3(sampleRiverCenter(26), sampleTerrainHeight(sampleRiverCenter(26), 26), 26),
+    landmarkId: "river-bend",
+  },
+  {
+    id: "bridge-fir-gate",
+    kind: "bridge",
+    title: "Fir Gate Bridge",
+    position: new Vector3(sampleRiverCenter(92), sampleTerrainHeight(sampleRiverCenter(92), 92), 92),
+    landmarkId: "fir-gate",
+  },
+  {
+    id: "poi-burrow",
+    kind: "poi",
+    title: "Burrow Hollow",
+    position: new Vector3(-44, sampleTerrainHeight(-44, -134), -134),
+    landmarkId: "start-burrow",
+  },
+  {
+    id: "poi-fir-gate",
+    kind: "poi",
+    title: "Fir Gate",
+    position: new Vector3(24, sampleTerrainHeight(24, 88), 88),
+    landmarkId: "fir-gate",
+  },
+  {
+    id: "poi-cloudback",
+    kind: "poi",
+    title: "Cloudback Ridge",
+    position: new Vector3(-26, sampleTerrainHeight(-26, 168), 168),
+    landmarkId: "ridge-overlook",
+  },
+  {
+    id: "special-amber-tree",
+    kind: "special",
+    title: "Amber Tree",
+    position: new Vector3(-4, sampleTerrainHeight(-4, -38), -38),
+    landmarkId: "orange-tree-overlook",
+  },
+  {
+    id: "special-mistfall",
+    kind: "special",
+    title: "Mistfall",
+    position: new Vector3(42, sampleTerrainHeight(42, 134), 134),
+    landmarkId: "mistfall-basin",
+  },
+  {
+    id: "special-moss-crown",
+    kind: "special",
+    title: "Moss Crown",
+    position: new Vector3(2, sampleTerrainHeight(2, 214), 214),
+    landmarkId: "peak-shrine",
+  },
+] as const;
 
 export const worldForageables: WorldForageable[] = [
   {

@@ -11,10 +11,12 @@ import {
   getMapLabelLayout,
   mapBoundaryPath,
   MapMarkerElements,
+  mapAtlasMarkers,
   MAP_VIEWBOX_HEIGHT,
   MAP_VIEWBOX_WIDTH,
   mapRiverBranchPaths,
   mapRiverPath,
+  mapRegionPatches,
   mapRoutePath,
   projectWorldToMap,
   routeLandmarks,
@@ -23,6 +25,8 @@ import {
 const POUCH_KIND_ORDER: ForageableKind[] = ["seed", "shell", "moss_tuft", "berry", "smooth_stone", "feather"];
 const POUCH_REVEAL_MS = 4200;
 const PICKUP_CARD_MS = 2200;
+type BinderSectionId = "profile" | "cards" | "pouch";
+type PauseCommandId = "resume" | "handbook" | "map";
 
 export interface HudShellUpdate {
   frame: FrameState;
@@ -98,7 +102,10 @@ export class HudShell {
   private readonly gatheredGoodsList = document.createElement("div");
   private readonly collectionsSectionBadge = document.createElement("span");
   private readonly gatheredGoodsSectionBadge = document.createElement("span");
+  private readonly binderTabs = new Map<BinderSectionId, HTMLButtonElement>();
+  private readonly binderSections = new Map<BinderSectionId, HTMLElement>();
   private characterScreenSignature = "";
+  private activeBinderSection: BinderSectionId = "cards";
   private latestPouchGatheredId: string | null = null;
   private pouchRevealUntil = 0;
   private latestPickupCardId: string | null = null;
@@ -132,12 +139,33 @@ export class HudShell {
       return;
     }
 
+    this.resetInventoryCardMotion(event.currentTarget);
+  };
+  private readonly handleInventoryCardFocus = (event: FocusEvent) => {
+    if (!(event.currentTarget instanceof HTMLElement)) {
+      return;
+    }
+
     const card = event.currentTarget;
+    card.style.setProperty("--card-tilt-x", "-1.7deg");
+    card.style.setProperty("--card-tilt-y", "2.2deg");
+    card.style.setProperty("--card-glare-x", "62%");
+    card.style.setProperty("--card-glare-y", "22%");
+  };
+  private readonly handleInventoryCardBlur = (event: FocusEvent) => {
+    if (!(event.currentTarget instanceof HTMLElement)) {
+      return;
+    }
+
+    this.resetInventoryCardMotion(event.currentTarget);
+  };
+
+  private resetInventoryCardMotion(card: HTMLElement) {
     card.style.removeProperty("--card-tilt-x");
     card.style.removeProperty("--card-tilt-y");
     card.style.removeProperty("--card-glare-x");
     card.style.removeProperty("--card-glare-y");
-  };
+  }
   private readonly statusValues = {
     zone: document.createElement("p"),
     landmark: document.createElement("p"),
@@ -233,9 +261,11 @@ export class HudShell {
 
     this.statusValues.objectiveTitle.textContent = frame.objective.title;
     this.statusValues.objectiveBody.textContent = frame.objective.body;
-    this.statusValues.ability.textContent = frame.player.rollModeReady
-      ? "Roll mode active: jump, then hold Space to Breeze Float."
-      : "Ability ready: Breeze Float uses stamina only while holding Space in the air.";
+    this.statusValues.ability.textContent = frame.player.floating
+      ? "Breeze Float active: Mossu is riding the wind."
+      : frame.player.rollModeReady
+      ? "Roll mode active: jump, then hold Q or Space to Breeze Float."
+      : "Ability ready: hold Q in the air, or keep Space held after jumping.";
 
     const faunaMoodIcon = this.renderFaunaMoodIcon(fauna.dominantMood);
     const faunaMoodLabel = `${fauna.dominantMood[0].toUpperCase()}${fauna.dominantMood.slice(1)}`;
@@ -299,11 +329,11 @@ export class HudShell {
             ["Esc", "pause"],
           ]
         : [
-            ["Click", "look"],
+            ["Click", "camera"],
             ["W/A/S/D", "move"],
             ["Space", "jump"],
             ["E", "interact"],
-            ["Tab", "bag"],
+            ["Tab", "inventory"],
           ],
     );
   }
@@ -558,8 +588,17 @@ export class HudShell {
         ]
           .filter((className) => className.length > 0)
           .join(" ");
+        article.tabIndex = 0;
+        article.setAttribute(
+          "aria-label",
+          entry.discovered
+            ? `${entry.keepsakeTitle}, ${entry.landmarkTitle}, logged keepsake card`
+            : `${entry.landmarkTitle}, hidden keepsake card`,
+        );
         article.addEventListener("pointermove", this.handleInventoryCardPointerMove);
         article.addEventListener("pointerleave", this.handleInventoryCardPointerLeave);
+        article.addEventListener("focus", this.handleInventoryCardFocus);
+        article.addEventListener("blur", this.handleInventoryCardBlur);
 
         const foil = document.createElement("div");
         foil.className = "inventory-holo-card__foil";
@@ -631,8 +670,17 @@ export class HudShell {
           entry.gathered ? "gathered-good--collected" : "gathered-good--locked",
           `gathered-good--${entry.kind}`,
         ].join(" ");
+        article.tabIndex = 0;
+        article.setAttribute(
+          "aria-label",
+          entry.gathered
+            ? `${entry.title}, ${this.formatForageableKind(entry.kind)}, gathered pouch good`
+            : `${this.prettyZone(entry.zone)}, unknown pouch good`,
+        );
         article.addEventListener("pointermove", this.handleInventoryCardPointerMove);
         article.addEventListener("pointerleave", this.handleInventoryCardPointerLeave);
+        article.addEventListener("focus", this.handleInventoryCardFocus);
+        article.addEventListener("blur", this.handleInventoryCardBlur);
 
         const foil = document.createElement("div");
         foil.className = "inventory-holo-card__foil";
@@ -708,7 +756,22 @@ export class HudShell {
     eyebrow.textContent = "Trail Note";
     this.statusValues.objectiveTitle.className = "objective-chip__title";
     this.statusValues.objectiveBody.className = "objective-chip__body";
-    objective.append(eyebrow, this.statusValues.objectiveTitle, this.statusValues.objectiveBody);
+    const noteCopy = document.createElement("div");
+    noteCopy.className = "objective-chip__copy";
+    noteCopy.append(eyebrow, this.statusValues.objectiveTitle, this.statusValues.objectiveBody);
+    const noteMap = document.createElement("div");
+    noteMap.className = "objective-chip__map";
+    noteMap.setAttribute("aria-hidden", "true");
+    noteMap.innerHTML = `
+      <span class="objective-chip__peak"></span>
+      <span class="objective-chip__trail"></span>
+      <span class="objective-chip__river"></span>
+      <span class="objective-chip__tree objective-chip__tree--one"></span>
+      <span class="objective-chip__tree objective-chip__tree--two"></span>
+      <span class="objective-chip__tree objective-chip__tree--three"></span>
+      <span class="objective-chip__mossu-dot"></span>
+    `;
+    objective.append(noteCopy, noteMap);
 
     const status = document.createElement("section");
     status.className = "status-strip";
@@ -803,7 +866,8 @@ export class HudShell {
 
     [
       ...MOVEMENT_CONTROL_LABELS,
-      ["Space", "jump / float"],
+      ["Space", "jump"],
+      ["Q / Space", "Breeze Float"],
       ["Shift", "roll"],
       ["E", "interact"],
       ["Hold E", "call Karu"],
@@ -945,6 +1009,7 @@ export class HudShell {
 
     const statsSection = this.buildCharacterSection("Profile", "Trail condition");
     statsSection.classList.add("character-section--stats");
+    this.binderSections.set("profile", statsSection);
     this.statsGrid.className = "character-stat-grid";
     statsSection.append(this.statsGrid);
 
@@ -959,6 +1024,7 @@ export class HudShell {
       this.collectionsSectionBadge,
     );
     collectionsSection.classList.add("character-section--binder", "character-section--dex");
+    this.binderSections.set("cards", collectionsSection);
     this.collectionsList.className = "collection-list";
     collectionsSection.append(this.collectionsList);
 
@@ -968,6 +1034,7 @@ export class HudShell {
       this.gatheredGoodsSectionBadge,
     );
     gatheredGoodsSection.classList.add("character-section--binder", "character-section--goods");
+    this.binderSections.set("pouch", gatheredGoodsSection);
     this.gatheredGoodsList.className = "gathered-goods-list";
     gatheredGoodsSection.append(this.gatheredGoodsList);
 
@@ -982,21 +1049,47 @@ export class HudShell {
   private buildBinderTabs() {
     const tabs = document.createElement("div");
     tabs.className = "character-screen__tabs";
+    tabs.setAttribute("role", "tablist");
     tabs.setAttribute("aria-label", "Binder sections");
 
     [
-      ["Profile", "trail data"],
-      ["Cards", "keepsakes"],
-      ["Pouch", "forage"],
-    ].forEach(([label, descriptor], index) => {
-      const tab = document.createElement("span");
-      tab.className = `character-screen__tab${index === 1 ? " character-screen__tab--active" : ""}`;
+      ["profile", "Profile", "trail data"],
+      ["cards", "Cards", "keepsakes"],
+      ["pouch", "Pouch", "forage"],
+    ].forEach(([sectionId, label, descriptor]) => {
+      const tab = document.createElement("button");
+      const typedSectionId = sectionId as BinderSectionId;
+      tab.type = "button";
+      tab.className = "character-screen__tab";
       tab.textContent = label;
+      tab.setAttribute("role", "tab");
       tab.setAttribute("aria-label", `${label}: ${descriptor}`);
+      tab.addEventListener("click", () => {
+        this.setActiveBinderSection(typedSectionId, true);
+      });
+      this.binderTabs.set(typedSectionId, tab);
       tabs.append(tab);
     });
+    this.setActiveBinderSection(this.activeBinderSection, false);
 
     return tabs;
+  }
+
+  private setActiveBinderSection(sectionId: BinderSectionId, scrollToSection: boolean) {
+    this.activeBinderSection = sectionId;
+    this.binderTabs.forEach((tab, tabSectionId) => {
+      const isActive = tabSectionId === sectionId;
+      tab.classList.toggle("character-screen__tab--active", isActive);
+      tab.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+
+    if (scrollToSection) {
+      this.binderSections.get(sectionId)?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+        behavior: "smooth",
+      });
+    }
   }
 
   private buildPauseMenu() {
@@ -1022,9 +1115,9 @@ export class HudShell {
     const actions = document.createElement("div");
     actions.className = "pause-menu__actions";
     actions.append(
-      this.buildPauseAction("Esc", "Resume Trail", "Return to the meadow exactly where Mossu paused."),
-      this.buildPauseAction("Tab", "Open Handbook", "Check profile notes, keepsake cards, trail moves, and pouch goods."),
-      this.buildPauseAction("M", "World View", "Pull the camera above the island with no extra map panel covering the scenery."),
+      this.buildPauseAction("resume", "Esc", "Resume Trail", "Return to the meadow exactly where Mossu paused."),
+      this.buildPauseAction("handbook", "Tab", "Open Handbook", "Check profile notes, keepsake cards, trail moves, and pouch goods."),
+      this.buildPauseAction("map", "M", "World View", "Pull the camera above the island with no extra map panel covering the scenery."),
     );
 
     const status = document.createElement("div");
@@ -1042,9 +1135,11 @@ export class HudShell {
     return this.pauseMenu;
   }
 
-  private buildPauseAction(keyText: string, titleText: string, bodyText: string) {
-    const article = document.createElement("article");
+  private buildPauseAction(command: PauseCommandId, keyText: string, titleText: string, bodyText: string) {
+    const article = document.createElement("button");
+    article.type = "button";
     article.className = "pause-action";
+    article.dataset.uiCommand = command;
 
     const key = document.createElement("kbd");
     key.className = "pause-action__key";
@@ -1080,6 +1175,13 @@ export class HudShell {
 
     const shell = document.createElement("div");
     shell.className = "world-map__shell";
+
+    const figure = document.createElement("div");
+    figure.className = "world-map__figure";
+    figure.append(this.buildMapSvg());
+
+    const panel = document.createElement("aside");
+    panel.className = "world-map__panel";
 
     const badge = document.createElement("div");
     badge.className = "world-map__badge";
@@ -1123,7 +1225,21 @@ export class HudShell {
       this.buildLegendRow("world-map__row-icon world-map__row-icon--special", "Special Spots"),
     );
 
-    body.append(currentRow, legend);
+    this.mapNextStop.className = "world-map__route-note";
+    this.mapCollectionsSummary.className = "world-map__collections";
+    this.mapStamp.className = "world-map__stamp";
+
+    const routeList = document.createElement("ol");
+    routeList.className = "world-map__route-steps";
+    routeLandmarks.forEach((landmark, index) => {
+      const step = document.createElement("li");
+      step.className = "world-map__route-step";
+      step.textContent = `${index + 1}. ${landmark.title}`;
+      this.mapRouteSteps.set(landmark.id, step);
+      routeList.append(step);
+    });
+
+    body.append(currentRow, this.mapNextStop, routeList, this.mapCollectionsSummary, legend);
 
     const bottomDivider = document.createElement("div");
     bottomDivider.className = "world-map__divider";
@@ -1151,10 +1267,11 @@ export class HudShell {
     scrollHint.textContent = "Scroll to zoom the island view";
     const resetHint = document.createElement("div");
     resetHint.className = "world-map__footer-hint";
-    resetHint.textContent = "R or Home to reset zoom";
-    footer.append(footerRow, scrollHint, resetHint);
+    resetHint.textContent = "Drag or WASD to pan; F to focus stops; R/Home to reset";
+    footer.append(this.mapStamp, footerRow, scrollHint, resetHint);
 
-    shell.append(badge, header, topDivider, body, bottomDivider, filters, footer);
+    panel.append(badge, header, topDivider, body, bottomDivider, filters, footer);
+    shell.append(figure, panel);
     this.mapOverlay.append(shell);
     return this.mapOverlay;
   }
@@ -1218,6 +1335,16 @@ export class HudShell {
     island.classList.add("world-map__island-shape");
     island.setAttribute("d", mapBoundaryPath);
 
+    const regionLayer = createSvgElement("g");
+    regionLayer.classList.add("world-map__region-layer");
+    regionLayer.setAttribute("clip-path", "url(#world-map-island-clip)");
+    mapRegionPatches.forEach((region) => {
+      const patch = createSvgElement("path");
+      patch.classList.add("world-map__region-patch", `world-map__region-patch--${region.kind}`);
+      patch.setAttribute("d", region.path);
+      regionLayer.append(patch);
+    });
+
     const pocketGroup = createSvgElement("g");
     pocketGroup.setAttribute("clip-path", "url(#world-map-island-clip)");
     routeLandmarks.forEach((landmark) => {
@@ -1252,6 +1379,9 @@ export class HudShell {
 
     const landmarkLayer = createSvgElement("g");
     landmarkLayer.classList.add("world-map__landmark-layer");
+    mapAtlasMarkers.forEach((marker) => {
+      landmarkLayer.append(this.createMapAtlasMarker(marker.kind, marker.title, marker.point.x, marker.point.y));
+    });
     worldLandmarks.forEach((landmark) => {
       const marker = this.createMapLandmarkMarker(landmark);
       landmarkLayer.append(marker.group);
@@ -1262,6 +1392,7 @@ export class HudShell {
     this.mapSvg.append(
       islandShadow,
       island,
+      regionLayer,
       pocketGroup,
       river,
       riverBranches,
@@ -1352,6 +1483,27 @@ export class HudShell {
     group.append(ring, dot, label);
 
     return { group, ring, dot, label };
+  }
+
+  private createMapAtlasMarker(kind: "bridge" | "poi" | "special", title: string, x: number, y: number) {
+    const group = createSvgElement("g");
+    group.classList.add("world-map__atlas-marker", `world-map__atlas-marker--${kind}`);
+    group.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+    group.setAttribute("aria-label", title);
+
+    const backing = createSvgElement("circle");
+    backing.setAttribute("r", kind === "bridge" ? "15" : "14");
+
+    const icon = createSvgElement("path");
+    if (kind === "bridge") {
+      icon.setAttribute("d", "M -8 3 Q 0 -7 8 3 M -9 7 L 9 7 M -5 5 L -5 0 M 0 5 L 0 -3 M 5 5 L 5 0");
+    } else if (kind === "special") {
+      icon.setAttribute("d", "M 0 -10 L 3 -3 L 10 -3 L 4 2 L 6 10 L 0 5 L -6 10 L -4 2 L -10 -3 L -3 -3 Z");
+    } else {
+      icon.setAttribute("d", "M -2 8 L 2 8 L 2 2 Q 9 0 7 -7 Q 2 -5 0 -10 Q -2 -5 -7 -7 Q -9 0 -2 2 Z");
+    }
+    group.append(backing, icon);
+    return group;
   }
 
   private createMapCompass() {

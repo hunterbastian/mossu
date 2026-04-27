@@ -35,6 +35,7 @@ export class CharacterPreview {
     rollingBoostActive: false,
     rollHoldSeconds: 0,
     rollModeReady: false,
+    floating: false,
     grounded: true,
     swimming: false,
     waterDepth: 0,

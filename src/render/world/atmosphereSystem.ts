@@ -128,9 +128,10 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
 
       void main() {
         vec3 dir = normalize(vWorldDirection);
-        vec3 horizonColor = vec3(0.985, 0.995, 0.965);
-        vec3 midColor = vec3(0.67, 0.92, 0.98);
-        vec3 zenithColor = vec3(0.35, 0.72, 0.98);
+        // Cozy, moss-forward sky: warm paper horizon, softened mid band, calmer zenith (less neon aqua).
+        vec3 horizonColor = vec3(0.99, 0.972, 0.918);
+        vec3 midColor = vec3(0.695, 0.885, 0.948);
+        vec3 zenithColor = vec3(0.495, 0.742, 0.935);
         vec3 color = mix(horizonColor, midColor, smoothstep(-0.08, 0.18, dir.y));
         color = mix(color, zenithColor, smoothstep(0.22, 0.96, dir.y));
 
@@ -138,21 +139,21 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
         float sunDot = max(dot(dir, sunDir), 0.0);
         float sunBloom = pow(sunDot, 4.2);
         float sunCore = pow(sunDot, 24.0);
-        color += vec3(0.5, 0.8, 0.9) * sunBloom * 0.16;
-        color += vec3(1.0, 0.985, 0.88) * sunBloom * 0.32;
-        color += vec3(1.0, 0.985, 0.94) * sunCore * 0.42;
+        color += vec3(0.58, 0.84, 0.90) * sunBloom * 0.12;
+        color += vec3(1.0, 0.945, 0.74) * sunBloom * 0.40;
+        color += vec3(1.0, 0.965, 0.82) * sunCore * 0.46;
 
         vec2 skyUv = dir.xz * (2.05 / max(0.26, dir.y + 0.38));
         float highWisp = fbm(skyUv * vec2(0.72, 0.3) + vec2(8.0, 3.0));
         float veil = smoothstep(0.62, 0.82, highWisp) * smoothstep(0.12, 0.72, dir.y);
-        vec3 veilColor = mix(vec3(0.9, 0.98, 1.0), vec3(0.96, 1.0, 0.94), 0.42 + sunBloom * 0.25);
-        color = mix(color, veilColor, veil * 0.12);
+        vec3 veilColor = mix(vec3(0.9, 0.975, 0.995), vec3(1.0, 0.978, 0.895), 0.44 + sunBloom * 0.22);
+        color = mix(color, veilColor, veil * 0.15);
 
         float horizonHaze = smoothstep(-0.14, 0.12, dir.y) * (1.0 - smoothstep(0.16, 0.44, dir.y));
-        color = mix(color, vec3(0.92, 0.99, 0.96), horizonHaze * 0.14);
+        color = mix(color, vec3(0.945, 0.985, 0.955), horizonHaze * 0.26);
 
         float aquaLift = smoothstep(0.08, 0.72, dir.y) * (1.0 - smoothstep(0.76, 1.0, dir.y));
-        color += vec3(0.1, 0.34, 0.28) * aquaLift * 0.08;
+        color += vec3(0.085, 0.30, 0.255) * aquaLift * 0.065;
 
         gl_FragColor = vec4(color, 1.0);
       }

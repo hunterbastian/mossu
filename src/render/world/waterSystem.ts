@@ -1,6 +1,7 @@
 import {
   BufferGeometry,
   CatmullRomCurve3,
+  CircleGeometry,
   Color,
   DoubleSide,
   Float32BufferAttribute,
@@ -111,31 +112,31 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     detailWaveAmplitude: 0.014,
     baseFrequency: 34,
     detailFrequency: 66,
-    shallowColor: "#9ef0e6",
-    deepColor: "#1d5f6e",
-    foamColor: "#f6faf4",
-    shorelineMilkColor: "#f2f6e8",
-    highlightColor: "#e5fcef",
-    sparkleColor: "#f0fff2",
-    reflectionColor: "#b8e4eb",
-    sedimentColor: "#9bad98",
-    bedColor: "#4a6b62",
-    causticColor: "#f4fff0",
+    shallowColor: "#b8f8ee",
+    deepColor: "#237f8a",
+    foamColor: "#fffaf0",
+    shorelineMilkColor: "#f8f0d6",
+    highlightColor: "#fff0bd",
+    sparkleColor: "#fff9da",
+    reflectionColor: "#c9edf4",
+    sedimentColor: "#b9bd91",
+    bedColor: "#5f7f6f",
+    causticColor: "#fff6d8",
     shorelineFoamStrength: 0.3,
     shorelineMilkStrength: 0.14,
     slopeFoamStrength: 0.1,
     highlightStrength: 0.095,
     clarity: 0.93,
     rippleContrast: 0.94,
-    depthShadowStrength: 0.48,
-    causticStrength: 0.11,
-    sparkleStrength: 0.065,
+    depthShadowStrength: 0.38,
+    causticStrength: 0.16,
+    sparkleStrength: 0.12,
   },
   stillPool: {
     key: "stillPool",
     widthScale: 1,
     levelOffset: MAIN_RIVER_SURFACE_OFFSET,
-    opacity: 0.91,
+    opacity: 0.84,
     flowSpeed: 0.38,
     roughness: 0.17,
     metalness: 0.022,
@@ -143,25 +144,25 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     detailWaveAmplitude: 0.008,
     baseFrequency: 22,
     detailFrequency: 44,
-    shallowColor: "#a2f0e4",
-    deepColor: "#2a6f7c",
+    shallowColor: "#a5f1e4",
+    deepColor: "#147b90",
     foamColor: "#faf8e8",
-    shorelineMilkColor: "#f0ebd2",
+    shorelineMilkColor: "#eadfbc",
     highlightColor: "#fff2c2",
     sparkleColor: "#fffce6",
-    reflectionColor: "#c2e8e0",
-    sedimentColor: "#a8a882",
-    bedColor: "#5c7362",
+    reflectionColor: "#c2eee9",
+    sedimentColor: "#aeb78a",
+    bedColor: "#637d68",
     causticColor: "#fff8dc",
-    shorelineFoamStrength: 0.32,
-    shorelineMilkStrength: 0.52,
+    shorelineFoamStrength: 0.28,
+    shorelineMilkStrength: 0.2,
     slopeFoamStrength: 0.09,
-    highlightStrength: 0.22,
-    clarity: 0.97,
+    highlightStrength: 0.16,
+    clarity: 0.91,
     rippleContrast: 0.78,
-    depthShadowStrength: 0.38,
-    causticStrength: 0.3,
-    sparkleStrength: 0.18,
+    depthShadowStrength: 0.46,
+    causticStrength: 0.24,
+    sparkleStrength: 0.14,
   },
   foothillCreek: {
     key: "foothillCreek",
@@ -175,15 +176,15 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     detailWaveAmplitude: 0.023,
     baseFrequency: 50,
     detailFrequency: 92,
-    shallowColor: "#b6dfe0",
-    deepColor: "#6baab0",
+    shallowColor: "#c5edf0",
+    deepColor: "#75b9bf",
     foamColor: "#fbf6ec",
     shorelineMilkColor: "#edf0e2",
     highlightColor: "#f6d3a0",
     sparkleColor: "#fff5d4",
     reflectionColor: "#cae2ed",
-    sedimentColor: "#d8e1cb",
-    bedColor: "#8a9980",
+    sedimentColor: "#e0dfbd",
+    bedColor: "#96a484",
     causticColor: "#f4f1cc",
     shorelineFoamStrength: 0.34,
     shorelineMilkStrength: 0.18,
@@ -193,7 +194,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     rippleContrast: 0.88,
     depthShadowStrength: 0.46,
     causticStrength: 0.28,
-    sparkleStrength: 0.2,
+    sparkleStrength: 0.22,
   },
   alpineRunoff: {
     key: "alpineRunoff",
@@ -225,7 +226,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     rippleContrast: 1.02,
     depthShadowStrength: 0.5,
     causticStrength: 0.24,
-    sparkleStrength: 0.2,
+    sparkleStrength: 0.22,
   },
   waterfallOutflow: {
     key: "waterfallOutflow",
@@ -263,6 +264,11 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
 
 const WATER_RIBBON_COLUMNS = [-1, -0.8, -0.54, -0.22, 0.22, 0.54, 0.8, 1];
 const WATER_RIPPLE_LIMIT = 4;
+
+interface WaterfallAccent {
+  group: Group;
+  controller: WaterSurfaceController;
+}
 
 function getWaterWidth(options: WaterSurfaceOptions, point: Vector3, t: number) {
   const baseWidth = typeof options.width === "function" ? options.width(point, t) : options.width;
@@ -738,8 +744,8 @@ function createWebGLWaterController(
           sin(flowUv.x * 11.0 - uTime * uFlowSpeed * 2.1 * uFlowDirection + flowUv.y * 1.35 + flowWarp * 4.8 + flowCurl * 2.4) * 0.5 + 0.5
         );
         vec3 waterTint = mix(uWaterShallow, uWaterDeep, toonDepthBand * 0.92);
-        waterTint = mix(waterTint, uSedimentColor, bankMask * (0.24 + eddyNoise * 0.12));
-        waterTint = mix(waterTint, uSedimentColor * vec3(0.88, 0.96, 0.82), shorelineEdge * (0.2 + eddyNoise * 0.06));
+        waterTint = mix(waterTint, uSedimentColor, bankMask * (0.18 + eddyNoise * 0.08));
+        waterTint = mix(waterTint, uSedimentColor * vec3(0.88, 0.96, 0.82), shorelineEdge * (0.16 + eddyNoise * 0.05));
         waterTint = mix(waterTint, uWaterShallow * vec3(1.02, 1.04, 1.0), shallowMask * (0.06 + uClarity * 0.1));
         waterTint = mix(waterTint, mix(uWaterShallow, uWaterFoam, 0.16), slopeBoost * 0.1);
         waterTint = mix(waterTint, uWaterShallow * vec3(1.04, 1.02, 0.96), shallowShelfLine * 0.14);
@@ -748,7 +754,7 @@ function createWebGLWaterController(
           bankFeather * shallowMask * (1.0 - slopeBoost * 0.48) * (0.42 + eddyNoise * 0.2) +
           shorelineLine * (0.28 + directionalRipple * 0.2)
         ) * uShorelineMilkStrength;
-        shorelineMilkMask = min(shorelineMilkMask, 0.26);
+        shorelineMilkMask = min(shorelineMilkMask, 0.2);
         waterTint = mix(waterTint, uShorelineMilkColor, shorelineMilkMask);
         vec3 bedTint = mix(uBedColor, uSedimentColor, bedNoise * 0.46 + pebbleNoise * 0.24);
         bedTint = mix(bedTint, uBedColor * vec3(0.82, 0.86, 0.9), channelDepth * 0.42 + slopeBoost * 0.18);
@@ -781,24 +787,34 @@ function createWebGLWaterController(
         float glintMask = pow(smoothstep(0.76, 1.0, sparkleNoise * 0.55 + detailFlow * 0.45), 2.0) * (0.2 + slopeBoost * 0.4) * fresnel;
         float sparkleScatter = waterNoise(vWaterWorldPosition.xz * 0.22 + vec2(uTime * 0.18, -uTime * 0.12));
         float sparkleTwinkle = sin(uTime * 4.8 + sparkleScatter * 12.0 + vWaterFlowT * 34.0) * 0.5 + 0.5;
+        float sparkleScore = sparkleScatter * 0.62 + sparkleTwinkle * 0.28 + sideShimmer * 0.1;
         float sparkleMask = pow(
-          smoothstep(0.82, 1.0, sparkleScatter * 0.62 + sparkleTwinkle * 0.28 + sideShimmer * 0.1),
-          5.0
-        ) * shallowMask * (0.18 + fresnel * 0.82) * uSparkleStrength;
+          smoothstep(0.84, 1.0, sparkleScore),
+          6.0
+        ) * step(0.88, sparkleScore) * shallowMask * (0.16 + fresnel * 0.7) * uSparkleStrength;
         vec3 finalWater = mix(waterTint, bedTint, bedVisibility);
         finalWater += uCausticColor * causticMask;
         finalWater *= 1.0 - depthShadow * 0.16;
+        float paintedCurrentLine = smoothstep(0.7, 0.9, currentBands) * (1.0 - smoothstep(0.88, 1.0, currentBands)) * (0.16 + slopeBoost * 0.24) * (1.0 - bankMask * 0.48);
+        finalWater = mix(finalWater, uHighlightColor, paintedCurrentLine * 0.08);
         finalWater = mix(finalWater, uWaterFoam, foamMask * (0.18 + shorelineLine * 0.28 + slopeBoost * 0.2));
-        finalWater = mix(finalWater, uShorelineMilkColor, shorelineMilkMask * 0.24 + graphicShoreLine * 0.16);
+        finalWater = mix(finalWater, uShorelineMilkColor, shorelineMilkMask * 0.16 + graphicShoreLine * 0.1);
         finalWater = mix(finalWater, uHighlightColor, shallowShelfLine * 0.08);
+        vec3 contourInk = mix(uSedimentColor * vec3(0.64, 0.78, 0.66), uWaterDeep * vec3(0.72, 0.9, 1.0), channelDepth);
+        finalWater = mix(finalWater, contourInk, (graphicShoreLine * 0.22 + shallowShelfLine * 0.12 + deepCoreLine * 0.14) * (1.0 - uMapLookdown * 0.5));
         finalWater = mix(finalWater, reflectionTint, highlightMask * (0.22 + shallowMask * 0.12 + channelDepth * 0.12));
         finalWater = mix(finalWater, uWaterFoam, actorRipple * 0.22);
         finalWater += uHighlightColor * glintMask * uHighlightStrength * 0.8;
         finalWater += uSparkleColor * sparkleMask;
         finalWater += reflectionTint * fresnel * (0.025 + channelDepth * 0.045) * (0.28 + uClarity * 0.45);
-        vec3 waterCeiling = mix(vec3(0.78, 0.9, 0.92), vec3(0.94, 0.96, 0.92), clamp(foamMask * 0.7 + sparkleMask * 0.8, 0.0, 1.0));
+        float shallowGlow = (shorelineLine * 0.22 + shallowShelfLine * 0.14 + highlightMask * 0.08) * shallowMask * (1.0 - uMapLookdown);
+        finalWater += mix(uHighlightColor, uSparkleColor, 0.35) * shallowGlow * (0.22 + uSparkleStrength);
+        vec3 waterCeiling = mix(vec3(0.72, 0.88, 0.92), vec3(0.9, 0.95, 0.92), clamp(foamMask * 0.62 + sparkleMask * 0.7, 0.0, 1.0));
         finalWater = min(finalWater, waterCeiling);
-        float alphaMask = clamp(0.52 + channelDepth * 0.16 + foamMask * 0.06 + fresnel * 0.025 - bankMask * 0.18 + shorelineMilkMask * 0.025, 0.34, 0.82);
+        float finalLuma = dot(finalWater, vec3(0.2126, 0.7152, 0.0722));
+        float lumaLimit = mix(0.74, 0.9, clamp(foamMask * 0.34 + sparkleMask * 0.46 + shallowMask * 0.16, 0.0, 1.0));
+        finalWater *= mix(1.0, lumaLimit / max(finalLuma, 0.001), smoothstep(lumaLimit, lumaLimit + 0.16, finalLuma));
+        float alphaMask = clamp(0.5 + channelDepth * 0.15 + foamMask * 0.045 + fresnel * 0.02 - bankMask * 0.2 + shorelineMilkMask * 0.015, 0.32, 0.76);
         float mapDepthBand =
           channelDepth > 0.68 ? 0.86 :
           channelDepth > 0.34 ? 0.48 :
@@ -914,49 +930,166 @@ function makeHighlandCreekSurface(path: HighlandCreekPath) {
   return makeCreekSurface(points, path.width, profile, path.opacity);
 }
 
-function makeWaterfallPanel(width: number, height: number, opacity: number) {
-  const group = new Group();
-  const outer = new Mesh(
+function makeWaterfallLayer(width: number, height: number, color: string, opacity: number, depth = 0) {
+  const layer = new Mesh(
     new PlaneGeometry(width, height, 1, 8),
     new MeshBasicMaterial({
-      color: "#d3edf2",
+      color,
       transparent: true,
       opacity,
       depthWrite: false,
       side: DoubleSide,
     }),
   );
-  const inner = new Mesh(
-    new PlaneGeometry(width * 0.56, height * 0.94, 1, 8),
+  layer.position.y = height * 0.5;
+  layer.position.z = depth;
+  layer.userData.baseOpacity = opacity;
+  layer.userData.baseX = layer.position.x;
+  layer.userData.baseY = layer.position.y;
+  layer.userData.baseZ = depth;
+  return layer;
+}
+
+function makeWaterfallFoamDisc(radius: number, color: string, opacity: number, x: number, z: number) {
+  const foam = new Mesh(
+    new CircleGeometry(radius, 18),
     new MeshBasicMaterial({
-      color: "#f4fbf3",
+      color,
       transparent: true,
-      opacity: opacity * 0.52,
+      opacity,
       depthWrite: false,
       side: DoubleSide,
     }),
   );
-  outer.position.y = height * 0.5;
-  inner.position.y = height * 0.48;
-  inner.position.z = 0.06;
-  group.add(outer, inner);
-  return group;
+  foam.rotation.x = -Math.PI / 2;
+  foam.position.set(x, 0.06, z);
+  foam.scale.z = 0.42;
+  foam.userData.baseOpacity = opacity;
+  foam.userData.baseScaleX = foam.scale.x;
+  foam.userData.baseScaleZ = foam.scale.z;
+  return foam;
+}
+
+function makeWaterfallPanel(width: number, height: number, opacity: number, seed: number): WaterfallAccent {
+  const group = new Group();
+  group.userData.seed = seed;
+
+  const veil = makeWaterfallLayer(width * 1.16, height, "#bde6f3", opacity * 0.68, -0.04);
+  const blueCore = makeWaterfallLayer(width * 0.72, height * 0.96, "#77c9e6", opacity * 0.56, 0.02);
+  const whiteCore = makeWaterfallLayer(width * 0.42, height * 0.92, "#f8fff8", opacity * 0.66, 0.08);
+  blueCore.position.x = Math.sin(seed * 1.7) * width * 0.08;
+  whiteCore.position.x = Math.cos(seed * 1.2) * width * 0.08;
+  group.add(veil, blueCore, whiteCore);
+
+  const ribbons: Mesh[] = [];
+  const ribbonCount = Math.max(4, Math.round(width * 1.15));
+  for (let i = 0; i < ribbonCount; i += 1) {
+    const t = ribbonCount === 1 ? 0.5 : i / (ribbonCount - 1);
+    const lateral = MathUtils.lerp(-0.42, 0.42, t) * width + Math.sin(seed + i * 1.9) * width * 0.08;
+    const ribbonWidth = width * MathUtils.lerp(0.08, 0.16, (Math.sin(seed * 2.1 + i) + 1) * 0.5);
+    const ribbonHeight = height * MathUtils.lerp(0.34, 0.62, (Math.cos(seed + i * 2.4) + 1) * 0.5);
+    const ribbon = makeWaterfallLayer(ribbonWidth, ribbonHeight, i % 2 === 0 ? "#ffffff" : "#dff8ff", opacity * 0.76, 0.16 + i * 0.012);
+    ribbon.position.x = lateral;
+    ribbon.userData.baseX = lateral;
+    ribbon.userData.fallSpeed = 0.34 + i * 0.055;
+    ribbon.userData.phase = (seed * 0.31 + i * 0.23) % 1;
+    ribbons.push(ribbon);
+    group.add(ribbon);
+  }
+
+  const foamA = makeWaterfallFoamDisc(width * 0.58, "#f8fff7", opacity * 1.14, -width * 0.16, 0.36);
+  const foamB = makeWaterfallFoamDisc(width * 0.42, "#d8f3fb", opacity * 0.76, width * 0.24, 0.52);
+  const foamC = makeWaterfallFoamDisc(width * 0.3, "#fff7dc", opacity * 0.38, width * 0.02, 0.68);
+  group.add(foamA, foamB, foamC);
+
+  const spray: Mesh[] = [];
+  for (let i = 0; i < 7; i += 1) {
+    const sprayPuff = new Mesh(
+      new CircleGeometry(width * MathUtils.lerp(0.055, 0.12, (Math.sin(seed + i) + 1) * 0.5), 12),
+      new MeshBasicMaterial({
+        color: i % 3 === 0 ? "#fff4d3" : "#ecfbff",
+        transparent: true,
+        opacity: opacity * MathUtils.lerp(0.28, 0.56, (Math.cos(seed + i * 1.6) + 1) * 0.5),
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+    );
+    sprayPuff.position.set(
+      Math.sin(seed * 0.7 + i * 1.3) * width * 0.58,
+      height * MathUtils.lerp(0.05, 0.34, (i % 4) / 3),
+      0.24 + i * 0.035,
+    );
+    sprayPuff.userData.baseX = sprayPuff.position.x;
+    sprayPuff.userData.baseY = sprayPuff.position.y;
+    sprayPuff.userData.baseOpacity = (sprayPuff.material as MeshBasicMaterial).opacity;
+    sprayPuff.userData.phase = seed * 0.4 + i;
+    spray.push(sprayPuff);
+    group.add(sprayPuff);
+  }
+
+  const controller: WaterSurfaceController = {
+    mesh: veil,
+    update(elapsed: number, _ripples: readonly WaterRippleSource[] = [], mapLookdown = false) {
+      const mapFade = mapLookdown ? 0.6 : 1;
+      [veil, blueCore, whiteCore].forEach((layer, index) => {
+        const material = layer.material as MeshBasicMaterial;
+        const baseOpacity = (layer.userData.baseOpacity as number | undefined) ?? opacity;
+        const baseZ = (layer.userData.baseZ as number | undefined) ?? layer.position.z;
+        material.opacity = baseOpacity * mapFade * (0.86 + Math.sin(elapsed * (1.1 + index * 0.34) + seed) * 0.14);
+        layer.position.z = baseZ + Math.sin(elapsed * 0.7 + index + seed) * 0.025;
+      });
+
+      ribbons.forEach((ribbon, index) => {
+        const material = ribbon.material as MeshBasicMaterial;
+        const baseOpacity = (ribbon.userData.baseOpacity as number | undefined) ?? opacity;
+        const speed = (ribbon.userData.fallSpeed as number | undefined) ?? 0.42;
+        const phase = (ribbon.userData.phase as number | undefined) ?? 0;
+        const cycle = (elapsed * speed + phase) % 1;
+        ribbon.position.y = height * (0.9 - cycle * 0.58);
+        ribbon.position.x = ((ribbon.userData.baseX as number | undefined) ?? ribbon.position.x) +
+          Math.sin(elapsed * 1.7 + index + seed) * width * 0.025;
+        material.opacity = baseOpacity * mapFade * (0.58 + Math.sin(cycle * Math.PI) * 0.42);
+      });
+
+      [foamA, foamB, foamC].forEach((foam, index) => {
+        const material = foam.material as MeshBasicMaterial;
+        const baseOpacity = (foam.userData.baseOpacity as number | undefined) ?? opacity;
+        const pulse = 0.88 + Math.sin(elapsed * (1.4 + index * 0.32) + seed) * 0.12;
+        foam.scale.x = ((foam.userData.baseScaleX as number | undefined) ?? 1) * pulse;
+        foam.scale.z = ((foam.userData.baseScaleZ as number | undefined) ?? 0.42) * (1.08 - (pulse - 0.88));
+        material.opacity = baseOpacity * mapFade * pulse;
+      });
+
+      spray.forEach((puff, index) => {
+        const material = puff.material as MeshBasicMaterial;
+        const phase = (puff.userData.phase as number | undefined) ?? index;
+        puff.position.x = ((puff.userData.baseX as number | undefined) ?? 0) + Math.sin(elapsed * 0.9 + phase) * width * 0.08;
+        puff.position.y = ((puff.userData.baseY as number | undefined) ?? 0) + Math.sin(elapsed * 1.2 + phase) * 0.12;
+        material.opacity = ((puff.userData.baseOpacity as number | undefined) ?? opacity * 0.4) * mapFade *
+          (0.72 + Math.sin(elapsed * 1.6 + phase) * 0.28);
+      });
+    },
+  };
+
+  return { group, controller };
 }
 
 function addSmallWaterfall(
   group: Group,
+  controllers: WaterSurfaceController[],
   x: number,
   z: number,
   width: number,
   height: number,
   yaw: number,
 ) {
-  const waterfall = makeWaterfallPanel(width, height, 0.24);
-  waterfall.position.set(x, sampleTerrainHeight(x, z) - height * 0.18, z);
-  waterfall.rotation.y = yaw;
-  waterfall.rotation.z = Math.sin(x * 0.13 + z * 0.07) * 0.05;
-  waterfall.name = `small-waterfall-${Math.round(x)}-${Math.round(z)}`;
-  group.add(waterfall);
+  const waterfall = makeWaterfallPanel(width, height, 0.34, x * 0.17 + z * 0.09);
+  waterfall.group.position.set(x, sampleTerrainHeight(x, z) - height * 0.18, z);
+  waterfall.group.rotation.y = yaw;
+  waterfall.group.rotation.z = Math.sin(x * 0.13 + z * 0.07) * 0.05;
+  waterfall.group.name = `pretty-waterfall-${Math.round(x)}-${Math.round(z)}`;
+  group.add(waterfall.group);
+  controllers.push(waterfall.controller);
 }
 
 function makeRiverSurface(
@@ -1071,9 +1204,10 @@ export function buildHighlandWaterways(): WaterSurfaceGroup {
     controllers.push(surface);
   });
 
-  addSmallWaterfall(group, 25, 89, 2.8, 5.4, -0.22);
-  addSmallWaterfall(group, 38, 128, 4.4, 10.2, -0.36);
-  addSmallWaterfall(group, -16, 158, 2.4, 4.8, 0.48);
+  addSmallWaterfall(group, controllers, 25, 89, 4.2, 7.2, -0.22);
+  addSmallWaterfall(group, controllers, 38, 128, 7.4, 15.8, -0.36);
+  addSmallWaterfall(group, controllers, -16, 158, 3.8, 6.8, 0.48);
+  addSmallWaterfall(group, controllers, 10, 154, 5.2, 10.4, 0.3);
 
   return { group, controllers };
 }

@@ -5,6 +5,7 @@ import {
   sampleRiverSurfaceHalfWidth,
   sampleRiverSurfaceMask,
   sampleStartingWaterSurfaceMask,
+  sampleWaterAmbience,
   sampleWaterBankShape,
   sampleWaterState,
   STARTING_WATER_POOLS,
@@ -31,11 +32,14 @@ export function runWaterContracts() {
     const water = sampleWaterState(channel.centerX, z);
     const edge = sampleRiverEdgeState(channel.centerX, z);
     const surfaceMask = sampleRiverSurfaceMask(channel.centerX, z);
+    const ambience = sampleWaterAmbience(channel.centerX, z);
 
     assert(surfaceMask > 0.95, `main river center has rendered surface at z=${z}`);
     assert(water !== null, `main river center has gameplay water at z=${z}`);
     assert(water.depth > 0.2, `main river center has positive depth at z=${z}`);
     assert(edge.zone === "shallow_water" || edge.zone === "swim_water", `main river center edge zone is water at z=${z}`);
+    assert(ambience.proximity > 0.95, `main river center has strong water ambience at z=${z}`);
+    assert(ambience.kind === "river", `main river center ambience resolves to river at z=${z}`);
     assertFlowVector(water.flowDirection, `main river z=${z}`);
 
     const dryBankX = channel.centerX + sampleRiverSurfaceHalfWidth(channel) * 1.16;
@@ -123,6 +127,7 @@ export function runWaterContracts() {
     assert(water !== null, `${pool.id} center has gameplay water`);
     assert(water.kind === "pool", `${pool.id} resolves as pool water`);
     assert(water.depth > 0.2, `${pool.id} has positive depth`);
+    assert(sampleWaterAmbience(pool.x, pool.z).proximity > 0.95, `${pool.id} center has strong water ambience`);
     assert(water.swimAllowed === pool.swimAllowed, `${pool.id} swim flag matches pool contract`);
     assert(
       Math.max(bankShape.dampBand, bankShape.coveCut, bankShape.shelfCut, bankShape.sandbarLift) > 0.08,
@@ -130,4 +135,12 @@ export function runWaterContracts() {
     );
     assertFlowVector(water.flowDirection, `${pool.id}`);
   });
+
+  const cloudbackCreek = sampleWaterAmbience(-22, 170);
+  assert(cloudbackCreek.kind === "creek", "highland creek resolves as creek ambience");
+  assert(cloudbackCreek.proximity > 0.95, "highland creek has strong ambience");
+
+  const farDryAmbience = sampleWaterAmbience(170, -190);
+  assert(farDryAmbience.proximity < 0.05, "far dry meadow has no water ambience");
+  assert(farDryAmbience.kind === null, "far dry meadow has no water ambience source");
 }

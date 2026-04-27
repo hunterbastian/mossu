@@ -38,6 +38,7 @@ export interface PlayerState {
   rollingBoostActive: boolean;
   rollHoldSeconds: number;
   rollModeReady: boolean;
+  floating: boolean;
   grounded: boolean;
   swimming: boolean;
   waterDepth: number;
@@ -119,6 +120,7 @@ export class GameState {
         rollingBoostActive: false,
         rollHoldSeconds: 0,
         rollModeReady: false,
+        floating: false,
         grounded: true,
         swimming: false,
         waterDepth: 0,
@@ -153,6 +155,7 @@ export class GameState {
     player.justLanded = false;
     player.justRespawned = false;
     player.landingImpact = 0;
+    player.floating = false;
     this.frame.lastCatalogedLandmarkId = null;
     tickStaminaCooldown(runtime, dt);
     tickMovementTimers(player, input, dt, runtime);
@@ -197,6 +200,7 @@ export class GameState {
     const waterStateAfterMove = sampleWaterState(player.position.x, player.position.z);
     resolveWaterContact(player, terrainHeight, waterStateAfterMove, wasGrounded, downwardSpeedBeforeResolve, runtime);
 
+    player.floating = isFloating && !player.grounded && !player.swimming && !player.fallingToVoid;
     updateStaminaAndAbilityState(player, dt, runtime, isFloating);
 
     if (horizontalSpeed > 0.3) {

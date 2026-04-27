@@ -10,6 +10,11 @@ Last updated: 2026-04-25
 - camera-controls
 - three-mesh-bvh
 
+Rendering reference:
+
+- `docs/THREE_RENDERING_NOTES.md`: Mossu-specific Three.js, WebGPU, TSL, and postprocessing guidance.
+- `docs/MODEL_INVENTORY.md`: complete procedural model/archetype list for characters, trees, props, water, terrain, and atmosphere.
+
 Useful scripts:
 
 ```bash

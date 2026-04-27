@@ -7,6 +7,7 @@ import {
   AIR_ACCELERATION,
   AIR_DECELERATION,
   AIR_SPEED,
+  BREEZE_FLOAT_BUFFER_TIME,
   COYOTE_TIME,
   FLOAT_FORWARD_BONUS,
   FLOAT_GRAVITY_SCALE,
@@ -81,6 +82,9 @@ export function tickMovementTimers(
   runtime.jumpBufferRemaining = input.jumpPressed
     ? JUMP_BUFFER_TIME
     : Math.max(0, runtime.jumpBufferRemaining - dt);
+  runtime.breezeFloatBufferRemaining = input.abilityPressed || input.abilityHeld
+    ? BREEZE_FLOAT_BUFFER_TIME
+    : Math.max(0, runtime.breezeFloatBufferRemaining - dt);
   runtime.coyoteTimeRemaining = player.grounded && !player.swimming
     ? COYOTE_TIME
     : Math.max(0, runtime.coyoteTimeRemaining - dt);
@@ -238,8 +242,10 @@ export function applyMovementPhysics(
 
   const canFloat = save.unlockedAbilities.has("breeze_float");
   const horizontalSpeed = Math.hypot(player.velocity.x, player.velocity.z);
-  const wantsFloat = canFloat && !player.grounded && !player.swimming && input.jumpHeld && player.velocity.y < 5;
+  const wantsFloatInput = input.jumpHeld || input.abilityHeld || runtime.breezeFloatBufferRemaining > 0;
+  const wantsFloat = canFloat && !player.grounded && !player.swimming && wantsFloatInput && player.velocity.y < 5;
   const isFloating = wantsFloat && player.stamina > STAMINA_ACTION_THRESHOLD;
+  player.floating = isFloating;
 
   if (!player.swimming) {
     player.velocity.y -= GRAVITY * (isFloating ? FLOAT_GRAVITY_SCALE : 1) * dt;

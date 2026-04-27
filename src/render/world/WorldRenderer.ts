@@ -2,6 +2,7 @@ import {
   AmbientLight,
   BufferAttribute,
   BufferGeometry,
+  CircleGeometry,
   Color,
   ConeGeometry,
   CylinderGeometry,
@@ -45,17 +46,29 @@ import {
   sampleWaterBankShape,
   sampleWaterState,
   shadowPockets,
+  STARTING_WATER_POOLS,
+  startingLookTarget,
+  startingPosition,
   worldLandmarks,
   worldForageables,
+  worldMapMarkers,
 } from "../../simulation/world";
 import { MossuAvatar } from "../objects/MossuAvatar";
-import { createGrassMesh, GrassShader, sampleOpeningMeadowMask, updateGrassMeshLod } from "./grassSystem";
+import {
+  createGrassMesh,
+  createGrassPatchImpostorMesh,
+  getGrassMeshLodStats,
+  GrassShader,
+  sampleOpeningMeadowMask,
+  updateGrassMeshLod,
+} from "./grassSystem";
 import { buildClouds, buildMountainAtmosphere, buildSkyDome } from "./atmosphereSystem";
 import {
   AMBIENT_BLOB_SPECIES_NAME,
   AmbientBlob,
   AmbientBlobUpdateStats,
   buildAmbientBlobs,
+  buildAmbientBlobNests,
   updateAmbientBlobs,
 } from "./ambientBlobs";
 import {
@@ -81,12 +94,14 @@ import {
 const WORLD_SIZE = 560;
 const TERRAIN_SEGMENTS = 160;
 const GRASS_COUNT = 5600;
+const FAR_GRASS_PATCH_COUNT = 520;
 const ALPINE_GRASS_COUNT = 1000;
 const LANDING_SPLASH_PARTICLES = 18;
 const SNOW_TRAIL_PARTICLES = 20;
 const WATER_RIPPLE_LIMIT = 4;
 const WATER_RIPPLE_LIFETIME = 1.45;
 const WATER_RIPPLE_MIN_DEPTH = 0.16;
+const TERRAIN_FORM_STROKE_COUNT = 96;
 
 interface LandingSplashParticle {
   mesh: Mesh;
@@ -142,6 +157,13 @@ export interface WorldPerfStats {
   grassMeshes: number;
   grassInstances: number;
   grassEstimatedTriangles: number;
+  grassImpostorMeshes: number;
+  grassImpostorInstances: number;
+  grassImpostorEstimatedTriangles: number;
+  grassLodCells: number;
+  grassLodSourceInstances: number;
+  grassLodVisitedCells: number;
+  grassLodVisitedSources: number;
   forestMeshes: number;
   forestInstances: number;
   forestEstimatedTriangles: number;
@@ -208,11 +230,11 @@ function colorForTerrain(x: number, y: number, z: number) {
     (zone === "peak_shrine" ? 0.38 : 0);
   const rockSnowDampen = 1 - MathUtils.clamp(rockMask * 0.55, 0, 0.45);
   const snowMask = MathUtils.clamp(snowBase * rockSnowDampen, 0, 0.9);
-  const grass = new Color("#53683d")
-    .lerp(new Color("#7fa254"), 0.36 + mixValue * 0.34 + heightGrass * 0.12)
-    .lerp(new Color("#a9c76b"), openingMask * (0.08 + fieldBands * 0.12) + meadowBloom * 0.9)
-    .lerp(new Color("#6f8a55"), foothillTint * 0.28)
-    .lerp(new Color("#829071"), alpineTint * 0.2);
+  const grass = new Color("#66894a")
+    .lerp(new Color("#9dc866"), 0.42 + mixValue * 0.32 + heightGrass * 0.14)
+    .lerp(new Color("#c7df73"), openingMask * (0.14 + fieldBands * 0.18) + meadowBloom * 1.1)
+    .lerp(new Color("#7fa45c"), foothillTint * 0.2)
+    .lerp(new Color("#94a184"), alpineTint * 0.18);
   const rock = new Color("#b5ad9c")
     .lerp(new Color("#d6d1c4"), 0.18 + mixValue * 0.22)
     .lerp(new Color("#8f958d"), MathUtils.clamp(slope * 1.3 + alpineTint * 0.34, 0, 0.78));
@@ -224,22 +246,22 @@ function colorForTerrain(x: number, y: number, z: number) {
   const sandbar = new Color("#b8ad7b")
     .lerp(new Color("#d8c989"), MathUtils.clamp(0.24 + sunWash * 0.22 + pathBands * 0.14, 0, 1))
     .lerp(new Color("#a1a988"), foothillTint * 0.16 + alpineTint * 0.22);
-  const wornDirt = new Color("#6b5a47")
-    .lerp(new Color("#8d7a62"), 0.35 + fieldBands * 0.2)
-    .lerp(new Color("#4f4438"), 0.12 + slope * 0.1);
+  const wornDirt = new Color("#846c4f")
+    .lerp(new Color("#aa9067"), 0.38 + fieldBands * 0.24)
+    .lerp(new Color("#665747"), 0.08 + slope * 0.08);
 
   const terrainColor = grass
-    .lerp(new Color("#a6c86f"), habitat.meadow * (0.12 + openingMask * 0.08))
-    .lerp(new Color("#4f6b45"), habitat.forest * 0.16)
-    .lerp(new Color("#71866f"), habitat.shore * 0.18)
+    .lerp(new Color("#c9e079"), habitat.meadow * (0.18 + openingMask * 0.1))
+    .lerp(new Color("#65864f"), habitat.forest * 0.12)
+    .lerp(new Color("#7f9b78"), habitat.shore * 0.14)
     .lerp(paintedEarth, paintedGround * (0.34 + (1 - slopeRock) * 0.22))
     .lerp(wornDirt, routeDirt * 0.58 * (1 - rockMask * 0.88))
     .lerp(sandbar, sandbarLine * 0.34)
-    .lerp(new Color("#3f6d5c"), wetBankLine * 0.34)
-    .lerp(new Color("#5e745e"), coveShade * 0.18)
-    .lerp(new Color("#6f7f5e"), waterShoreMask * 0.22)
+    .lerp(new Color("#5d9581"), wetBankLine * 0.24)
+    .lerp(new Color("#748b69"), coveShade * 0.13)
+    .lerp(new Color("#86a978"), waterShoreMask * 0.16)
     .lerp(new Color("#c6b987"), dryLipLine * 0.28)
-    .lerp(new Color("#d6c57d"), meadowBloom * (0.28 + openingMask * 0.16))
+    .lerp(new Color("#f0d985"), meadowBloom * (0.36 + openingMask * 0.2))
     .lerp(rock, rockMask * (1 - snowMask * 0.46))
     .lerp(snow, snowMask);
   return terrainColor.lerp(new Color("#cdeef4"), MathUtils.smoothstep(islandEdge, 0.74, 1) * 0.74);
@@ -291,6 +313,268 @@ function makeTerrainMesh() {
   const mesh = new Mesh(geometry, material);
   mesh.receiveShadow = true;
   return mesh;
+}
+
+function terrainFormHash(seed: number) {
+  return MathUtils.euclideanModulo(Math.sin(seed * 127.1 + 17.7) * 43758.5453123, 1);
+}
+
+function buildTerrainFormStrokes() {
+  const geometry = new CircleGeometry(1, 20);
+  geometry.rotateX(-Math.PI / 2);
+  const material = new MeshBasicMaterial({
+    color: "#6f835d",
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.16,
+    depthWrite: false,
+  });
+  const mesh = new InstancedMesh(geometry, material, TERRAIN_FORM_STROKE_COUNT);
+  const dummy = new Object3D();
+  const color = new Color();
+  const routeBands = [
+    { x: -42, z: -116, radiusX: 58, radiusZ: 40, yaw: -0.28, warmth: 0.72 },
+    { x: -6, z: -42, radiusX: 74, radiusZ: 50, yaw: 0.18, warmth: 0.66 },
+    { x: 18, z: 38, radiusX: 72, radiusZ: 44, yaw: 0.46, warmth: 0.52 },
+    { x: 36, z: 118, radiusX: 64, radiusZ: 48, yaw: 0.7, warmth: 0.34 },
+    { x: 2, z: 198, radiusX: 62, radiusZ: 42, yaw: 0.2, warmth: 0.26 },
+  ];
+
+  for (let i = 0; i < TERRAIN_FORM_STROKE_COUNT; i += 1) {
+    const band = routeBands[i % routeBands.length];
+    const ring = Math.floor(i / routeBands.length);
+    const a = ring * 1.618 + terrainFormHash(i + 3) * Math.PI * 2;
+    const r = Math.sqrt(terrainFormHash(i + 31));
+    const localX = Math.cos(a) * band.radiusX * r;
+    const localZ = Math.sin(a) * band.radiusZ * r;
+    const c = Math.cos(band.yaw);
+    const s = Math.sin(band.yaw);
+    const x = band.x + localX * c - localZ * s;
+    const z = band.z + localX * s + localZ * c;
+    const y = sampleTerrainHeight(x, z);
+    const slope = 1 - sampleTerrainNormal(x, z).y;
+    const size = MathUtils.lerp(3.8, 10.4, terrainFormHash(i + 71)) * MathUtils.lerp(1, 1.36, slope);
+    const flatten = MathUtils.lerp(0.16, 0.38, terrainFormHash(i + 97));
+    dummy.position.set(x, y + 0.052 + slope * 0.05, z);
+    dummy.rotation.set(0, band.yaw + MathUtils.lerp(-0.55, 0.55, terrainFormHash(i + 113)), 0);
+    dummy.scale.set(size * MathUtils.lerp(1.2, 2.2, terrainFormHash(i + 151)), 1, size * flatten);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+    color
+      .set("#6d815d")
+      .lerp(new Color("#d7c77f"), band.warmth * 0.36)
+      .lerp(new Color("#6f8790"), MathUtils.smoothstep(y, 72, 146) * 0.28)
+      .lerp(new Color("#415747"), slope * 0.18);
+    mesh.setColorAt(i, color);
+  }
+
+  mesh.name = "terrain-form-strokes";
+  mesh.renderOrder = 1;
+  return mesh;
+}
+
+function buildOpeningNestVista() {
+  const group = new Group();
+  group.name = "opening-nest-vista";
+
+  const forward = new Vector3().subVectors(startingLookTarget, startingPosition).setY(0).normalize();
+  const right = new Vector3(forward.z, 0, -forward.x).normalize();
+  const nestCenter = startingPosition.clone().addScaledVector(forward, 25).addScaledVector(right, -0.7);
+  nestCenter.y = sampleTerrainHeight(nestCenter.x, nestCenter.z);
+
+  const nestFloorMaterial = new MeshLambertMaterial({
+    color: "#b9a978",
+    transparent: true,
+    opacity: 0.72,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const softLeafMaterial = new MeshLambertMaterial({ color: "#8fc86a" });
+  const darkLeafMaterial = new MeshLambertMaterial({ color: "#6fa257" });
+  const mossLeafMaterial = new MeshLambertMaterial({ color: "#b8d873" });
+  const twigMaterial = new MeshLambertMaterial({ color: "#8a6a43" });
+  const pebbleMaterial = new MeshStandardMaterial({ color: "#c8c3aa", roughness: 1, metalness: 0 });
+  const flowerMaterial = new MeshBasicMaterial({ color: "#f7f4d6", transparent: true, opacity: 0.92 });
+  const pollenMaterial = new MeshBasicMaterial({ color: "#ffd76a", transparent: true, opacity: 0.88 });
+
+  const floor = new Mesh(new CircleGeometry(1, 34), nestFloorMaterial);
+  floor.rotation.x = -Math.PI / 2;
+  floor.rotation.z = Math.atan2(forward.x, forward.z) + 0.2;
+  floor.position.set(nestCenter.x, nestCenter.y + 0.045, nestCenter.z);
+  floor.scale.set(5.9, 3.6, 1);
+  group.add(floor);
+
+  for (let i = 0; i < 28; i += 1) {
+    const angle = (i / 28) * Math.PI * 2 + Math.sin(i * 1.7) * 0.12;
+    const ringRadius = 3.6 + (i % 5) * 0.28 + Math.sin(i * 2.31) * 0.34;
+    const x = nestCenter.x + Math.cos(angle) * ringRadius + forward.x * Math.sin(i * 0.9) * 0.55;
+    const z = nestCenter.z + Math.sin(angle) * ringRadius + forward.z * Math.sin(i * 0.9) * 0.55;
+    const y = sampleTerrainHeight(x, z);
+    const material = i % 5 === 0 ? mossLeafMaterial : i % 3 === 0 ? darkLeafMaterial : softLeafMaterial;
+    const clump = new Mesh(new SphereGeometry(1, 10, 8), material);
+    clump.position.set(x, y + 0.16 + (i % 4) * 0.018, z);
+    clump.rotation.y = angle;
+    clump.scale.set(0.8 + (i % 4) * 0.16, 0.12 + (i % 3) * 0.03, 0.32 + (i % 5) * 0.05);
+    group.add(clump);
+  }
+
+  for (let i = 0; i < 13; i += 1) {
+    const angle = (i / 13) * Math.PI * 2 + 0.28;
+    const radius = 2.3 + (i % 4) * 0.42;
+    const x = nestCenter.x + Math.cos(angle) * radius;
+    const z = nestCenter.z + Math.sin(angle) * radius;
+    const twig = new Mesh(new CylinderGeometry(0.045, 0.06, 1.25 + (i % 4) * 0.2, 6), twigMaterial);
+    twig.position.set(x, sampleTerrainHeight(x, z) + 0.18, z);
+    twig.rotation.set(0.06 * Math.sin(i), angle + Math.PI / 2, Math.PI / 2 + Math.sin(i * 0.8) * 0.18);
+    group.add(twig);
+  }
+
+  for (let i = 0; i < 14; i += 1) {
+    const distance = 6.2 + i * 2.6;
+    const lateral = Math.sin(i * 1.42) * 1.4 + (i % 2 === 0 ? -0.28 : 0.28);
+    const x = nestCenter.x + forward.x * distance + right.x * lateral;
+    const z = nestCenter.z + forward.z * distance + right.z * lateral;
+    const y = sampleTerrainHeight(x, z);
+    const stone = new Mesh(new SphereGeometry(1, 10, 8), pebbleMaterial);
+    stone.position.set(x, y + 0.11, z);
+    stone.rotation.y = Math.sin(i * 2.1);
+    stone.scale.set(0.38 + (i % 4) * 0.06, 0.1, 0.28 + (i % 3) * 0.05);
+    group.add(stone);
+  }
+
+  for (let i = 0; i < 18; i += 1) {
+    const distance = 9 + (i % 9) * 4.2;
+    const side = i < 9 ? -1 : 1;
+    const lateral = side * (3.3 + Math.sin(i * 1.37) * 1.2);
+    const x = nestCenter.x + forward.x * distance + right.x * lateral;
+    const z = nestCenter.z + forward.z * distance + right.z * lateral;
+    const y = sampleTerrainHeight(x, z);
+    const stem = new Mesh(new ConeGeometry(0.06, 0.62 + (i % 3) * 0.08, 6), mossLeafMaterial);
+    stem.position.set(x, y + 0.3, z);
+    stem.rotation.z = side * 0.12 + Math.sin(i) * 0.08;
+    group.add(stem);
+
+    if (i % 3 === 0) {
+      const flower = new Mesh(new SphereGeometry(0.12, 8, 6), i % 2 === 0 ? flowerMaterial : pollenMaterial);
+      flower.position.set(x, y + 0.72, z);
+      flower.scale.set(1.2, 0.45, 1.2);
+      group.add(flower);
+    }
+  }
+
+  return group;
+}
+
+function buildOpeningWaterComposition() {
+  const group = new Group();
+  group.name = "opening-water-composition";
+
+  const dampMaterial = new MeshLambertMaterial({
+    color: "#86a77b",
+    transparent: true,
+    opacity: 0.54,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const sandMaterial = new MeshLambertMaterial({
+    color: "#d6c487",
+    transparent: true,
+    opacity: 0.66,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const wetSandMaterial = new MeshLambertMaterial({
+    color: "#9eb68b",
+    transparent: true,
+    opacity: 0.5,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const reedMaterial = new MeshLambertMaterial({ color: "#6fa759", side: DoubleSide });
+  const reedTipMaterial = new MeshLambertMaterial({ color: "#c89c58" });
+  const stoneMaterial = new MeshStandardMaterial({ color: "#bfc5b2", roughness: 1, metalness: 0 });
+
+  const patchGeometry = new CircleGeometry(1, 18);
+  patchGeometry.rotateX(-Math.PI / 2);
+  const reedGeometry = new ConeGeometry(0.08, 1, 6);
+  const reedTipGeometry = new SphereGeometry(0.12, 8, 6);
+  const stoneGeometry = new SphereGeometry(1, 10, 8);
+
+  const addPatch = (material: MeshLambertMaterial, x: number, z: number, sx: number, sz: number, yaw: number) => {
+    const patch = new Mesh(patchGeometry, material);
+    patch.position.set(x, sampleTerrainHeight(x, z) + 0.066, z);
+    patch.rotation.y = yaw;
+    patch.scale.set(sx, 1, sz);
+    patch.renderOrder = 1;
+    group.add(patch);
+  };
+
+  const addReedCluster = (x: number, z: number, seed: number) => {
+    const count = 3 + (seed % 3);
+    for (let i = 0; i < count; i += 1) {
+      const offsetX = Math.sin(seed * 1.7 + i * 2.1) * 0.42;
+      const offsetZ = Math.cos(seed * 1.3 + i * 1.9) * 0.42;
+      const reedX = x + offsetX;
+      const reedZ = z + offsetZ;
+      const height = 1.1 + ((seed + i) % 4) * 0.22;
+      const reed = new Mesh(reedGeometry, reedMaterial);
+      reed.position.set(reedX, sampleTerrainHeight(reedX, reedZ) + height * 0.5, reedZ);
+      reed.rotation.z = Math.sin(seed + i) * 0.16;
+      reed.scale.set(0.8, height, 0.8);
+      group.add(reed);
+
+      if ((seed + i) % 2 === 0) {
+        const tip = new Mesh(reedTipGeometry, reedTipMaterial);
+        tip.position.set(reedX, sampleTerrainHeight(reedX, reedZ) + height + 0.06, reedZ);
+        tip.scale.set(0.68, 0.34, 0.68);
+        group.add(tip);
+      }
+    }
+  };
+
+  STARTING_WATER_POOLS.forEach((pool, poolIndex) => {
+    const isMainLake = pool.id === "opening-lake";
+    const patchCount = isMainLake ? 48 : 18;
+    for (let i = 0; i < patchCount; i += 1) {
+      const angle = (i / patchCount) * Math.PI * 2 + Math.sin(i * 1.93 + poolIndex) * 0.08;
+      const scallop = Math.sin(i * 2.37 + pool.x * 0.04 + pool.z * 0.02);
+      const shoreScale = 0.96 + scallop * 0.06 + (i % 5) * 0.012;
+      const edgeX = pool.x + Math.cos(angle) * pool.renderRadiusX * shoreScale;
+      const edgeZ = pool.z + Math.sin(angle) * pool.renderRadiusZ * shoreScale;
+      const tangentYaw = -angle + Math.PI * 0.5;
+      const longAxis = isMainLake ? 3.6 + (i % 4) * 0.4 : 2.5 + (i % 3) * 0.34;
+      const shortAxis = isMainLake ? 0.8 + (i % 3) * 0.16 : 0.62 + (i % 2) * 0.16;
+      addPatch(i % 4 === 0 ? wetSandMaterial : dampMaterial, edgeX, edgeZ, longAxis, shortAxis, tangentYaw);
+
+      if (isMainLake && (i % 6 === 0 || (i > 28 && i < 40 && i % 3 === 0))) {
+        const sandX = pool.x + Math.cos(angle) * pool.renderRadiusX * (0.78 + scallop * 0.04);
+        const sandZ = pool.z + Math.sin(angle) * pool.renderRadiusZ * (0.78 + scallop * 0.04);
+        addPatch(sandMaterial, sandX, sandZ, 2.6 + (i % 5) * 0.3, 0.62 + (i % 4) * 0.12, tangentYaw + 0.2);
+      }
+
+      if ((isMainLake && i % 5 === 0) || (!isMainLake && i % 7 === 0)) {
+        const reedX = pool.x + Math.cos(angle) * pool.renderRadiusX * 1.08;
+        const reedZ = pool.z + Math.sin(angle) * pool.renderRadiusZ * 1.08;
+        addReedCluster(reedX, reedZ, i + poolIndex * 19);
+      }
+    }
+  });
+
+  const forward = new Vector3().subVectors(startingLookTarget, startingPosition).setY(0).normalize();
+  const right = new Vector3(forward.z, 0, -forward.x).normalize();
+  for (let i = 0; i < 18; i += 1) {
+    const distance = 22 + i * 4.2;
+    const lateral = Math.sin(i * 1.41) * 4.6 + (i % 2 === 0 ? -2.2 : 2.2);
+    const x = startingPosition.x + forward.x * distance + right.x * lateral;
+    const z = startingPosition.z + forward.z * distance + right.z * lateral;
+    const stone = new Mesh(stoneGeometry, stoneMaterial);
+    stone.position.set(x, sampleTerrainHeight(x, z) + 0.13, z);
+    stone.rotation.y = Math.sin(i * 1.9);
+    stone.scale.set(0.52 + (i % 4) * 0.12, 0.12, 0.36 + (i % 3) * 0.08);
+    group.add(stone);
+  }
+
+  return group;
 }
 
 function buildShrine() {
@@ -769,24 +1053,35 @@ export class WorldRenderer {
   readonly clouds = buildClouds();
   readonly windMeshes: Array<InstancedMesh> = [];
   private readonly treeWindMeshes: Array<InstancedMesh> = [];
+  private readonly grassImpostorMeshes: Array<InstancedMesh> = [];
   private readonly smallPropMeshes: Array<InstancedMesh> = [];
   private readonly waterControllers: Array<WaterSurfaceController> = [];
   private readonly waterRipples: WaterRippleSource[] = [];
   private readonly waterRippleActorStates = new Map<string, WaterRippleActorState>();
   private readonly cameraCollisionMeshes: Mesh[] = [];
-  private readonly gameplayFog = new FogExp2("#c8d6cf", 0.00112);
-  private readonly lowlandBackground = new Color("#d8f6ff");
-  private readonly highlandBackground = new Color("#cfe7f3");
-  private readonly lowlandFogColor = new Color("#c9ded0");
-  private readonly highlandFogColor = new Color("#c8d8dd");
-  private readonly lowlandSunColor = new Color("#fff0cf");
+  private readonly gameplayFog = new FogExp2("#dff3f2", 0.00118);
+  private readonly lowlandBackground = new Color("#e7fbff");
+  private readonly highlandBackground = new Color("#dceff8");
+  private readonly lowlandFogColor = new Color("#def4ef");
+  private readonly highlandFogColor = new Color("#d5e4ed");
+  private readonly lowlandSunColor = new Color("#fff1c8");
   private readonly highlandSunColor = new Color("#e8f2ff");
+  private readonly lowlandSkyFillColor = new Color("#c7f5ff");
+  private readonly highlandSkyFillColor = new Color("#d8eaff");
+  private readonly lowlandGroundFillColor = new Color("#eadb9a");
+  private readonly highlandGroundFillColor = new Color("#c7d3be");
+  private readonly ambientLight = new AmbientLight("#fffdf0", 0.9);
+  private readonly skyFill = new HemisphereLight("#c7f5ff", "#eadb9a", 1.08);
+  private readonly skyBounce = new DirectionalLight("#e7fdff", 0.36);
   private elevationMood = 0;
   private grassLodFrame = 0;
 
   private readonly shrine = buildShrine();
   private readonly riverSystem = buildRiverSystem();
   private readonly startingWater = buildStartingWaterSystem();
+  private readonly terrainFormStrokes = buildTerrainFormStrokes();
+  private readonly openingNestVista = batchStaticDecorations(buildOpeningNestVista(), "opening-nest-vista-batch");
+  private readonly openingWaterComposition = batchStaticDecorations(buildOpeningWaterComposition(), "opening-water-composition-batch");
   private readonly islandShell = buildFloatingIslandShell();
   private readonly groundLayer = batchStaticDecorations(buildGroundLayer(), "ground-layer-batch");
   private readonly midLayer = batchStaticDecorations(buildMidLayer(), "mid-layer-batch");
@@ -802,6 +1097,15 @@ export class WorldRenderer {
   private readonly landmarkTrees = batchStaticDecorations(buildLandmarkTrees(), "landmark-tree-batch");
   private readonly mountainSilhouettes = new Group();
   private readonly sun = new DirectionalLight("#fff0cf", 3.12);
+  private readonly mossuContactShadow = new Mesh(
+    new CircleGeometry(1, 32),
+    new MeshBasicMaterial({
+      color: "#2f4a3f",
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+    }),
+  );
   private readonly meadowGlow = new PointLight("#ffe6b3", 1.48, 220, 1.4);
   private readonly alpineGlow = new PointLight("#cddcff", 0.74, 260, 1.1);
   private readonly landingSplash = new Group();
@@ -809,6 +1113,7 @@ export class WorldRenderer {
   private readonly snowTrail = new Group();
   private readonly snowTrailParticles: SnowTrailParticle[] = [];
   private readonly ambientBlobs: AmbientBlob[];
+  private readonly ambientNestGroup = new Group();
   private readonly ambientBlobGroup = new Group();
   private faunaStats: AmbientBlobUpdateStats = {
     speciesName: AMBIENT_BLOB_SPECIES_NAME,
@@ -842,20 +1147,19 @@ export class WorldRenderer {
     pulseSpeed: 2.4,
   };
   private readonly landmarkMapMarkers: Array<MapMarker> = [];
+  private readonly atlasMapMarkers: Array<MapMarker> = [];
 
   constructor(private readonly scene: Scene, options: WorldRendererOptions = {}) {
     this.skyDome = buildSkyDome({
       webGpuCompatible: options.webGpuCompatibleMaterials ?? false,
     });
     this.ambientBlobs = buildAmbientBlobs(options);
+    this.ambientNestGroup.add(batchStaticDecorations(buildAmbientBlobNests(this.ambientBlobs), "karu-nest-batch"));
     scene.background = this.lowlandBackground.clone();
     scene.fog = this.gameplayFog;
 
-    const ambient = new AmbientLight("#f4fff9", 0.84);
-    const skyFill = new HemisphereLight("#c8f7ff", "#d5e7a4", 1.02);
-    const skyBounce = new DirectionalLight("#dffcff", 0.32);
-    skyBounce.position.set(148, 126, 196);
-    scene.add(ambient, skyFill, skyBounce);
+    this.skyBounce.position.set(148, 126, 196);
+    scene.add(this.ambientLight, this.skyFill, this.skyBounce);
 
     this.sun.position.set(-244, 84, -46);
     this.sun.castShadow = false;
@@ -873,6 +1177,12 @@ export class WorldRenderer {
 
     scene.add(this.skyDome);
     scene.add(this.terrain);
+    scene.add(this.terrainFormStrokes);
+    scene.add(this.openingNestVista);
+    scene.add(this.openingWaterComposition);
+    this.mossuContactShadow.rotation.x = -Math.PI / 2;
+    this.mossuContactShadow.renderOrder = 1;
+    scene.add(this.mossuContactShadow);
     scene.add(this.islandShell);
     scene.add(this.riverSystem.group);
     scene.add(this.startingWater.group);
@@ -894,29 +1204,30 @@ export class WorldRenderer {
     scene.add(this.landingSplash);
     scene.add(this.snowTrail);
     scene.add(this.forageableGroup);
+    scene.add(this.ambientNestGroup);
     scene.add(this.ambientBlobGroup);
     scene.add(this.mapMarkerGroup);
 
     const meadowNearGrass = createGrassMesh(
-      Math.round(GRASS_COUNT * 0.42),
+      Math.round(GRASS_COUNT * 0.5),
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#347f36"),
-      new Color("#d6f478"),
+      new Color("#4d8b3d"),
+      new Color("#e6f58a"),
       {
         crossPlanes: 2,
-        bladeWidth: 0.62,
-        bladeHeight: 3.55,
-        placementMultiplier: 1.18,
-        scaleMultiplier: 1.08,
-        widthMultiplier: 0.9,
+        bladeWidth: 0.74,
+        bladeHeight: 3.85,
+        placementMultiplier: 1.28,
+        scaleMultiplier: 1.16,
+        widthMultiplier: 1.06,
         fadeInStart: 5,
         fadeInEnd: 12,
-        fadeOutStart: 34,
-        fadeOutEnd: 68,
-        rootFillBoost: 0.08,
-        selfShadowStrength: 0.92,
+        fadeOutStart: 38,
+        fadeOutEnd: 76,
+        rootFillBoost: 0.06,
+        selfShadowStrength: 0.72,
         distanceCompressionBoost: 0.04,
-        playerPushRadius: 11.6,
+        playerPushRadius: 12.4,
         playerPushStrength: 1.36,
         windExaggeration: 1.16,
         windTimeScale: 1,
@@ -926,6 +1237,7 @@ export class WorldRenderer {
           label: "near",
           innerRadius: 0,
           outerRadius: 76,
+          cellSize: 22,
           sampleStride: 1,
           updateEveryFrames: 4,
           movementThreshold: 1.8,
@@ -935,21 +1247,21 @@ export class WorldRenderer {
     const meadowMidGrass = createGrassMesh(
       Math.round(GRASS_COUNT * 0.34),
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#43743a"),
-      new Color("#b7df6a"),
+      new Color("#517a3e"),
+      new Color("#cbe66f"),
       {
         crossPlanes: 1,
         bladeWidth: 0.94,
         bladeHeight: 3.32,
-        placementMultiplier: 1.14,
-        scaleMultiplier: 1.06,
+        placementMultiplier: 1.2,
+        scaleMultiplier: 1.08,
         widthMultiplier: 1.12,
         fadeInStart: 24,
         fadeInEnd: 44,
         fadeOutStart: 96,
         fadeOutEnd: 144,
         rootFillBoost: 0.18,
-        selfShadowStrength: 0.72,
+        selfShadowStrength: 0.58,
         distanceCompressionBoost: 0.14,
         playerPushRadius: 12,
         playerPushStrength: 1.2,
@@ -961,45 +1273,22 @@ export class WorldRenderer {
           label: "mid",
           innerRadius: 48,
           outerRadius: 168,
+          cellSize: 34,
           sampleStride: 2,
           updateEveryFrames: 6,
           movementThreshold: 3,
         },
       },
     );
-    const meadowFarGrass = createGrassMesh(
-      Math.round(GRASS_COUNT * 0.28),
+    const meadowFarGrassPatches = createGrassPatchImpostorMesh(
+      FAR_GRASS_PATCH_COUNT,
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#536b42"),
-      new Color("#9fbd70"),
+      new Color("#5f7648"),
+      new Color("#c9df76"),
       {
-        crossPlanes: 1,
-        bladeWidth: 1.72,
-        bladeHeight: 1.42,
-        placementMultiplier: 0.96,
-        scaleMultiplier: 0.78,
-        widthMultiplier: 1.84,
-        fadeInStart: 84,
-        fadeInEnd: 118,
-        fadeOutStart: 220,
-        fadeOutEnd: 320,
-        rootFillBoost: 0.28,
-        selfShadowStrength: 0.46,
-        distanceCompressionBoost: 0.42,
-        playerPushRadius: 1,
-        playerPushStrength: 0,
-        windExaggeration: 0.9,
-        windTimeScale: 0.38,
-        broadWindScale: 0.64,
-        fineWindScale: 0.04,
-        lod: {
-          label: "far",
-          innerRadius: 128,
-          outerRadius: 332,
-          sampleStride: 4,
-          updateEveryFrames: 10,
-          movementThreshold: 7,
-        },
+        placementMultiplier: 1.08,
+        scaleMultiplier: 1.04,
+        opacity: 0.24,
       },
     );
     const alpineGrass = createGrassMesh(
@@ -1022,14 +1311,16 @@ export class WorldRenderer {
           label: "alpine",
           innerRadius: 34,
           outerRadius: 340,
+          cellSize: 52,
           sampleStride: 2,
           updateEveryFrames: 10,
           movementThreshold: 8,
         },
       },
     );
-    this.windMeshes.push(meadowNearGrass, meadowMidGrass, meadowFarGrass, alpineGrass);
-    scene.add(meadowNearGrass, meadowMidGrass, meadowFarGrass, alpineGrass);
+    this.windMeshes.push(meadowNearGrass, meadowMidGrass, alpineGrass);
+    this.grassImpostorMeshes.push(meadowFarGrassPatches);
+    scene.add(meadowFarGrassPatches, meadowNearGrass, meadowMidGrass, alpineGrass);
 
     const stoneMaterial = new MeshStandardMaterial({ color: "#bcc8ba", roughness: 1 });
     for (const [x, z, sx, sy, sz] of [
@@ -1112,6 +1403,28 @@ export class WorldRenderer {
       this.landmarkMapMarkers.push(marker);
       this.mapMarkerGroup.add(marker.group);
     });
+    worldMapMarkers.forEach((atlasMarker, index) => {
+      const color =
+        atlasMarker.kind === "bridge" ? "#8edaf5" :
+          atlasMarker.kind === "special" ? "#ffc75f" :
+            "#aeea80";
+      const radius =
+        atlasMarker.kind === "bridge" ? 2.4 :
+          atlasMarker.kind === "special" ? 2.8 :
+            2.2;
+      const marker: MapMarker = {
+        group: createMapMarker(color, radius, atlasMarker.kind === "special" ? 12 : 9, 0.28),
+        baseScale: 0.9,
+        pulseSpeed: 1.2 + index * 0.12,
+      };
+      marker.group.position.set(
+        atlasMarker.position.x,
+        sampleTerrainHeight(atlasMarker.position.x, atlasMarker.position.z) + 0.1,
+        atlasMarker.position.z,
+      );
+      this.atlasMapMarkers.push(marker);
+      this.mapMarkerGroup.add(marker.group);
+    });
 
     this.ambientBlobs.forEach((blob) => {
       this.ambientBlobGroup.add(blob.group);
@@ -1138,6 +1451,8 @@ export class WorldRenderer {
     ].forEach((object) => this.collectSmallPropMeshes(object));
     [
       this.terrain,
+      this.openingNestVista,
+      this.openingWaterComposition,
       this.islandShell,
       this.riverSystem.group,
       this.startingWater.group,
@@ -1203,6 +1518,7 @@ export class WorldRenderer {
       regroupPressed,
     );
     this.mossu.update(frame.player, dt);
+    this.updateMossuContactShadow(frame, mapLookdown);
     this.skyDome.position.copy(frame.player.position);
     this.updateSceneMood(frame, dt);
     this.scene.fog = mapLookdown ? null : this.gameplayFog;
@@ -1228,6 +1544,7 @@ export class WorldRenderer {
     this.mountainAtmosphere.visible = !mapLookdown;
     this.valleyMist.visible = !mapLookdown;
     this.shadowVolumes.visible = !mapLookdown;
+    this.terrainFormStrokes.visible = !mapLookdown;
   }
 
   private updateForageables(frame: FrameState, elapsed: number, mapLookdown: boolean) {
@@ -1285,6 +1602,8 @@ export class WorldRenderer {
       { vertices: 0, triangles: 0 },
     );
     const grassInstances = this.windMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
+    const grassLodStats = this.windMeshes.map((mesh) => getGrassMeshLodStats(mesh));
+    const grassImpostorInstances = this.grassImpostorMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
     const forestInstances = this.treeWindMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
     const smallPropInstances = this.smallPropMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
 
@@ -1294,6 +1613,13 @@ export class WorldRenderer {
       grassMeshes: this.windMeshes.length,
       grassInstances,
       grassEstimatedTriangles: countInstancedTriangles(this.windMeshes),
+      grassImpostorMeshes: this.grassImpostorMeshes.length,
+      grassImpostorInstances,
+      grassImpostorEstimatedTriangles: countInstancedTriangles(this.grassImpostorMeshes),
+      grassLodCells: grassLodStats.reduce((sum, stats) => sum + (stats?.cells ?? 0), 0),
+      grassLodSourceInstances: grassLodStats.reduce((sum, stats) => sum + (stats?.sourceInstances ?? 0), 0),
+      grassLodVisitedCells: grassLodStats.reduce((sum, stats) => sum + (stats?.visitedCells ?? 0), 0),
+      grassLodVisitedSources: grassLodStats.reduce((sum, stats) => sum + (stats?.visitedSources ?? 0), 0),
       forestMeshes: this.treeWindMeshes.length,
       forestInstances,
       forestEstimatedTriangles: countInstancedTriangles(this.treeWindMeshes),
@@ -1326,6 +1652,24 @@ export class WorldRenderer {
         this.smallPropMeshes.push(mesh);
       }
     });
+  }
+
+  private updateMossuContactShadow(frame: FrameState, mapLookdown: boolean) {
+    const player = frame.player;
+    const terrainY = sampleTerrainHeight(player.position.x, player.position.z);
+    const water = sampleWaterState(player.position.x, player.position.z);
+    const surfaceY = water ? Math.max(terrainY, water.surfaceY) : terrainY;
+    const heightAboveSurface = MathUtils.clamp(player.position.y - surfaceY, 0, 16);
+    const groundedFade = player.fallingToVoid ? 0 : 1 - MathUtils.smoothstep(heightAboveSurface, 2.4, 14);
+    const waterFade = water && water.depth > 0.24 ? 0.48 : 1;
+    const rollingScale = player.rolling ? 1.22 : 1;
+    const shadowScale = MathUtils.lerp(4.8, 7.4, MathUtils.clamp(heightAboveSurface / 12, 0, 1)) * rollingScale;
+    const material = this.mossuContactShadow.material as MeshBasicMaterial;
+
+    this.mossuContactShadow.visible = !mapLookdown && groundedFade > 0.02;
+    this.mossuContactShadow.position.set(player.position.x, surfaceY + 0.055, player.position.z);
+    this.mossuContactShadow.scale.set(shadowScale * 1.08, shadowScale * 0.74, 1);
+    material.opacity = 0.2 * groundedFade * waterFade;
   }
 
   private updateGrassLod(frame: FrameState, mapLookdown: boolean) {
@@ -1377,10 +1721,15 @@ export class WorldRenderer {
     }
 
     this.gameplayFog.color.copy(this.lowlandFogColor).lerp(this.highlandFogColor, this.elevationMood);
-    this.gameplayFog.density = MathUtils.lerp(0.00098, 0.00134, this.elevationMood);
+    this.gameplayFog.density = MathUtils.lerp(0.00108, 0.00136, this.elevationMood);
     this.sun.color.copy(this.lowlandSunColor).lerp(this.highlandSunColor, this.elevationMood);
-    this.sun.intensity = MathUtils.lerp(3.18, 2.74, this.elevationMood);
-    this.meadowGlow.intensity = MathUtils.lerp(0.52, 0.24, this.elevationMood);
+    this.sun.intensity = MathUtils.lerp(3.42, 2.92, this.elevationMood);
+    this.ambientLight.intensity = MathUtils.lerp(0.86, 0.76, this.elevationMood);
+    this.skyFill.color.copy(this.lowlandSkyFillColor).lerp(this.highlandSkyFillColor, this.elevationMood);
+    this.skyFill.groundColor.copy(this.lowlandGroundFillColor).lerp(this.highlandGroundFillColor, this.elevationMood);
+    this.skyFill.intensity = MathUtils.lerp(1.12, 1.0, this.elevationMood);
+    this.skyBounce.intensity = MathUtils.lerp(0.42, 0.5, this.elevationMood);
+    this.meadowGlow.intensity = MathUtils.lerp(0.66, 0.28, this.elevationMood);
     this.alpineGlow.intensity = MathUtils.lerp(0.38, 0.72, this.elevationMood);
   }
 
@@ -1652,7 +2001,7 @@ export class WorldRenderer {
     this.playerMapMarker.group.position.set(player.x, playerGround + 0.2, player.z);
     this.shrineMapMarker.group.position.set(2, sampleTerrainHeight(2, 214) + 0.2, 214);
 
-    [this.playerMapMarker, this.shrineMapMarker, ...this.landmarkMapMarkers].forEach((marker, index) => {
+    [this.playerMapMarker, this.shrineMapMarker, ...this.landmarkMapMarkers, ...this.atlasMapMarkers].forEach((marker, index) => {
       const pulse = 1 + Math.sin(elapsed * marker.pulseSpeed + index * 0.9) * 0.08;
       const highlightBoost = marker === this.playerMapMarker ? 1.95 : marker === this.shrineMapMarker ? 1.6 : 1.28;
       marker.group.scale.setScalar(marker.baseScale * pulse * highlightBoost);

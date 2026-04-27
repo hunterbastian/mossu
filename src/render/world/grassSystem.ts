@@ -1,12 +1,14 @@
 import {
   BufferAttribute,
   BufferGeometry,
+  CircleGeometry,
   Color,
   DoubleSide,
   DynamicDrawUsage,
   InstancedBufferAttribute,
   InstancedMesh,
   MathUtils,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   Object3D,
   PlaneGeometry,
@@ -58,14 +60,29 @@ export interface GrassLodOptions {
   label: string;
   innerRadius: number;
   outerRadius: number;
+  cellSize?: number;
   sampleStride?: number;
   updateEveryFrames?: number;
   movementThreshold?: number;
 }
 
+export interface GrassPatchImpostorOptions {
+  placementMultiplier?: number;
+  scaleMultiplier?: number;
+  opacity?: number;
+  yOffset?: number;
+}
+
+interface GrassLodCell {
+  centerX: number;
+  centerZ: number;
+  sourceIndices: number[];
+}
+
 interface GrassLodSource {
   options: Required<GrassLodOptions>;
   sourceCount: number;
+  cells: GrassLodCell[];
   matrices: Float32Array;
   phases: Float32Array;
   tints: Float32Array;
@@ -76,6 +93,40 @@ interface GrassLodSource {
   lastOriginX: number;
   lastOriginZ: number;
   activeCount: number;
+  lastVisitedCells: number;
+  lastVisitedSources: number;
+}
+
+export interface GrassLodPerfStats {
+  cells: number;
+  sourceInstances: number;
+  visitedCells: number;
+  visitedSources: number;
+  activeInstances: number;
+}
+
+function buildGrassLodCells(roots: Float32Array, sourceCount: number, cellSize: number) {
+  const cells = new Map<string, GrassLodCell>();
+  for (let source = 0; source < sourceCount; source += 1) {
+    const rootIndex = source * 3;
+    const rootX = roots[rootIndex];
+    const rootZ = roots[rootIndex + 2];
+    const cellX = Math.floor(rootX / cellSize);
+    const cellZ = Math.floor(rootZ / cellSize);
+    const key = `${cellX},${cellZ}`;
+    let cell = cells.get(key);
+    if (!cell) {
+      cell = {
+        centerX: (cellX + 0.5) * cellSize,
+        centerZ: (cellZ + 0.5) * cellSize,
+        sourceIndices: [],
+      };
+      cells.set(key, cell);
+    }
+    cell.sourceIndices.push(source);
+  }
+
+  return [...cells.values()];
 }
 
 export function mergeBufferGeometries(geometries: BufferGeometry[]) {
@@ -269,16 +320,19 @@ export function createGrassMesh(
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
 
   if (options.lod) {
+    const lodCellSize = options.lod.cellSize ?? MathUtils.clamp(options.lod.outerRadius * 0.22, 20, 52);
     mesh.userData.grassLod = {
       options: {
         label: options.lod.label,
         innerRadius: options.lod.innerRadius,
         outerRadius: options.lod.outerRadius,
+        cellSize: lodCellSize,
         sampleStride: options.lod.sampleStride ?? 1,
         updateEveryFrames: options.lod.updateEveryFrames ?? 6,
         movementThreshold: options.lod.movementThreshold ?? 2.5,
       },
       sourceCount: count,
+      cells: buildGrassLodCells(roots, count, lodCellSize),
       matrices: matrices.slice(),
       phases: phases.slice(),
       tints: tints.slice(),
@@ -289,6 +343,8 @@ export function createGrassMesh(
       lastOriginX: Number.POSITIVE_INFINITY,
       lastOriginZ: Number.POSITIVE_INFINITY,
       activeCount: count,
+      lastVisitedCells: 0,
+      lastVisitedSources: count,
     } satisfies GrassLodSource;
   }
 
@@ -471,7 +527,18 @@ export function createGrassMesh(
         float tipGlow = smoothstep(0.62, 1.0, vBladeMix) * smoothstep(1.0, 0.12, vSoftEdge) * (0.04 + vHeroField * 0.08 + vPatchLight * 0.04);
         meadowColor += vec3(0.07, 0.12, 0.025) * tipGlow;
         float gustHighlight = vGustSignal * smoothstep(0.34, 1.0, vBladeMix) * smoothstep(1.0, 0.16, vSoftEdge);
-        meadowColor += vec3(0.052, 0.082, 0.018) * gustHighlight * (0.32 + nearDetail * 0.48);
+        float windInk = vGustSignal * smoothstep(0.08, 0.74, vBladeMix) * smoothstep(1.0, 0.2, vSoftEdge) * (1.0 - vDistanceBlend * 0.42);
+        meadowColor = mix(meadowColor, meadowColor * vec3(0.82, 0.94, 0.72), windInk * (0.1 + vElevationMood * 0.04));
+        meadowColor += vec3(0.07, 0.105, 0.024) * gustHighlight * (0.42 + nearDetail * 0.54);
+        float rootBand = 1.0 - smoothstep(0.28, 0.34, vBladeMix);
+        float tipBand = smoothstep(0.68, 0.76, vBladeMix);
+        vec3 bladeRootBand = vTint * vec3(0.3, 0.58, 0.28);
+        vec3 bladeMidBand = vTint * vec3(0.74, 1.02, 0.48) + vec3(0.025, 0.055, 0.0) * vPatchLight;
+        vec3 bladeTipBand = vTint * vec3(1.03, 1.22, 0.64) + vec3(0.05, 0.08, 0.015) * (vPatchLight + vHeroField * 0.5);
+        vec3 painterBands = mix(bladeMidBand, bladeRootBand, rootBand);
+        painterBands = mix(painterBands, bladeTipBand, tipBand);
+        float bandInfluence = mix(0.52, 0.24, vDistanceBlend) * (0.86 + vHeroField * 0.14);
+        meadowColor = mix(meadowColor, painterBands, bandInfluence);
         vec3 lowlandLush = mix(meadowColor, vTint * vec3(0.72, 1.08, 0.5), (1.0 - vElevationMood) * nearDetail * 0.28);
         vec3 highlandSage = mix(vTint * vec3(0.62, 0.74, 0.58), vec3(0.63, 0.72, 0.66), vElevationMood * 0.48);
         meadowColor = mix(lowlandLush, highlandSage, vSceneDepthMood * (0.42 + vElevationMood * 0.34));
@@ -493,11 +560,131 @@ export function createGrassMesh(
         "#include <color_fragment>",
         `#include <color_fragment>
         vec3 posterized = floor(diffuseColor.rgb * 11.0) / 11.0;
-        diffuseColor.rgb = mix(diffuseColor.rgb, posterized, 0.08);
+        diffuseColor.rgb = mix(diffuseColor.rgb, posterized, 0.14);
       `,
       );
 
     mesh.userData.shader = shader;
+  };
+
+  return mesh;
+}
+
+export function createGrassPatchImpostorMesh(
+  count: number,
+  zoneFilter: (zone: BiomeZone) => boolean,
+  tintBottom: Color,
+  tintTop: Color,
+  options: GrassPatchImpostorOptions = {},
+) {
+  const geometry = new CircleGeometry(1, 14);
+  geometry.rotateX(-Math.PI / 2);
+  const material = new MeshBasicMaterial({
+    color: "#ffffff",
+    vertexColors: true,
+    transparent: true,
+    opacity: options.opacity ?? 0.26,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const mesh = new InstancedMesh(geometry, material, count);
+  const dummy = new Object3D();
+  const color = new Color();
+  let placed = 0;
+  let attempts = 0;
+  const maxAttempts = count * 160;
+
+  while (placed < count && attempts < maxAttempts) {
+    attempts += 1;
+    const x = (Math.random() - 0.5) * (WORLD_SIZE - 40);
+    const z = (Math.random() - 0.5) * (WORLD_SIZE - 40);
+    const height = sampleTerrainHeight(x, z);
+    const zone = sampleBiomeZone(x, z, height);
+    if (!zoneFilter(zone)) {
+      continue;
+    }
+
+    const normal = sampleTerrainNormal(x, z);
+    if (normal.y < 0.72) {
+      continue;
+    }
+
+    const density = sampleGrassDensity(x, z);
+    const habitat = sampleHabitatLayer(x, z, height);
+    const openingMask = sampleOpeningMeadowMask(x, z);
+    const riverNookMask = sampleRiverNookMask(x, z);
+    const riverWetness = sampleRiverWetness(x, z);
+    const patchCluster = Math.sin(x * 0.021 + z * 0.013 + 1.2) * 0.5 + 0.5;
+    const placement =
+      density *
+      (0.42 + habitat.meadow * 0.34 + openingMask * 0.22 + riverNookMask * 0.16 + patchCluster * 0.18) *
+      (1 - habitat.forest * 0.26) *
+      (1 - habitat.shore * 0.58) *
+      (1 - riverWetness * 0.72) *
+      (options.placementMultiplier ?? 1);
+    if (Math.random() > MathUtils.clamp(placement, 0, 1)) {
+      continue;
+    }
+
+    const elevationMood = MathUtils.clamp(MathUtils.smoothstep(height, 46, 140) * 0.74 + MathUtils.smoothstep(z, 80, 218) * 0.28, 0, 1);
+    const size = MathUtils.lerp(9.5, 24, Math.random()) * MathUtils.lerp(1.18, 0.78, elevationMood) * (options.scaleMultiplier ?? 1);
+    const flatten = MathUtils.lerp(0.18, 0.44, Math.random());
+    dummy.position.set(x, height + (options.yOffset ?? 0.078), z);
+    dummy.rotation.set(0, Math.random() * Math.PI, 0);
+    dummy.scale.set(size * MathUtils.lerp(1.12, 2.15, patchCluster), 1, size * flatten);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(placed, dummy.matrix);
+
+    color
+      .copy(tintBottom)
+      .lerp(tintTop, MathUtils.clamp(0.3 + patchCluster * 0.42 + openingMask * 0.16 + Math.random() * 0.1, 0, 1))
+      .lerp(new Color("#d5df86"), habitat.meadow * 0.18)
+      .lerp(new Color("#6d8167"), elevationMood * 0.24)
+      .lerp(new Color("#4f6249"), habitat.forest * 0.14);
+    mesh.setColorAt(placed, color);
+    placed += 1;
+  }
+
+  mesh.count = placed;
+  mesh.name = "far-grass-patch-impostors";
+  mesh.renderOrder = 1;
+  mesh.frustumCulled = true;
+  mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) {
+    mesh.instanceColor.needsUpdate = true;
+  }
+  material.onBeforeCompile = (shader: GrassShader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        varying vec2 vPatchUv;`,
+      )
+      .replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+        vPatchUv = uv;`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        varying vec2 vPatchUv;`,
+      )
+      .replace(
+        "vec4 diffuseColor = vec4( diffuse, opacity );",
+        `vec2 patchCenter = vPatchUv - vec2(0.5);
+        float patchRadius = length(patchCenter * 2.0);
+        float brushNoise = sin(vPatchUv.x * 35.0 + vPatchUv.y * 17.0) * 0.5 + sin((vPatchUv.x - vPatchUv.y) * 22.0) * 0.32;
+        float edge = 0.72 + brushNoise * 0.055;
+        float alpha = 1.0 - smoothstep(edge, 1.0, patchRadius);
+        alpha *= 0.78 + smoothstep(0.08, 0.68, patchRadius) * 0.22;
+        float band = floor((vPatchUv.x + vPatchUv.y * 0.65 + brushNoise * 0.035) * 5.0) / 5.0;
+        vec3 patchDiffuse = diffuse * mix(vec3(0.78, 0.92, 0.68), vec3(1.08, 1.12, 0.74), band * 0.42);
+        vec4 diffuseColor = vec4(patchDiffuse, opacity * alpha);`,
+      );
   };
 
   return mesh;
@@ -520,6 +707,9 @@ export function updateGrassMeshLod(mesh: InstancedMesh, origin: Vector3, frameIn
 
   const innerRadiusSq = lod.options.innerRadius ** 2;
   const outerRadiusSq = lod.options.outerRadius ** 2;
+  const cellPadding = Math.SQRT2 * lod.options.cellSize * 0.5;
+  const minCellRangeSq = Math.max(0, lod.options.innerRadius - cellPadding) ** 2;
+  const maxCellRangeSq = (lod.options.outerRadius + cellPadding) ** 2;
   const stride = Math.max(1, Math.floor(lod.options.sampleStride ?? 1));
   const matrixArray = mesh.instanceMatrix.array as Float32Array;
   const phaseArray = mesh.geometry.getAttribute("instancePhase").array as Float32Array;
@@ -528,23 +718,40 @@ export function updateGrassMeshLod(mesh: InstancedMesh, origin: Vector3, frameIn
   const widthArray = mesh.geometry.getAttribute("instanceWidth").array as Float32Array;
   const rootArray = mesh.geometry.getAttribute("instanceRoot").array as Float32Array;
   let active = 0;
+  let visitedCells = 0;
+  let visitedSources = 0;
 
-  for (let source = 0; source < lod.sourceCount; source += 1) {
-    const rootIndex = source * 3;
-    const rootX = lod.roots[rootIndex];
-    const rootZ = lod.roots[rootIndex + 2];
-    const distanceSq = (rootX - origin.x) ** 2 + (rootZ - origin.z) ** 2;
-    if (distanceSq < innerRadiusSq || distanceSq > outerRadiusSq || source % stride !== 0) {
+  for (const cell of lod.cells) {
+    const cellDistanceSq = (cell.centerX - origin.x) ** 2 + (cell.centerZ - origin.z) ** 2;
+    if (cellDistanceSq < minCellRangeSq || cellDistanceSq > maxCellRangeSq) {
       continue;
     }
 
-    matrixArray.set(lod.matrices.subarray(source * 16, source * 16 + 16), active * 16);
-    phaseArray[active] = lod.phases[source];
-    scaleArray[active] = lod.scales[source];
-    widthArray[active] = lod.widths[source];
-    tintArray.set(lod.tints.subarray(rootIndex, rootIndex + 3), active * 3);
-    rootArray.set(lod.roots.subarray(rootIndex, rootIndex + 3), active * 3);
-    active += 1;
+    visitedCells += 1;
+    const sources = cell.sourceIndices;
+    for (let index = 0; index < sources.length; index += 1) {
+      const source = sources[index];
+      visitedSources += 1;
+      if (source % stride !== 0) {
+        continue;
+      }
+
+      const rootIndex = source * 3;
+      const rootX = lod.roots[rootIndex];
+      const rootZ = lod.roots[rootIndex + 2];
+      const distanceSq = (rootX - origin.x) ** 2 + (rootZ - origin.z) ** 2;
+      if (distanceSq < innerRadiusSq || distanceSq > outerRadiusSq) {
+        continue;
+      }
+
+      matrixArray.set(lod.matrices.subarray(source * 16, source * 16 + 16), active * 16);
+      phaseArray[active] = lod.phases[source];
+      scaleArray[active] = lod.scales[source];
+      widthArray[active] = lod.widths[source];
+      tintArray.set(lod.tints.subarray(rootIndex, rootIndex + 3), active * 3);
+      rootArray.set(lod.roots.subarray(rootIndex, rootIndex + 3), active * 3);
+      active += 1;
+    }
   }
 
   mesh.count = active;
@@ -560,4 +767,21 @@ export function updateGrassMeshLod(mesh: InstancedMesh, origin: Vector3, frameIn
   lod.lastFrame = frameIndex;
   lod.lastOriginX = origin.x;
   lod.lastOriginZ = origin.z;
+  lod.lastVisitedCells = visitedCells;
+  lod.lastVisitedSources = visitedSources;
+}
+
+export function getGrassMeshLodStats(mesh: InstancedMesh): GrassLodPerfStats | null {
+  const lod = mesh.userData.grassLod as GrassLodSource | undefined;
+  if (!lod) {
+    return null;
+  }
+
+  return {
+    cells: lod.cells.length,
+    sourceInstances: lod.sourceCount,
+    visitedCells: lod.lastVisitedCells,
+    visitedSources: lod.lastVisitedSources,
+    activeInstances: lod.activeCount,
+  };
 }

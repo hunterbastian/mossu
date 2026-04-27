@@ -8,9 +8,60 @@
     />
     <title>Mossu</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <style>
+      html,
+      body,
+      #app {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        overflow: hidden;
+        background: linear-gradient(180deg, #c7f5ff 0%, #edfbd6 72%, #9bc46f 100%);
+        color: #143f4d;
+        font-family: ui-rounded, "Avenir Next", system-ui, sans-serif;
+      }
+
+      .instant-title {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        background:
+          radial-gradient(circle at 50% 68%, rgba(118, 174, 89, 0.36), transparent 20rem),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0));
+      }
+
+      .instant-title strong {
+        display: block;
+        font-size: clamp(3.4rem, 10vw, 7.8rem);
+        font-weight: 950;
+        letter-spacing: 0;
+        line-height: 0.88;
+        text-shadow: 0 0.28rem 0 rgba(255, 255, 255, 0.66);
+      }
+
+      .instant-title span {
+        display: block;
+        margin-top: 0.8rem;
+        font-size: clamp(0.78rem, 1.8vw, 1rem);
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="instant-title" aria-label="Mossu">
+        <div>
+          <strong>Mossu</strong>
+          <span>Meadow trail</span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

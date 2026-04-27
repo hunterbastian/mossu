@@ -1,17 +1,22 @@
 import {
-  CanvasTexture,
+  CircleGeometry,
+  ConeGeometry,
+  CylinderGeometry,
+  DoubleSide,
   Group,
   MathUtils,
-  Mesh,
+  MeshBasicMaterial,
+  MeshLambertMaterial,
   MeshStandardMaterial,
-  RepeatWrapping,
+  Mesh,
   SphereGeometry,
-  SRGBColorSpace,
+  TorusGeometry,
   Vector3,
 } from "three";
-import { FrameState } from "../../simulation/gameState";
+import type { FrameState } from "../../simulation/gameState";
 import { PLAYER_RADIUS } from "../../simulation/playerSimulationConstants";
 import { sampleTerrainHeight, sampleWaterState, scenicPockets, startingLookTarget, startingPosition } from "../../simulation/world";
+import { createKaruModelRig, type AmbientBlobRig } from "../objects/KaruAvatar";
 import { scatterAroundPocket } from "./sceneHelpers";
 
 export type KaruMood = "curious" | "shy" | "brave" | "sleepy";
@@ -24,10 +29,14 @@ export interface AmbientBlob {
   face: Group;
   leftEye: Mesh;
   rightEye: Mesh;
-  feet: [Mesh, Mesh];
+  tail: Mesh;
+  feet: [Mesh, Mesh, Mesh, Mesh];
   fluffPuffs: Mesh[];
   herdId: number;
   herdCenter: Vector3;
+  nestCenter: Vector3;
+  nestRadius: number;
+  nestYaw: number;
   home: Vector3;
   target: Vector3;
   velocity: Vector3;
@@ -58,6 +67,7 @@ export interface AmbientBlob {
   rolling: boolean;
   rollBlend: number;
   rollSpin: number;
+  breezeBlend: number;
 }
 
 export interface AmbientBlobBuildOptions {
@@ -95,6 +105,12 @@ const FAUNA_RECRUITED_COLLISION_RADIUS = 1.26;
 const FAUNA_ROLL_COLLISION_RADIUS = 1.48;
 const FAUNA_COLLISION_MAX_CORRECTION = 0.82;
 const FAUNA_COLLISION_VELOCITY_RESPONSE = 0.42;
+const FAUNA_RECRUITED_IDLE_PLAYER_SPEED = 0.65;
+const FAUNA_RECRUITED_IDLE_MAX_DISTANCE = 13.5;
+const FAUNA_RECRUITED_IDLE_SLOT_DISTANCE = 7.5;
+const FAUNA_NEST_WANDER_RADIUS = 2.8;
+const FAUNA_NEST_RETURN_RADIUS = 7.2;
+const FAUNA_NEST_SHY_LIMIT_RADIUS = 11.5;
 
 const ambientPlayerMotion = new Vector3();
 const ambientToPlayer = new Vector3();
@@ -113,7 +129,7 @@ const ambientFollowSteer = new Vector3();
 const ambientPlayerSpace = new Vector3();
 const ambientBoidSteer = new Vector3();
 const ambientCollisionNormal = new Vector3();
-let karuTexture: CanvasTexture | null = null;
+const ambientNestOffset = new Vector3();
 
 function moodForBlob(pocketIndex: number, index: number): KaruMood {
   const moods: KaruMood[] = ["curious", "shy", "brave", "sleepy"];
@@ -181,6 +197,22 @@ function dominantMood(blobs: AmbientBlob[]): KaruMood {
 
 function planarDistance(a: Vector3, b: Vector3) {
   return Math.hypot(a.x - b.x, a.z - b.z);
+}
+
+function clampTargetAroundNest(blob: AmbientBlob, target: Vector3, radius: number) {
+  ambientNestOffset
+    .subVectors(target, blob.nestCenter)
+    .setY(0);
+  const distance = ambientNestOffset.length();
+  if (distance > radius && distance > 0.001) {
+    ambientNestOffset.multiplyScalar(radius / distance);
+    target.set(
+      blob.nestCenter.x + ambientNestOffset.x,
+      blob.nestCenter.y,
+      blob.nestCenter.z + ambientNestOffset.z,
+    );
+  }
+  target.y = sampleTerrainHeight(target.x, target.z);
 }
 
 function collisionRadiusForBlob(blob: AmbientBlob) {
@@ -297,168 +329,6 @@ function recruitNearbyBlobs(blobs: AmbientBlob[], sourceBlob: AmbientBlob, playe
   return recruitedCount;
 }
 
-function getKaruTexture() {
-  if (karuTexture) {
-    return karuTexture;
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = 128;
-  canvas.height = 128;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Unable to create Karu texture");
-  }
-
-  const baseGradient = context.createRadialGradient(42, 32, 4, 64, 68, 92);
-  baseGradient.addColorStop(0, "#e4fbff");
-  baseGradient.addColorStop(0.42, "#aedff4");
-  baseGradient.addColorStop(1, "#7dbbdc");
-  context.fillStyle = baseGradient;
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  for (let i = 0; i < 190; i += 1) {
-    const x = (i * 47) % canvas.width;
-    const y = (i * 83 + Math.floor(i / 5) * 17) % canvas.height;
-    const radius = 0.7 + ((i * 19) % 10) * 0.14;
-    const alpha = 0.08 + ((i * 23) % 8) * 0.012;
-    context.beginPath();
-    context.fillStyle = i % 4 === 0
-      ? `rgba(255, 255, 255, ${alpha + 0.05})`
-      : `rgba(75, 145, 188, ${alpha})`;
-    context.arc(x, y, radius, 0, Math.PI * 2);
-    context.fill();
-  }
-
-  context.globalAlpha = 0.12;
-  context.strokeStyle = "#ffffff";
-  context.lineWidth = 1;
-  for (let y = -8; y < canvas.height + 16; y += 12) {
-    context.beginPath();
-    context.moveTo(0, y);
-    for (let x = 0; x <= canvas.width; x += 12) {
-      context.lineTo(x, y + Math.sin(x * 0.08 + y * 0.15) * 2.2);
-    }
-    context.stroke();
-  }
-  context.globalAlpha = 1;
-
-  karuTexture = new CanvasTexture(canvas);
-  karuTexture.colorSpace = SRGBColorSpace;
-  karuTexture.wrapS = RepeatWrapping;
-  karuTexture.wrapT = RepeatWrapping;
-  karuTexture.repeat.set(1.85, 1.45);
-  karuTexture.needsUpdate = true;
-  return karuTexture;
-}
-
-function makeAmbientBlob(scale: number) {
-  const group = new Group();
-  const root = new Group();
-  const furTexture = getKaruTexture();
-  const bodyMaterial = new MeshStandardMaterial({
-    color: "#a8ddf3",
-    map: furTexture,
-    bumpMap: furTexture,
-    bumpScale: 0.025,
-    emissive: "#dff7ff",
-    emissiveIntensity: 0.09,
-    roughness: 0.98,
-    metalness: 0,
-  });
-  const fluffMaterial = new MeshStandardMaterial({
-    color: "#c8eefb",
-    map: furTexture,
-    bumpMap: furTexture,
-    bumpScale: 0.018,
-    roughness: 1,
-    metalness: 0,
-  });
-  const deepFluffMaterial = new MeshStandardMaterial({
-    color: "#86c7e7",
-    map: furTexture,
-    bumpMap: furTexture,
-    bumpScale: 0.022,
-    roughness: 1,
-    metalness: 0,
-  });
-  const footMaterial = new MeshStandardMaterial({ color: "#dff7ff", roughness: 1, metalness: 0 });
-  const eyeMaterial = new MeshStandardMaterial({ color: "#121b24", roughness: 0.08, metalness: 0.02 });
-  const eyeHighlightMaterial = new MeshStandardMaterial({
-    color: "#ffffff",
-    emissive: "#ffffff",
-    emissiveIntensity: 0.25,
-    roughness: 0.18,
-    metalness: 0,
-  });
-
-  group.add(root);
-
-  const body = new Mesh(new SphereGeometry(0.58 * scale, 18, 16), bodyMaterial);
-  body.scale.set(1.12, 1.42, 1.08);
-  body.position.y = 0.76 * scale;
-  root.add(body);
-
-  const fluffPuffs: Mesh[] = [];
-  [
-    { x: -0.35, y: 0.74, z: 0.08, sx: 0.48, sy: 0.56, sz: 0.46, material: fluffMaterial },
-    { x: 0.35, y: 0.74, z: 0.08, sx: 0.48, sy: 0.56, sz: 0.46, material: fluffMaterial },
-    { x: -0.28, y: 0.38, z: 0.16, sx: 0.36, sy: 0.22, sz: 0.3, material: fluffMaterial },
-    { x: 0.28, y: 0.38, z: 0.16, sx: 0.36, sy: 0.22, sz: 0.3, material: fluffMaterial },
-    { x: -0.18, y: 1.15, z: 0.04, sx: 0.3, sy: 0.36, sz: 0.28, material: deepFluffMaterial },
-    { x: 0.18, y: 1.13, z: 0.05, sx: 0.29, sy: 0.35, sz: 0.27, material: deepFluffMaterial },
-    { x: 0, y: 1.34, z: 0.02, sx: 0.24, sy: 0.28, sz: 0.22, material: fluffMaterial },
-    { x: -0.26, y: 0.46, z: 0.3, sx: 0.2, sy: 0.17, sz: 0.18, material: deepFluffMaterial },
-    { x: 0.26, y: 0.46, z: 0.3, sx: 0.2, sy: 0.17, sz: 0.18, material: deepFluffMaterial },
-    { x: 0, y: 0.28, z: 0.22, sx: 0.24, sy: 0.14, sz: 0.18, material: deepFluffMaterial },
-    { x: 0, y: 0.74, z: -0.08, sx: 0.34, sy: 0.4, sz: 0.26, material: deepFluffMaterial },
-  ].forEach(({ x, y, z, sx, sy, sz, material }) => {
-    const puff = new Mesh(new SphereGeometry(0.5 * scale, 10, 9), material);
-    puff.position.set(x * scale, y * scale, z * scale);
-    puff.scale.set(sx * scale, sy * scale, sz * scale);
-    root.add(puff);
-    fluffPuffs.push(puff);
-  });
-
-  const face = new Group();
-  face.position.set(0, 0.88 * scale, 0.5 * scale);
-  root.add(face);
-
-  const leftEye = new Mesh(new SphereGeometry(0.112 * scale, 10, 9), eyeMaterial);
-  leftEye.scale.set(0.86, 1.34, 0.68);
-  leftEye.position.set(-0.18 * scale, -0.01 * scale, 0);
-  face.add(leftEye);
-  const leftEyeHighlight = new Mesh(new SphereGeometry(0.028 * scale, 8, 7), eyeHighlightMaterial);
-  leftEyeHighlight.scale.set(0.72, 0.9, 0.45);
-  leftEyeHighlight.position.set(-0.028 * scale, 0.04 * scale, 0.07 * scale);
-  leftEye.add(leftEyeHighlight);
-
-  const rightEye = leftEye.clone();
-  rightEye.position.x = 0.18 * scale;
-  face.add(rightEye);
-
-  const leftFoot = new Mesh(new SphereGeometry(0.1 * scale, 10, 9), footMaterial);
-  leftFoot.scale.set(1.08, 0.72, 0.9);
-  leftFoot.position.set(-0.18 * scale, 0.1 * scale, 0.26 * scale);
-  root.add(leftFoot);
-
-  const rightFoot = leftFoot.clone();
-  rightFoot.position.x = 0.2 * scale;
-  root.add(rightFoot);
-
-  return {
-    group,
-    root,
-    body,
-    face,
-    leftEye,
-    rightEye,
-    feet: [leftFoot, rightFoot] as [Mesh, Mesh],
-    fluffPuffs,
-    creatureScale: scale,
-  };
-}
-
 function stageAmbientBlobCloseup(blobs: AmbientBlob[]) {
   const forward = new Vector3().subVectors(startingLookTarget, startingPosition).setY(0).normalize();
   const right = new Vector3(forward.z, 0, -forward.x).normalize();
@@ -479,6 +349,7 @@ function stageAmbientBlobCloseup(blobs: AmbientBlob[]) {
     const y = sampleTerrainHeight(x, z);
     const facingYaw = Math.atan2(startingPosition.x - x, startingPosition.z - z);
     blob.group.position.set(x, y, z);
+    blob.nestCenter.set(x, y, z);
     blob.home.set(x, y, z);
     blob.target.set(x, y, z);
     blob.velocity.set(0, 0, 0);
@@ -515,11 +386,179 @@ function stageAmbientBlobCloseup(blobs: AmbientBlob[]) {
   return blobs;
 }
 
+export function buildAmbientBlobNests(blobs: readonly AmbientBlob[]) {
+  const group = new Group();
+  group.name = "karu-nest-habitats";
+
+  const nestFloorMaterial = new MeshLambertMaterial({
+    color: "#b7a777",
+    transparent: true,
+    opacity: 0.7,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const mossMaterial = new MeshLambertMaterial({ color: "#83ad58" });
+  const deepMossMaterial = new MeshLambertMaterial({ color: "#58723e" });
+  const leafMaterial = new MeshLambertMaterial({ color: "#9fc96b" });
+  const twigMaterial = new MeshLambertMaterial({ color: "#80633f" });
+  const beddingMaterial = new MeshLambertMaterial({ color: "#eee0b9" });
+  const warmBeddingMaterial = new MeshLambertMaterial({ color: "#f5e7bd" });
+  const pebbleMaterial = new MeshStandardMaterial({ color: "#bdb49b", roughness: 1, metalness: 0 });
+  const flowerMaterial = new MeshBasicMaterial({ color: "#fff3ce", transparent: true, opacity: 0.9 });
+  const berryMaterial = new MeshLambertMaterial({ color: "#c66e46" });
+  const glowSeedMaterial = new MeshBasicMaterial({ color: "#ffd978", transparent: true, opacity: 0.82 });
+
+  blobs.forEach((blob, blobIndex) => {
+    const center = blob.nestCenter;
+    const radius = blob.nestRadius;
+    const yaw = blob.nestYaw;
+    const nest = new Group();
+    nest.name = `${blob.id}-nest`;
+
+    const floor = new Mesh(new CircleGeometry(1, 30), nestFloorMaterial);
+    floor.rotation.x = -Math.PI / 2;
+    floor.rotation.z = yaw;
+    floor.position.set(center.x, center.y + 0.035, center.z);
+    floor.scale.set(radius * 1.1, radius * 0.82, 1);
+    nest.add(floor);
+
+    const cupShadow = new Mesh(new CircleGeometry(1, 24), deepMossMaterial);
+    cupShadow.rotation.x = -Math.PI / 2;
+    cupShadow.rotation.z = yaw + 0.12;
+    cupShadow.position.set(center.x, center.y + 0.058, center.z);
+    cupShadow.scale.set(radius * 0.54, radius * 0.42, 1);
+    nest.add(cupShadow);
+
+    const wovenRim = new Mesh(new TorusGeometry(1, 0.09, 8, 32), twigMaterial);
+    wovenRim.rotation.x = Math.PI / 2;
+    wovenRim.rotation.z = yaw;
+    wovenRim.position.set(center.x, center.y + 0.16, center.z);
+    wovenRim.scale.set(radius * 0.9, radius * 0.64, 0.74);
+    nest.add(wovenRim);
+
+    for (let i = 0; i < 14; i += 1) {
+      const angle = yaw + (i / 14) * Math.PI * 2 + Math.sin(blob.poseSeed + i * 1.9) * 0.1;
+      const ringRadius = radius * (0.8 + (i % 4) * 0.065);
+      const x = center.x + Math.cos(angle) * ringRadius;
+      const z = center.z + Math.sin(angle) * ringRadius;
+      const y = sampleTerrainHeight(x, z);
+      const clump = new Mesh(
+        new SphereGeometry(1, 10, 7),
+        i % 3 === 0 ? deepMossMaterial : i % 2 === 0 ? mossMaterial : leafMaterial,
+      );
+      clump.position.set(x, y + 0.16 + (i % 3) * 0.024, z);
+      clump.rotation.y = angle;
+      clump.scale.set(radius * (0.22 + (i % 3) * 0.035), 0.13, radius * (0.13 + (i % 4) * 0.025));
+      nest.add(clump);
+    }
+
+    for (let i = 0; i < 11; i += 1) {
+      const angle = yaw + (i / 11) * Math.PI * 2 + 0.22;
+      const x = center.x + Math.cos(angle) * radius * 0.72;
+      const z = center.z + Math.sin(angle) * radius * 0.72;
+      const twig = new Mesh(new CylinderGeometry(0.03, 0.045, radius * 0.78, 6), twigMaterial);
+      twig.position.set(x, sampleTerrainHeight(x, z) + 0.18, z);
+      twig.rotation.set(0.08 * Math.sin(i + blob.poseSeed), angle + Math.PI / 2, Math.PI / 2 + Math.sin(i * 0.8) * 0.16);
+      nest.add(twig);
+    }
+
+    for (let i = 0; i < 9; i += 1) {
+      const angle = yaw + (i / 9) * Math.PI * 2 + 0.1;
+      const x = center.x + Math.cos(angle) * radius * (0.26 + (i % 2) * 0.06);
+      const z = center.z + Math.sin(angle) * radius * (0.2 + (i % 3) * 0.035);
+      const y = sampleTerrainHeight(x, z);
+      const petal = new Mesh(new SphereGeometry(1, 10, 6), i % 3 === 0 ? warmBeddingMaterial : beddingMaterial);
+      petal.position.set(x, y + 0.13 + i * 0.004, z);
+      petal.rotation.y = angle;
+      petal.scale.set(radius * 0.17, 0.045, radius * 0.3);
+      nest.add(petal);
+    }
+
+    for (let i = 0; i < 5; i += 1) {
+      const angle = yaw + Math.PI * 0.86 + i * 0.35;
+      const x = center.x + Math.cos(angle) * radius * (0.98 + (i % 2) * 0.16);
+      const z = center.z + Math.sin(angle) * radius * (0.98 + (i % 2) * 0.16);
+      const pebble = new Mesh(new SphereGeometry(1, 8, 6), i === 2 ? berryMaterial : pebbleMaterial);
+      pebble.position.set(x, sampleTerrainHeight(x, z) + 0.08, z);
+      pebble.scale.set(0.12 + (i % 2) * 0.035, 0.055, 0.1 + (i % 3) * 0.024);
+      nest.add(pebble);
+    }
+
+    for (let i = 0; i < 4; i += 1) {
+      const side = i < 2 ? -1 : 1;
+      const angle = yaw + side * (0.55 + i * 0.13);
+      const x = center.x + Math.cos(angle) * radius * 1.04;
+      const z = center.z + Math.sin(angle) * radius * 1.04;
+      const y = sampleTerrainHeight(x, z);
+      const stem = new Mesh(new ConeGeometry(0.025, 0.34, 6), leafMaterial);
+      stem.position.set(x, y + 0.18, z);
+      stem.rotation.z = side * 0.16;
+      nest.add(stem);
+
+      const bloom = new Mesh(new SphereGeometry(0.07, 8, 6), i % 2 === 0 ? flowerMaterial : glowSeedMaterial);
+      bloom.position.set(x, y + 0.38 + (i % 2) * 0.05, z);
+      bloom.scale.set(1, 0.48, 1);
+      nest.add(bloom);
+    }
+
+    const shadeLeaf = new Mesh(new SphereGeometry(1, 10, 6), leafMaterial);
+    shadeLeaf.position.set(
+      center.x + Math.cos(yaw - 0.62) * radius * 0.22,
+      sampleTerrainHeight(center.x, center.z) + 0.52 + (blobIndex % 2) * 0.05,
+      center.z + Math.sin(yaw - 0.62) * radius * 0.22,
+    );
+    shadeLeaf.rotation.set(0.08, yaw - 0.42, -0.18);
+    shadeLeaf.scale.set(radius * 0.28, 0.05, radius * 0.42);
+    nest.add(shadeLeaf);
+
+    const backCanopy = new Mesh(new SphereGeometry(1, 10, 6), leafMaterial);
+    backCanopy.position.set(
+      center.x + Math.cos(yaw + Math.PI) * radius * 0.42,
+      sampleTerrainHeight(center.x, center.z) + 0.34,
+      center.z + Math.sin(yaw + Math.PI) * radius * 0.42,
+    );
+    backCanopy.rotation.set(0.02, yaw + 0.18, 0.12);
+    backCanopy.scale.set(radius * 0.36, 0.08, radius * 0.2);
+    nest.add(backCanopy);
+
+    group.add(nest);
+  });
+
+  return group;
+}
+
+function openingHerdLayout(pocketId: string, index: number) {
+  const forward = new Vector3().subVectors(startingLookTarget, startingPosition).setY(0).normalize();
+  const right = new Vector3(forward.z, 0, -forward.x).normalize();
+  const layouts: Record<string, Array<{ forwardOffset: number; rightOffset: number }>> = {
+    "start-meadow": [
+      { forwardOffset: 7.5, rightOffset: -1.8 },
+      { forwardOffset: 11.2, rightOffset: 1.8 },
+      { forwardOffset: 14.6, rightOffset: -4.5 },
+    ],
+    "burrow-bloom": [
+      { forwardOffset: 42, rightOffset: 11 },
+      { forwardOffset: 50, rightOffset: 16 },
+    ],
+  };
+  const layout = layouts[pocketId]?.[index];
+  if (!layout) {
+    return null;
+  }
+  return {
+    x: startingPosition.x + forward.x * layout.forwardOffset + right.x * layout.rightOffset,
+    z: startingPosition.z + forward.z * layout.forwardOffset + right.z * layout.rightOffset,
+  };
+}
+
 export function buildAmbientBlobs(options: AmbientBlobBuildOptions = {}) {
   const plainsHomes = scenicPockets.filter((pocket) => pocket.zone === "plains");
   const blobs = plainsHomes.flatMap((pocket, pocketIndex): AmbientBlob[] =>
     Array.from({ length: pocketIndex === 0 ? 3 : 2 }, (_, index) => {
-      const { x, z } = scatterAroundPocket(pocket, 200 + pocketIndex * 20 + index, 0.46);
+      const scattered = scatterAroundPocket(pocket, 200 + pocketIndex * 20 + index, 0.46);
+      const staged = openingHerdLayout(pocket.id, index);
+      const x = staged?.x ?? scattered.x;
+      const z = staged?.z ?? scattered.z;
       const y = sampleTerrainHeight(x, z);
       const herdCenter = new Vector3(
         pocket.position.x,
@@ -527,15 +566,22 @@ export function buildAmbientBlobs(options: AmbientBlobBuildOptions = {}) {
         pocket.position.z,
       );
       const creatureScale = 1.18 + index * 0.12;
-      const rig = makeAmbientBlob(creatureScale);
+      const rig = createKaruModelRig(creatureScale);
       rig.group.position.set(x, y, z);
-      const facingYaw = Math.sin((pocketIndex + 1) * 2.6 + index * 1.9) * 0.7;
+      const facingYaw = staged
+        ? Math.atan2(startingPosition.x - x, startingPosition.z - z)
+        : Math.sin((pocketIndex + 1) * 2.6 + index * 1.9) * 0.7;
+      const nestRadius = 2.25 + (index % 2) * 0.18 + (pocket.kind === "moss_hollow" ? 0.18 : 0);
+      const nestYaw = staged ? facingYaw + 0.08 * (index - 1) : facingYaw + Math.sin(pocketIndex * 1.8 + index) * 0.28;
       rig.group.rotation.y = facingYaw;
       return {
         ...rig,
         id: `karu-${pocketIndex}-${index}`,
         herdId: pocketIndex,
         herdCenter,
+        nestCenter: new Vector3(x, y, z),
+        nestRadius,
+        nestYaw,
         home: new Vector3(x, y, z),
         target: new Vector3(x, y, z),
         velocity: new Vector3(),
@@ -566,6 +612,7 @@ export function buildAmbientBlobs(options: AmbientBlobBuildOptions = {}) {
         rolling: false,
         rollBlend: 0,
         rollSpin: 0,
+        breezeBlend: 0,
       };
     }),
   );
@@ -600,7 +647,8 @@ export function updateAmbientBlobs(
 
   const playerPosition = frame.player.position;
   const playerPlanarSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
-  const playerRolling = frame.player.rolling && !frame.player.swimming;
+  const playerFloating = frame.player.floating && !frame.player.swimming;
+  const playerRolling = frame.player.rolling && !frame.player.swimming && !playerFloating;
   ambientPlayerMotion.set(frame.player.velocity.x, 0, frame.player.velocity.z);
   const nearestBeforeRecruit = findNearestRecruitable(blobs, playerPosition);
   const recruitedThisFrame =
@@ -692,12 +740,18 @@ export function updateAmbientBlobs(
       herdDistance > 4.8 || (herdMateCount > 1 && nearbyMateCount === 0 && nearestMateDistance > 6.4);
     const herdPullStrength = herdDistance > 2.2 ? MathUtils.clamp((herdDistance - 2.2) / 4.4, 0, 1.25) : 0;
     const separationStrength = ambientSeparation.length();
+    const nestDistance = ambientNestOffset
+      .subVectors(blob.group.position, blob.nestCenter)
+      .setY(0)
+      .length();
+    const awayFromNest = !blob.recruited && nestDistance > FAUNA_NEST_RETURN_RADIUS && elapsed >= blob.avoidPlayerUntil;
 
     if (blob.mode === "curious" && blob.restUntil < elapsed) {
       blob.investigateAgainAt = elapsed + 2.6 + (index % 2) * 0.5;
     }
 
     let recruitedMoveStrength = 0;
+    let recruitedIdleWanderActive = false;
     if (blob.recruited) {
       const tuning = moodFollowTuning(blob.mood);
       const regroupActive = elapsed < blob.regroupUntil;
@@ -739,6 +793,35 @@ export function updateAmbientBlobs(
         .addScaledVector(ambientFollowDirection, -followBackDistance)
         .addScaledVector(ambientRightDirection, followSideDistance);
       ambientLeaderSlot.y = sampleTerrainHeight(ambientLeaderSlot.x, ambientLeaderSlot.z);
+      const formationDistance = planarDistance(blob.group.position, ambientLeaderSlot);
+      recruitedIdleWanderActive =
+        playerPlanarSpeed < FAUNA_RECRUITED_IDLE_PLAYER_SPEED &&
+        !frame.player.swimming &&
+        frame.player.grounded &&
+        !playerRolling &&
+        !playerFloating &&
+        !regroupActive &&
+        !listeningForCall &&
+        !waitingForCallWave &&
+        elapsed - blob.recruitedAt > 0.8 &&
+        planarToPlayer < FAUNA_RECRUITED_IDLE_MAX_DISTANCE &&
+        formationDistance < FAUNA_RECRUITED_IDLE_SLOT_DISTANCE;
+      if (recruitedIdleWanderActive) {
+        const moodOrbitSpeed =
+          blob.mood === "sleepy" ? 0.12 :
+          blob.mood === "brave" ? 0.2 :
+          0.16;
+        const orbitAngle = elapsed * moodOrbitSpeed + blob.poseSeed * 2.4 + blob.leaderSlot * 1.37;
+        const orbitRadius =
+          (4.6 + (blob.leaderSlot % 3) * 0.82 + Math.floor(blob.leaderSlot / 3) * 0.38)
+          * (blob.mood === "shy" ? 1.16 : blob.mood === "sleepy" ? 0.92 : 1);
+        const orbitBreath = Math.sin(elapsed * 0.37 + blob.poseSeed) * 0.42;
+        ambientLeaderSlot
+          .copy(playerPosition)
+          .addScaledVector(ambientFollowDirection, Math.cos(orbitAngle) * orbitRadius * 0.78 + orbitBreath)
+          .addScaledVector(ambientRightDirection, Math.sin(orbitAngle) * orbitRadius);
+        ambientLeaderSlot.y = sampleTerrainHeight(ambientLeaderSlot.x, ambientLeaderSlot.z);
+      }
       blob.waterReaction = "dry";
 
       const targetWater = sampleWaterState(ambientLeaderSlot.x, ambientLeaderSlot.z);
@@ -848,11 +931,13 @@ export function updateAmbientBlobs(
         ambientBoidSteer.copy(ambientFollowSteer);
       }
 
-      const targetLead = MathUtils.clamp(
-        followDistance * (blob.rolling ? 0.36 : playerRolling ? 0.34 : 0.3) + (blob.rolling ? 3.35 : playerRolling ? 3.1 : 2.4),
-        2.2,
-        blob.rolling ? 8.8 : playerRolling ? 8.2 : 7.4,
-      );
+      const targetLead = recruitedIdleWanderActive
+        ? MathUtils.clamp(followDistance * 0.2 + 1.18, 1.1, 3.2)
+        : MathUtils.clamp(
+          followDistance * (blob.rolling ? 0.36 : playerRolling ? 0.34 : 0.3) + (blob.rolling ? 3.35 : playerRolling ? 3.1 : 2.4),
+          2.2,
+          blob.rolling ? 8.8 : playerRolling ? 8.2 : 7.4,
+        );
       blob.target
         .copy(blob.group.position)
         .addScaledVector(ambientBoidSteer, targetLead);
@@ -867,6 +952,9 @@ export function updateAmbientBlobs(
         (regroupActive && !waitingForCallWave ? 1.12 : 1) *
         (playerRolling ? 1.12 : 1) *
         (blob.rolling ? FAUNA_ROLL_SPEED_MULTIPLIER : 1);
+      if (recruitedIdleWanderActive) {
+        recruitedMoveStrength *= 0.58;
+      }
       if (blob.waterReaction === "bank_wait") {
         recruitedMoveStrength *= 0.82;
       } else if (blob.waterReaction === "float") {
@@ -894,6 +982,7 @@ export function updateAmbientBlobs(
         blob.home.y,
         ambientDesiredTarget.z,
       );
+      clampTargetAroundNest(blob, blob.target, FAUNA_NEST_SHY_LIMIT_RADIUS);
       if (playerTooClose || playerApproaching) {
         blob.avoidPlayerUntil = Math.max(
           blob.avoidPlayerUntil,
@@ -918,7 +1007,17 @@ export function updateAmbientBlobs(
       blob.restUntil = elapsed + 1.3;
     } else if (blob.restUntil < elapsed) {
       blob.rolling = false;
-      if (separatedFromHerd && elapsed >= blob.avoidPlayerUntil) {
+      if (awayFromNest) {
+        blob.mode = "wander";
+        const returnAngle = Math.atan2(blob.group.position.z - blob.nestCenter.z, blob.group.position.x - blob.nestCenter.x) + 0.65;
+        blob.target.set(
+          blob.nestCenter.x + Math.cos(returnAngle) * blob.nestRadius * 0.8,
+          blob.nestCenter.y,
+          blob.nestCenter.z + Math.sin(returnAngle) * blob.nestRadius * 0.7,
+        );
+        blob.target.y = sampleTerrainHeight(blob.target.x, blob.target.z);
+        blob.restUntil = elapsed + 1.2;
+      } else if (separatedFromHerd && elapsed >= blob.avoidPlayerUntil) {
         blob.mode = "wander";
         const regroupAngle = blob.poseSeed + elapsed * 0.2;
         blob.target.set(
@@ -930,11 +1029,14 @@ export function updateAmbientBlobs(
       } else if (blob.mode === "rest") {
         blob.mode = "wander";
         const wanderAngle = elapsed * 0.45 + index * 1.7;
+        const wanderRadiusX = Math.min(FAUNA_NEST_WANDER_RADIUS, blob.nestRadius * (1.08 + (index % 3) * 0.08));
+        const wanderRadiusZ = Math.min(FAUNA_NEST_WANDER_RADIUS * 0.82, blob.nestRadius * (0.82 + (index % 2) * 0.1));
         blob.target.set(
-          blob.home.x + Math.cos(wanderAngle) * (1.6 + (index % 3) * 1.1),
-          blob.home.y,
-          blob.home.z + Math.sin(wanderAngle) * (1.2 + (index % 2) * 1.4),
+          blob.nestCenter.x + Math.cos(wanderAngle) * wanderRadiusX,
+          blob.nestCenter.y,
+          blob.nestCenter.z + Math.sin(wanderAngle) * wanderRadiusZ,
         );
+        blob.target.y = sampleTerrainHeight(blob.target.x, blob.target.z);
         blob.restUntil = elapsed + 2.2 + (index % 3) * 0.5;
       } else {
         blob.mode = "rest";
@@ -1020,6 +1122,14 @@ export function updateAmbientBlobs(
           blob.recruited ? 1.6 : blob.mode === "shy" ? 1.8 : 1.2,
         );
       }
+      if (!blob.recruited) {
+        const nestLimit = blob.mode === "shy"
+          ? FAUNA_NEST_SHY_LIMIT_RADIUS
+          : blob.mode === "curious"
+            ? FAUNA_NEST_SHY_LIMIT_RADIUS * 0.9
+          : Math.max(FAUNA_NEST_WANDER_RADIUS * 1.3, blob.nestRadius * 1.55);
+        clampTargetAroundNest(blob, ambientDesiredTarget, nestLimit);
+      }
       ambientTrailDirection
         .subVectors(ambientDesiredTarget, blob.group.position)
         .setY(0);
@@ -1062,11 +1172,21 @@ export function updateAmbientBlobs(
   const planarSpeed = blob.velocity.length();
   const wantsRollMimic = blob.rolling;
   blob.rollBlend = MathUtils.damp(blob.rollBlend, wantsRollMimic ? 1 : 0, wantsRollMimic ? 8.5 : 6.5, dt);
+  const wantsBreezeMimic =
+    blob.recruited &&
+    playerFloating &&
+    !blob.rolling &&
+    blob.waterReaction !== "float" &&
+    blob.waterReaction !== "bank_wait" &&
+    planarToPlayer < 18;
+  blob.breezeBlend = MathUtils.damp(blob.breezeBlend, wantsBreezeMimic ? 1 : 0, wantsBreezeMimic ? 5.4 : 7.2, dt);
   if (blob.rollBlend > 0.02) {
     blob.rollSpin = (blob.rollSpin + (playerPlanarSpeed * 0.16 + planarSpeed * 0.36 + 1.6 + index * 0.08) * dt) % (Math.PI * 2);
   }
   const rollMimicT = blob.rollBlend;
+  const breezeMimicT = blob.breezeBlend;
   const rollBounce = Math.max(0, Math.sin(blob.rollSpin * 2 + blob.poseSeed)) * rollMimicT;
+  const breezeBounce = (0.12 + Math.sin(elapsed * 2.5 + blob.poseSeed) * 0.045) * breezeMimicT;
   const scale = blob.creatureScale;
   const restPulse = Math.sin(elapsed * 2.3 + blob.poseSeed);
   const curiousSway = Math.sin(elapsed * 2.1 + blob.poseSeed * 1.4);
@@ -1106,7 +1226,7 @@ export function updateAmbientBlobs(
   const poseLift =
     (blob.mode === "wander" ? Math.max(wanderHop * 0.2 * scale, idleHop * 0.15 * scale, waterHop, callWaveT * 0.34 * scale) :
     blob.mode === "shy" ? shyHop * 0.16 * scale :
-    idleHop * 0.15 * scale) + rollBounce * 0.14 * scale;
+    idleHop * 0.15 * scale) + rollBounce * 0.14 * scale + breezeBounce * scale;
     const poseDrop =
     blob.mode === "rest" ? (0.03 + restPulse * 0.012 + idleHopSettle * 0.028 + idleSettle * 0.022) * scale :
     blob.mode === "shy" ? (0.05 + (1 - shyHop) * 0.04) * scale :
@@ -1115,13 +1235,13 @@ export function updateAmbientBlobs(
     blob.mode === "wander" ? 1 + wanderHop * 0.08 + idleHop * 0.03 + (blob.mood === "sleepy" ? 0.025 : 0) :
     blob.mode === "shy" ? 1 + shyHop * 0.05 :
     1 + Math.max(0, restPulse) * 0.02 + idleHop * 0.05 + idleSniff * 0.03;
-  const stretch = MathUtils.lerp(baseStretch, 0.92 + rollBounce * 0.04, rollMimicT * 0.68);
+  const stretch = MathUtils.lerp(baseStretch + breezeMimicT * 0.08, 0.92 + rollBounce * 0.04, rollMimicT * 0.68);
   const baseSquash =
     blob.mode === "rest" ? 1 - (0.06 + Math.max(0, -restPulse) * 0.04 + idleHopSettle * 0.05 + idleSettle * 0.05) :
     blob.mode === "shy" ? 1 - (0.08 + (1 - shyHop) * 0.06) :
     blob.mode === "wander" ? 1 - (wanderHop * 0.06 + idleHopSettle * 0.04 + idleSettle * 0.03 + (blob.waterReaction === "splash" ? 0.035 : 0)) :
     1 - idleHop * 0.04;
-  const squash = MathUtils.lerp(baseSquash, 1.15 - rollBounce * 0.04, rollMimicT * 0.68);
+  const squash = MathUtils.lerp(baseSquash - breezeMimicT * 0.035, 1.15 - rollBounce * 0.04, rollMimicT * 0.68);
     const desiredYaw =
       callListenT > 0.001 && planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) :
       planarSpeed > 0.05 ? Math.atan2(blob.velocity.x, blob.velocity.z) :
@@ -1148,12 +1268,12 @@ export function updateAmbientBlobs(
     blob.mode === "curious" ? curiousSway * 0.08 :
     blob.mode === "wander" ? Math.sin(elapsed * 3.6 + blob.poseSeed) * 0.04 + idleLookYaw * 0.18 :
     restPulse * 0.02 + idleLookYaw * 0.22;
-  blob.root.rotation.x = baseRootX + rollMimicT * blob.rollSpin;
-  blob.root.rotation.z = baseRootZ + rollMimicT * Math.sin(blob.rollSpin * 0.7 + blob.poseSeed) * 0.16;
+  blob.root.rotation.x = baseRootX + rollMimicT * blob.rollSpin - breezeMimicT * 0.1;
+  blob.root.rotation.z = baseRootZ + rollMimicT * Math.sin(blob.rollSpin * 0.7 + blob.poseSeed) * 0.16 + breezeMimicT * Math.sin(elapsed * 2.2 + blob.poseSeed) * 0.045;
 
-  blob.body.scale.set(1.12 * squash, 1.42 * stretch, 1.08 * squash);
+  blob.body.scale.set(1.16 * squash, 1.04 * stretch, 1.14 * MathUtils.lerp(squash, 0.92, rollMimicT * 0.36));
   blob.body.position.y =
-    0.76 * scale +
+    0.62 * scale +
     (blob.mode === "rest" ? restPulse * 0.015 * scale : 0) -
     idleSettle * 0.015 * scale;
   blob.face.rotation.y =
@@ -1161,57 +1281,85 @@ export function updateAmbientBlobs(
     blob.mode === "curious" ? curiousSway * 0.28 :
     (blob.mode === "rest" ? curiousSway * 0.08 : 0) + idleLookYaw;
   blob.face.position.y =
-    0.88 * scale +
+    0.73 * scale +
     (blob.mode === "rest" ? restPulse * 0.012 * scale : 0) +
     idleSniff * 0.05 * scale -
-    idleSettle * 0.015 * scale;
+    idleSettle * 0.015 * scale +
+    breezeMimicT * 0.035 * scale;
   blob.face.position.z =
-    0.5 * scale +
+    0.56 * scale +
     (blob.mode === "shy" ? -0.03 * scale : 0) +
-    idleSniff * 0.035 * scale;
+    idleSniff * 0.045 * scale -
+    breezeMimicT * 0.04 * scale;
 
   const baseEyeSquish =
     callListenT > 0 ? 0.08 + blink * 0.4 :
     blob.mode === "rest" ? 0.35 + Math.max(0, -restPulse) * 0.22 + idleSettle * 0.16 + blink * 1.35 :
     blob.mode === "shy" ? 0.24 :
     blink * 1.35 + idleSniff * 0.08;
-  const eyeSquish = baseEyeSquish + rollMimicT * 0.12;
-  blob.leftEye.scale.set(0.86 + eyeSquish * 0.18, 1.34 - eyeSquish * 0.56, 0.68);
+  const eyeSquish = Math.max(0, baseEyeSquish + rollMimicT * 0.12 - breezeMimicT * 0.05);
+  blob.leftEye.scale.set(0.72 + eyeSquish * 0.12, 1.58 - eyeSquish * 0.7, 0.32);
   blob.rightEye.scale.copy(blob.leftEye.scale);
 
+  const tailWag = Math.sin(elapsed * 3.2 + blob.poseSeed) * (
+    blob.mode === "wander" ? 0.12 :
+    blob.mode === "curious" ? 0.08 :
+    0.045
+  ) + callListenT * 0.12;
+  blob.tail.position.set(
+    Math.sin(elapsed * 2.2 + blob.poseSeed) * 0.035 * scale,
+    0.46 * scale + wanderHop * 0.025 * scale - idleSettle * 0.012 * scale + breezeMimicT * 0.06 * scale,
+    -0.72 * scale + rollMimicT * 0.12 * scale,
+  );
+  blob.tail.rotation.y = tailWag + breezeMimicT * Math.sin(elapsed * 2.9 + blob.poseSeed) * 0.08;
+  blob.tail.rotation.x = -0.12 + rollMimicT * 0.46 - breezeMimicT * 0.2;
+  blob.tail.scale.set(
+    0.52 * MathUtils.lerp(1 + tailWag * 0.2, 0.58, rollMimicT),
+    0.5 * MathUtils.lerp(1 + wanderHop * 0.08, 0.48, rollMimicT),
+    0.82 * MathUtils.lerp(1, 0.62, rollMimicT),
+  );
+
   blob.feet.forEach((foot, footIndex) => {
-      const footHop =
-        blob.mode === "wander" ? Math.max(0, Math.sin(elapsed * 6.8 + blob.poseSeed + footIndex * Math.PI * 0.65)) * 0.05 * scale :
-        blob.mode === "shy" ? Math.max(0, Math.sin(elapsed * 9.6 + blob.poseSeed + footIndex * Math.PI * 0.75)) * 0.04 * scale :
-        idleHop * 0.02 * scale;
-    const footTuck = rollMimicT;
+    const homeX = typeof foot.userData.homeX === "number" ? foot.userData.homeX : (footIndex % 2 === 0 ? -0.3 : 0.3);
+    const homeZ = typeof foot.userData.homeZ === "number" ? foot.userData.homeZ : (footIndex < 2 ? 0.38 : -0.38);
+    const isFrontFoot = homeZ > 0;
+    const gaitPhase = footIndex % 2 === 0 ? 0 : Math.PI;
+    const footHop =
+      blob.mode === "wander" ? Math.max(0, Math.sin(elapsed * 6.8 + blob.poseSeed + gaitPhase + (isFrontFoot ? 0 : 0.55))) * 0.052 * scale :
+      blob.mode === "shy" ? Math.max(0, Math.sin(elapsed * 9.6 + blob.poseSeed + gaitPhase + (isFrontFoot ? 0.2 : 0.7))) * 0.036 * scale :
+      idleHop * (isFrontFoot ? 0.022 : 0.014) * scale;
+    const footTuck = Math.max(rollMimicT, breezeMimicT * 0.62);
     foot.visible = footTuck < 0.86;
-    const footSide = MathUtils.lerp((footIndex === 0 ? -0.18 : 0.18) * scale, (footIndex === 0 ? -0.06 : 0.06) * scale, footTuck);
-    const footHeight = MathUtils.lerp(0.1 * scale + footHop - idleSettle * 0.015 * scale, 0.17 * scale, footTuck);
-    const footForward = MathUtils.lerp((blob.mode === "shy" ? 0.18 : 0.26) * scale - idleSniff * 0.015 * scale, 0.08 * scale, footTuck);
+    const footSide = MathUtils.lerp(homeX * scale, homeX * 0.28 * scale, footTuck);
+    const footHeight = MathUtils.lerp(0.09 * scale + footHop - idleSettle * 0.015 * scale, 0.16 * scale, footTuck);
+    const sniffOffset = idleSniff * (isFrontFoot ? 0.028 : -0.01) * scale;
+    const footForward = MathUtils.lerp(homeZ * scale + sniffOffset, (homeZ * 0.24 + 0.04) * scale, footTuck);
     foot.position.set(
       footSide,
       footHeight,
       footForward,
     );
-      foot.scale.set(
-        MathUtils.lerp(1.08 - eyeSquish * 0.08, 0.38, footTuck),
-        MathUtils.lerp(0.72 - eyeSquish * 0.08 + footHop / Math.max(0.001, scale), 0.28, footTuck),
-        MathUtils.lerp(0.9, 0.34, footTuck),
-      );
-    });
+    const footSize = isFrontFoot ? 1 : 0.9;
+    foot.scale.set(
+      MathUtils.lerp(((isFrontFoot ? 1.1 : 0.94) - eyeSquish * 0.05) * footSize, 0.36, footTuck),
+      MathUtils.lerp(0.46 - eyeSquish * 0.03 + footHop / Math.max(0.001, scale), 0.26, footTuck),
+      MathUtils.lerp((isFrontFoot ? 0.84 : 0.76) * footSize, 0.32, footTuck),
+    );
+  });
 
-    blob.fluffPuffs.forEach((puff, puffIndex) => {
-      const sway = Math.sin(elapsed * 2.8 + blob.poseSeed + puffIndex * 0.8);
-      const puffScale = 1 + sway * 0.03 + (blob.mode === "wander" ? wanderHop * 0.02 : 0) + rollMimicT * 0.04;
-      if (puffIndex < 4) {
-        puff.scale.set(0.42 * scale * puffScale, 0.4 * scale * (1 - sway * 0.02), 0.38 * scale);
-      } else if (puffIndex < 7) {
-        puff.scale.set(0.28 * scale * puffScale, 0.34 * scale, 0.26 * scale);
-      } else {
-        puff.scale.set(0.22 * scale * puffScale, 0.16 * scale, 0.18 * scale);
-      }
-    });
+  blob.fluffPuffs.forEach((puff, puffIndex) => {
+    const sway = Math.sin(elapsed * 2.8 + blob.poseSeed + puffIndex * 0.8);
+    const puffScale = 1 + sway * 0.035 + (blob.mode === "wander" ? wanderHop * 0.024 : 0) + rollMimicT * 0.035 + breezeMimicT * 0.045;
+    const baseScale = puff.userData.baseScale as { x?: number; y?: number; z?: number } | undefined;
+    const baseX = baseScale?.x ?? 0.26 * scale;
+    const baseY = baseScale?.y ?? 0.26 * scale;
+    const baseZ = baseScale?.z ?? 0.24 * scale;
+    puff.scale.set(
+      baseX * puffScale,
+      baseY * (1 - sway * 0.018 + rollMimicT * 0.018 + breezeMimicT * 0.04),
+      baseZ * (1 + rollMimicT * 0.025 + breezeMimicT * 0.02),
+    );
+  });
   });
 
   const nearestAfterRecruit = findNearestRecruitable(blobs, playerPosition);

@@ -5,6 +5,7 @@ import {
   sampleRiverCenter,
   WorldLandmark,
   worldLandmarks,
+  worldMapMarkers,
 } from "../../simulation/world";
 
 const MAP_SVG_NS = "http://www.w3.org/2000/svg";
@@ -37,6 +38,20 @@ export interface MapMarkerElements {
   ring: SVGCircleElement;
   dot: SVGCircleElement;
   label: SVGTextElement;
+}
+
+export interface MapAtlasMarker {
+  id: string;
+  kind: "bridge" | "poi" | "special";
+  title: string;
+  point: MapPoint;
+  landmarkId?: string;
+}
+
+export interface MapRegionPatch {
+  id: string;
+  kind: "forest" | "meadow" | "ridge";
+  path: string;
 }
 
 const MAP_LABEL_LAYOUT: Record<string, { dx: number; dy: number; anchor: MapTextAnchor }> = {
@@ -76,6 +91,18 @@ function buildPath(points: MapPoint[], closed = false) {
   return `${commands.join(" ")}${closed ? " Z" : ""}`;
 }
 
+function buildBlobPath(center: MapPoint, radiusX: number, radiusY: number, phase: number) {
+  const points = Array.from({ length: 18 }, (_, index) => {
+    const angle = (index / 18) * Math.PI * 2;
+    const wobble = 0.92 + Math.sin(angle * 3 + phase) * 0.07 + Math.cos(angle * 5 - phase) * 0.035;
+    return {
+      x: center.x + Math.cos(angle) * radiusX * wobble,
+      y: center.y + Math.sin(angle) * radiusY * wobble,
+    };
+  });
+  return buildPath(points, true);
+}
+
 export const routeLandmarks = MAP_ROUTE_IDS
   .map((id) => worldLandmarks.find((landmark) => landmark.id === id))
   .filter((landmark): landmark is WorldLandmark => Boolean(landmark));
@@ -96,6 +123,32 @@ export const mapRiverBranchPaths = RIVER_BRANCH_SEGMENTS.map((segment) => buildP
   }),
 ));
 export const mapRoutePath = buildPath(routeLandmarks.map((landmark) => projectWorldToMap(landmark.position.x, landmark.position.z)));
+
+export const mapAtlasMarkers: readonly MapAtlasMarker[] = worldMapMarkers.map((marker) => ({
+  id: marker.id,
+  kind: marker.kind,
+  title: marker.title,
+  point: projectWorldToMap(marker.position.x, marker.position.z),
+  landmarkId: marker.landmarkId,
+}));
+
+const mapRegionDefinitions = [
+  ["forest-southwest", "forest", -100, -112, 58, 44, 0.2],
+  ["forest-low-east", "forest", 92, -38, 68, 56, 1.1],
+  ["forest-fir-gate", "forest", 54, 82, 74, 46, 2.2],
+  ["forest-ridge-west", "forest", -78, 164, 58, 42, 0.7],
+  ["meadow-burrow", "meadow", -54, -130, 76, 54, 2.7],
+  ["meadow-silver", "meadow", -6, 8, 86, 58, 1.8],
+  ["ridge-crown", "ridge", 6, 204, 86, 46, 0.3],
+] as const;
+
+export const mapRegionPatches: readonly MapRegionPatch[] = mapRegionDefinitions.map(
+  ([id, kind, x, z, radiusX, radiusY, phase]) => ({
+    id,
+    kind,
+    path: buildBlobPath(projectWorldToMap(x, z), radiusX, radiusY, phase),
+  }),
+);
 
 export function createSvgElement<K extends keyof SVGElementTagNameMap>(tag: K) {
   return document.createElementNS(MAP_SVG_NS, tag);
