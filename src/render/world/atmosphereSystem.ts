@@ -1,5 +1,7 @@
 import {
   BackSide,
+  BufferAttribute,
+  BufferGeometry,
   Camera,
   Color,
   DirectionalLight,
@@ -13,27 +15,49 @@ import {
   Vector3,
 } from "three";
 import { scenicPockets } from "../../simulation/world";
+import { getAtmosphereHorizonTints } from "./sceneLighting";
 
 const _sunDirScratch = new Vector3();
 const _sunDirViewScratch = new Vector3();
+const _horizonTintScratch = new Color();
+const _horizonHazeScratch = new Color();
+const _cloudBrightScratch = new Color();
+const _cloudShadowScratch = new Color();
 
 function createCloudPuffMaterial() {
   return new ShaderMaterial({
     uniforms: {
       uSunDirView: { value: new Vector3(0, 1, 0) },
+      uCameraPosition: { value: new Vector3() },
       uSunColor: { value: new Color("#fff0cf") },
       uCloudBright: { value: new Color("#f8feff") },
       uCloudShadow: { value: new Color("#c8d8e8") },
+      uHorizonTint: { value: new Color("#f0e0d2") },
+      uHorizonHaze: { value: new Color("#ddeef6") },
       uOpacity: { value: 0.94 },
+      uTime: { value: 0 },
+      uElevationMood: { value: 0 },
     },
     transparent: true,
     depthWrite: false,
     vertexShader: `
+      attribute float aPuffPhase;
+      attribute float aInterior;
+
       varying vec3 vNormalView;
       varying vec3 vViewDir;
+      varying vec3 vNormalWorld;
+      varying vec3 vWorldPos;
+      varying float vPuffPhase;
+      varying float vInterior;
 
       void main() {
+        vPuffPhase = aPuffPhase;
+        vInterior = aInterior;
         vNormalView = normalize(normalMatrix * normal);
+        vNormalWorld = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+        vec4 wPos = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wPos.xyz;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
         vViewDir = -mvPosition.xyz;
         gl_Position = projectionMatrix * mvPosition;
@@ -41,37 +65,83 @@ function createCloudPuffMaterial() {
     `,
     fragmentShader: `
       uniform vec3 uSunDirView;
+      uniform vec3 uCameraPosition;
       uniform vec3 uSunColor;
       uniform vec3 uCloudBright;
       uniform vec3 uCloudShadow;
+      uniform vec3 uHorizonTint;
+      uniform vec3 uHorizonHaze;
       uniform float uOpacity;
+      uniform float uTime;
+      uniform float uElevationMood;
 
       varying vec3 vNormalView;
       varying vec3 vViewDir;
+      varying vec3 vNormalWorld;
+      varying vec3 vWorldPos;
+      varying float vPuffPhase;
+      varying float vInterior;
 
       void main() {
         vec3 N = normalize(vNormalView);
         vec3 V = normalize(vViewDir);
         float ndotl = max(dot(N, normalize(uSunDirView)), 0.0);
-        float wrap = 0.38;
+        float wrap = 0.32 + 0.08 * uElevationMood;
         float diffuse = mix(wrap, 1.0, ndotl);
-        vec3 base = mix(uCloudShadow, uCloudBright, diffuse);
-        vec3 sunMul = mix(vec3(1.0), uSunColor, 0.55);
+
+        // Per-puff / phase: subtle silver-lining variation (Ghibli billows).
+        float phaseW = 0.91 + 0.09 * sin(uTime * 0.28 + vPuffPhase);
+        float phaseLift = 0.04 * sin(uTime * 0.17 + vPuffPhase * 0.5);
+        vec3 base = mix(uCloudShadow, uCloudBright, diffuse) * phaseW + vec3(phaseLift);
+        vec3 sunMul = mix(vec3(1.0), uSunColor, 0.5 + 0.12 * (1.0 - uElevationMood));
         base *= sunMul;
-        float rim = pow(1.0 - max(dot(N, V), 0.0), 2.85);
-        base += vec3(1.0, 0.99, 0.97) * rim * 0.2;
-        float alpha = uOpacity * (0.68 + 0.26 * rim + 0.18 * ndotl);
+
+        vec3 vWorld = normalize(vWorldPos - uCameraPosition);
+        float viewHeight = vWorld.y;
+        float nUp = max(vNormalWorld.y, 0.0);
+        // Horizon: warmer / milkier on undersides; airy haze toward eye-level.
+        float underbelly = 1.0 - nUp;
+        float horizonView = 1.0 - abs(viewHeight);
+        float hBlend = underbelly * (0.38 + 0.42 * horizonView) * (0.65 + 0.35 * (1.0 - uElevationMood));
+        base = mix(base, uHorizonTint, hBlend * 0.5);
+        base = mix(base, uHorizonHaze, smoothstep(0.12, 0.62, horizonView) * (0.12 + 0.14 * (1.0 - nUp)) * 0.85);
+
+        // Fake inter-puff depth: darker in the cluster "core" + lower hemisphere = shelf shadow.
+        float coreDark = 0.18 * vInterior * (0.5 + 0.5 * underbelly);
+        float shelfAo = 1.0 - 0.48 * underbelly;
+        base *= (0.7 + 0.3 * nUp) * (1.0 - coreDark) * mix(0.86, 1.0, shelfAo);
+        // Soft cavity between lobes: lateral fold.
+        float fold = abs(vNormalWorld.x) + abs(vNormalWorld.z);
+        base *= 1.0 - 0.05 * smoothstep(0.2, 1.0, fold) * underbelly;
+
+        float rim = pow(1.0 - max(dot(N, V), 0.0), 2.55);
+        base += vec3(1.0, 0.99, 0.97) * rim * (0.18 + 0.04 * (1.0 - uElevationMood));
+        float alpha = uOpacity * (0.64 + 0.28 * rim + 0.2 * ndotl) * (0.95 + 0.05 * nUp);
         gl_FragColor = vec4(base, clamp(alpha, 0.0, 1.0));
       }
     `,
   });
 }
 
+function setPuffAttributes(geometry: BufferGeometry, x: number, y: number, z: number, puffIndex: number) {
+  const n = geometry.attributes.position.count;
+  const phase = (puffIndex * 1.12 + x * 0.19 + y * 0.13 + z * 0.17) % 6.28318530718;
+  const interior = MathUtils.clamp(Math.hypot(x, z) / 9.2, 0, 1);
+  const aPhase = new Float32Array(n);
+  const aInt = new Float32Array(n);
+  for (let i = 0; i < n; i += 1) {
+    aPhase[i] = phase;
+    aInt[i] = interior;
+  }
+  geometry.setAttribute("aPuffPhase", new BufferAttribute(aPhase, 1));
+  geometry.setAttribute("aInterior", new BufferAttribute(aInt, 1));
+}
+
 function makeCloudCluster(position: Vector3, scale: number, puffMaterial: ShaderMaterial) {
   const group = new Group();
-  const puffGeometry = new SphereGeometry(1.2, 14, 12);
+  const baseSphere = new SphereGeometry(1.2, 14, 12);
 
-  const puffs = [
+  const puffs: [number, number, number, number, number, number, number][] = [
     [0, 0, 0, 5.6, 2.5, 0.98, 1.72],
     [-6.8, 0.5, 0.6, 4.1, 2.0, 0.92, 1.4],
     [6.6, 0.35, -0.2, 4.4, 2.08, 0.94, 1.46],
@@ -79,10 +149,47 @@ function makeCloudCluster(position: Vector3, scale: number, puffMaterial: Shader
     [3.6, 2.0, 0.5, 2.8, 1.5, 0.86, 1.12],
   ];
 
-  puffs.forEach(([x, y, z, size, sx, sy, sz]) => {
-    const puff = new Mesh(puffGeometry, puffMaterial);
-    puff.position.set(x as number, y as number, z as number);
-    puff.scale.set((size as number) * (sx as number) * scale, (size as number) * (sy as number) * scale, (size as number) * (sz as number) * scale);
+  // Second layer: very soft, dark shelf for depth (drawn under puffs; fake inter-lobe shadow).
+  const shelfGeo = new SphereGeometry(1.0, 12, 10);
+  const shelf = new Mesh(
+    shelfGeo,
+    new MeshBasicMaterial({
+      color: 0x9a8a7c,
+      transparent: true,
+      opacity: 0.11,
+      depthWrite: false,
+    }),
+  );
+  shelf.position.set(0, -1.4 * scale, 0.4);
+  shelf.scale.set(scale * 11, scale * 0.9, scale * 6.2);
+  shelf.renderOrder = -1;
+  group.add(shelf);
+
+  // Mid layer: hazy Ghibli-style mass behind the bright puffs (adds aerial perspective).
+  const haze = new Mesh(
+    baseSphere.clone(),
+    new MeshBasicMaterial({
+      color: 0xc5d2dc,
+      transparent: true,
+      opacity: 0.08,
+      depthWrite: false,
+    }),
+  );
+  haze.position.set(2, 0.6, -4);
+  haze.scale.set(scale * 5.2, scale * 2.2, scale * 3.2);
+  haze.renderOrder = -1;
+  group.add(haze);
+
+  puffs.forEach(([x, y, z, size, sx, sy, sz], puffIndex) => {
+    const geom = baseSphere.clone();
+    setPuffAttributes(geom, x, y, z, puffIndex);
+    const puff = new Mesh(geom, puffMaterial);
+    puff.position.set(x, y, z);
+    puff.scale.set(
+      (size * sx) * scale,
+      (size * sy) * scale,
+      (size * sz) * scale,
+    );
     group.add(puff);
   });
 
@@ -240,20 +347,38 @@ export function syncAtmosphereLighting(
   sun: DirectionalLight,
   elevationMood: number,
   camera: Camera,
+  timeSeconds: number,
 ) {
+  const mood = MathUtils.clamp(elevationMood, 0, 1);
   _sunDirScratch.subVectors(sun.position, sun.target.position).normalize();
   camera.updateMatrixWorld();
   const skyMat = skyDome.material;
   if (skyMat instanceof ShaderMaterial && skyMat.uniforms.uSunDir) {
     skyMat.uniforms.uSunDir.value.copy(_sunDirScratch);
     (skyMat.uniforms.uSunColor.value as Color).copy(sun.color);
-    skyMat.uniforms.uElevationMood.value = MathUtils.clamp(elevationMood, 0, 1);
+    skyMat.uniforms.uElevationMood.value = mood;
   }
   const cloudMat = clouds.userData.cloudMaterial as ShaderMaterial | undefined;
   if (cloudMat?.uniforms?.uSunDirView) {
     _sunDirViewScratch.copy(_sunDirScratch).transformDirection(camera.matrixWorldInverse);
     cloudMat.uniforms.uSunDirView.value.copy(_sunDirViewScratch);
     (cloudMat.uniforms.uSunColor.value as Color).copy(sun.color);
+    (cloudMat.uniforms.uCameraPosition.value as Vector3).copy(camera.position);
+    cloudMat.uniforms.uTime.value = timeSeconds;
+    cloudMat.uniforms.uElevationMood.value = mood;
+
+    // Ghibli-ish: warm paper/cream at horizon, cooler cel highlights aloft; ties to sky + elevation.
+    getAtmosphereHorizonTints(
+      mood,
+      _horizonTintScratch,
+      _horizonHazeScratch,
+      _cloudBrightScratch,
+      _cloudShadowScratch,
+    );
+    (cloudMat.uniforms.uHorizonTint.value as Color).copy(_horizonTintScratch);
+    (cloudMat.uniforms.uHorizonHaze.value as Color).copy(_horizonHazeScratch);
+    (cloudMat.uniforms.uCloudBright.value as Color).copy(_cloudBrightScratch);
+    (cloudMat.uniforms.uCloudShadow.value as Color).copy(_cloudShadowScratch);
   }
 }
 

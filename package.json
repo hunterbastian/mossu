@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.ts",
     "perf:guard": "npm run build && node scripts/perfGuard.mjs --headed --browser=chrome",
     "perf:guard:headless": "npm run build && node scripts/perfGuard.mjs",
     "perf:guard:headed": "npm run build && node scripts/perfGuard.mjs --headed --browser=chrome",

@@ -8,6 +8,7 @@ import {
   AIR_DECELERATION,
   AIR_SPEED,
   BREEZE_FLOAT_BUFFER_TIME,
+  BREEZE_FLOAT_MAX_UPWARD_VELOCITY,
   COYOTE_TIME,
   FLOAT_FORWARD_BONUS,
   FLOAT_GRAVITY_SCALE,
@@ -243,7 +244,12 @@ export function applyMovementPhysics(
   const canFloat = save.unlockedAbilities.has("breeze_float");
   const horizontalSpeed = Math.hypot(player.velocity.x, player.velocity.z);
   const wantsFloatInput = input.jumpHeld || input.abilityHeld || runtime.breezeFloatBufferRemaining > 0;
-  const wantsFloat = canFloat && !player.grounded && !player.swimming && wantsFloatInput && player.velocity.y < 5;
+  const wantsFloat =
+    canFloat &&
+    !player.grounded &&
+    !player.swimming &&
+    wantsFloatInput &&
+    player.velocity.y < BREEZE_FLOAT_MAX_UPWARD_VELOCITY;
   const isFloating = wantsFloat && player.stamina > STAMINA_ACTION_THRESHOLD;
   player.floating = isFloating;
 

@@ -22,7 +22,13 @@ export const AIR_DECELERATION = 10;
 export const JUMP_VELOCITY = 24.5;
 export const COYOTE_TIME = 0.12;
 export const JUMP_BUFFER_TIME = 0.14;
-export const BREEZE_FLOAT_BUFFER_TIME = 0.24;
+/** Extra frames after Q release to still start float (input forgiveness). */
+export const BREEZE_FLOAT_BUFFER_TIME = 0.3;
+/**
+ * Float only while vertical speed is below this (m/s). Higher = Breeze can engage
+ * earlier in the jump (more responsive) without staying locked out until late apex.
+ */
+export const BREEZE_FLOAT_MAX_UPWARD_VELOCITY = 10.5;
 export const STAMINA_MAX = 100;
 export const STAMINA_REGEN_DELAY = 0.55;
 export const STAMINA_REGEN_GROUND = 26;

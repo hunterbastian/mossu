@@ -316,8 +316,8 @@ function recruitNearbyBlobs(blobs: AmbientBlob[], sourceBlob: AmbientBlob, playe
     blob.recruited = true;
     blob.recruitedAt = elapsed;
     blob.regroupUntil = elapsed + 1.6;
-    blob.callRespondUntil = elapsed + 0.35;
-    blob.callWaveStartAt = elapsed + 0.12 + blob.leaderSlot * 0.04;
+    blob.callRespondUntil = elapsed + 0.3;
+    blob.callWaveStartAt = elapsed + 0.04 + blob.leaderSlot * 0.03;
     blob.mode = "curious";
     blob.avoidPlayerUntil = 0;
     blob.investigateAgainAt = elapsed + 5;
@@ -664,7 +664,7 @@ export function updateAmbientBlobs(
       if (blob.recruited) {
         blob.regroupUntil = elapsed + FAUNA_REGROUP_SECONDS;
         blob.callRespondUntil = elapsed + FAUNA_CALL_LISTEN_SECONDS + blob.leaderSlot * 0.035;
-        blob.callWaveStartAt = elapsed + 0.2 + blob.leaderSlot * FAUNA_CALL_WAVE_STAGGER;
+        blob.callWaveStartAt = elapsed + 0.07 + blob.leaderSlot * FAUNA_CALL_WAVE_STAGGER;
         blob.restUntil = Math.max(blob.restUntil, blob.callRespondUntil);
       }
     });

@@ -7,18 +7,22 @@ import { worldLandmarks } from "../../simulation/world";
 import type { ForageableKind, WorldLandmark } from "../../simulation/world";
 import { ViewMode } from "../../simulation/viewMode";
 import {
+  buildMapNorthRidgePath,
   createSvgElement,
   getMapLabelLayout,
-  mapBoundaryPath,
-  MapMarkerElements,
   mapAtlasMarkers,
-  MAP_VIEWBOX_HEIGHT,
-  MAP_VIEWBOX_WIDTH,
+  mapBoundaryPath,
+  mapHighlandBackdrop,
+  mapLakePatches,
+  mapRegionPatches,
   mapRiverBranchPaths,
   mapRiverPath,
-  mapRegionPatches,
   mapRoutePath,
+  MapMarkerElements,
+  MAP_VIEWBOX_HEIGHT,
+  MAP_VIEWBOX_WIDTH,
   projectWorldToMap,
+  routeLandmarkIdSet,
   routeLandmarks,
 } from "./worldMap";
 
@@ -1321,15 +1325,19 @@ export class HudShell {
     const regionSilhouettePaths: readonly { id: string; d: string }[] = [
       {
         id: "map-region-silhouette-forest",
-        d: "M 20 60 C 8 40 18 15 42 12 C 60 10 82 22 88 42 C 94 58 82 82 58 88 C 38 92 22 82 20 60 Z",
+        d: "M 22 58 C 10 36 20 12 44 10 C 62 8 85 20 90 40 C 96 58 85 80 60 86 C 36 90 20 80 22 58 Z",
       },
       {
         id: "map-region-silhouette-meadow",
-        d: "M 12 50 C 12 28 32 15 50 15 C 72 15 88 32 88 52 C 88 75 68 88 48 86 C 26 84 12 72 12 50 Z",
+        d: "M 14 48 C 14 26 34 12 52 12 C 74 12 90 30 90 50 C 90 72 70 86 50 85 C 28 84 12 70 14 48 Z",
       },
       {
         id: "map-region-silhouette-ridge",
-        d: "M 8 55 Q 22 28 48 22 Q 78 18 90 42 Q 88 62 62 78 Q 32 86 10 68 Q 6 58 8 55 Z",
+        d: "M 10 52 Q 24 24 50 20 Q 80 16 92 40 Q 90 64 64 80 Q 34 86 8 66 Q 4 56 10 52 Z",
+      },
+      {
+        id: "map-lake-bloom",
+        d: "M 50 18 C 72 20 86 40 88 58 C 86 80 64 90 50 90 C 28 90 10 70 12 48 C 14 24 32 16 50 18 Z",
       },
     ];
     regionSilhouettePaths.forEach(({ id, d }) => {
@@ -1376,13 +1384,47 @@ export class HudShell {
       riverGradient.append(stop);
     });
 
+    const highlandRidgeGradient = createSvgElement("linearGradient");
+    highlandRidgeGradient.id = "world-map-ridge-mass-gradient";
+    highlandRidgeGradient.setAttribute("x1", "0%");
+    highlandRidgeGradient.setAttribute("y1", "0%");
+    highlandRidgeGradient.setAttribute("x2", "0%");
+    highlandRidgeGradient.setAttribute("y2", "100%");
+    [
+      ["0%", "rgba(118, 160, 168, 0.62)"],
+      ["100%", "rgba(96, 132, 116, 0.38)"],
+    ].forEach(([offset, color]) => {
+      const stop = createSvgElement("stop");
+      stop.setAttribute("offset", offset);
+      stop.setAttribute("stop-color", color);
+      highlandRidgeGradient.append(stop);
+    });
+
+    const lakeSiltGradient = createSvgElement("radialGradient");
+    lakeSiltGradient.id = "world-map-lake-gradient";
+    [
+      ["0%", "#9ecfe0"],
+      ["55%", "#7eb8c2"],
+      ["100%", "#6a9aa8"],
+    ].forEach(([offset, color], i) => {
+      const stop = createSvgElement("stop");
+      stop.setAttribute("offset", offset);
+      stop.setAttribute("stop-color", color);
+      stop.setAttribute("stop-opacity", i === 0 ? "0.92" : "0.88");
+      lakeSiltGradient.append(stop);
+    });
+    lakeSiltGradient.setAttribute("gradientUnits", "objectBoundingBox");
+    lakeSiltGradient.setAttribute("cx", "0.48");
+    lakeSiltGradient.setAttribute("cy", "0.42");
+    lakeSiltGradient.setAttribute("r", "0.58");
+
     const islandClip = createSvgElement("clipPath");
     islandClip.id = "world-map-island-clip";
     const clipPath = createSvgElement("path");
     clipPath.setAttribute("d", mapBoundaryPath);
     islandClip.append(clipPath);
 
-    defs.append(islandGradient, riverGradient, islandClip);
+    defs.append(islandGradient, riverGradient, highlandRidgeGradient, lakeSiltGradient, islandClip);
     this.mapSvg.append(defs);
 
     const islandShadow = createSvgElement("path");
@@ -1393,6 +1435,51 @@ export class HudShell {
     const island = createSvgElement("path");
     island.classList.add("world-map__island-shape");
     island.setAttribute("d", mapBoundaryPath);
+
+    const { center: hCenter, width: hW, height: hH, rotationDeg: hRot } = mapHighlandBackdrop;
+    const highlandGroup = createSvgElement("g");
+    highlandGroup.classList.add("world-map__upland-backdrop");
+    highlandGroup.setAttribute("clip-path", "url(#world-map-island-clip)");
+    highlandGroup.setAttribute(
+      "transform",
+      `translate(${hCenter.x.toFixed(1)} ${hCenter.y.toFixed(1)}) rotate(${hRot.toFixed(2)})`,
+    );
+    const highlandMass = createSvgElement("ellipse");
+    highlandMass.setAttribute("rx", (hW / 2).toFixed(1));
+    highlandMass.setAttribute("ry", (hH / 2).toFixed(1));
+    highlandMass.setAttribute("fill", "url(#world-map-ridge-mass-gradient)");
+    highlandGroup.append(highlandMass);
+
+    const northRidgeD = buildMapNorthRidgePath();
+    const northRidge = createSvgElement("path");
+    if (northRidgeD) {
+      northRidge.classList.add("world-map__north-ridge-crest");
+      northRidge.setAttribute("d", northRidgeD);
+      northRidge.setAttribute("clip-path", "url(#world-map-island-clip)");
+    }
+
+    const lakeLayer = createSvgElement("g");
+    lakeLayer.classList.add("world-map__lake-layer");
+    lakeLayer.setAttribute("clip-path", "url(#world-map-island-clip)");
+    mapLakePatches.forEach((lake) => {
+      const g = createSvgElement("g");
+      g.setAttribute(
+        "transform",
+        `translate(${lake.center.x.toFixed(1)} ${lake.center.y.toFixed(1)}) rotate(${lake.rotationDeg.toFixed(2)})`,
+      );
+      g.classList.add("world-map__lake", `world-map__lake--${lake.id.replace(/[^a-z0-9-]/g, "-")}`);
+      const blo = createSvgElement("use");
+      blo.setAttribute("href", "#map-lake-bloom");
+      blo.classList.add("world-map__lake-bloom");
+      const rx = (lake.width / 2).toFixed(1);
+      const ry = (lake.height / 2).toFixed(1);
+      blo.setAttribute("x", `-${rx}`);
+      blo.setAttribute("y", `-${ry}`);
+      blo.setAttribute("width", lake.width.toFixed(1));
+      blo.setAttribute("height", lake.height.toFixed(1));
+      g.append(blo);
+      lakeLayer.append(g);
+    });
 
     const regionLayer = createSvgElement("g");
     regionLayer.classList.add("world-map__region-layer");
@@ -1414,21 +1501,6 @@ export class HudShell {
       usePatch.setAttribute("height", h.toFixed(1));
       patchGroup.append(usePatch);
       regionLayer.append(patchGroup);
-    });
-
-    const pocketGroup = createSvgElement("g");
-    pocketGroup.setAttribute("clip-path", "url(#world-map-island-clip)");
-    routeLandmarks.forEach((landmark) => {
-      const pocket = createSvgElement("circle");
-      pocket.classList.add("world-map__route-pocket");
-      const point = projectWorldToMap(landmark.position.x, landmark.position.z);
-      pocket.setAttribute("cx", point.x.toFixed(1));
-      pocket.setAttribute("cy", point.y.toFixed(1));
-      pocket.setAttribute("r", landmark.id === "peak-shrine" ? "44" : "34");
-      if (landmark.id === "peak-shrine") {
-        pocket.classList.add("world-map__route-pocket--shrine");
-      }
-      pocketGroup.append(pocket);
     });
 
     const river = createSvgElement("path");
@@ -1463,8 +1535,10 @@ export class HudShell {
     this.mapSvg.append(
       islandShadow,
       island,
+      highlandGroup,
+      ...(northRidgeD ? [northRidge] : []),
+      lakeLayer,
       regionLayer,
-      pocketGroup,
       river,
       riverBranches,
       route,
@@ -1530,6 +1604,7 @@ export class HudShell {
   private createMapLandmarkMarker(landmark: WorldLandmark): MapMarkerElements {
     const point = projectWorldToMap(landmark.position.x, landmark.position.z);
     const layout = getMapLabelLayout(landmark.id);
+    const isRoute = routeLandmarkIdSet.has(landmark.id);
 
     const group = createSvgElement("g");
     group.classList.add("world-map__marker");
@@ -1537,19 +1612,36 @@ export class HudShell {
     if (landmark.id === "peak-shrine") {
       group.classList.add("world-map__marker--shrine");
     }
+    if (!isRoute) {
+      group.classList.add("world-map__marker--minor");
+    }
 
     const ring = createSvgElement("circle");
-    ring.setAttribute("r", landmark.id === "peak-shrine" ? "13" : "10");
+    if (isRoute) {
+      ring.setAttribute("r", landmark.id === "peak-shrine" ? "13" : "10");
+    } else {
+      ring.setAttribute("r", "6.5");
+    }
 
     const dot = createSvgElement("circle");
-    dot.setAttribute("r", landmark.id === "peak-shrine" ? "5.8" : "4.6");
+    if (isRoute) {
+      dot.setAttribute("r", landmark.id === "peak-shrine" ? "5.8" : "4.6");
+    } else {
+      dot.setAttribute("r", "3.2");
+    }
 
     const label = createSvgElement("text");
     label.classList.add("world-map__marker-label");
     label.setAttribute("x", `${layout.dx}`);
     label.setAttribute("y", `${layout.dy}`);
     label.setAttribute("text-anchor", layout.anchor);
-    label.textContent = landmark.title;
+    if (isRoute) {
+      label.textContent = landmark.title;
+    } else {
+      label.textContent = "";
+      label.setAttribute("aria-hidden", "true");
+    }
+    group.setAttribute("aria-label", landmark.title);
 
     group.append(ring, dot, label);
 

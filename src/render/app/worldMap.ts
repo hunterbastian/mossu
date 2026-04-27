@@ -3,6 +3,7 @@ import {
   sampleIslandBoundaryPoint,
   sampleRiverChannelCenter,
   sampleRiverCenter,
+  STARTING_WATER_POOLS,
   WorldLandmark,
   worldLandmarks,
   worldMapMarkers,
@@ -15,7 +16,7 @@ export const MAP_VIEWBOX_HEIGHT = 760;
 
 const MAP_PADDING_X = 92;
 const MAP_PADDING_Y = 74;
-const MAP_ROUTE_IDS = [
+export const MAP_ROUTE_IDS = [
   "start-burrow",
   "river-bend",
   "fir-gate",
@@ -25,6 +26,9 @@ const MAP_ROUTE_IDS = [
   "ridge-overlook",
   "peak-shrine",
 ] as const;
+
+/** Primary route — full marker + label on the parchment map. */
+export const routeLandmarkIdSet = new Set<string>([...MAP_ROUTE_IDS]);
 
 export type MapTextAnchor = "start" | "middle" | "end";
 
@@ -147,13 +151,13 @@ export const mapAtlasMarkers: readonly MapAtlasMarker[] = worldMapMarkers.map((m
 }));
 
 const mapRegionDefinitions = [
-  ["forest-southwest", "forest", -100, -112, 58, 44, 0.2],
-  ["forest-low-east", "forest", 92, -38, 68, 56, 1.1],
-  ["forest-fir-gate", "forest", 54, 82, 74, 46, 2.2],
-  ["forest-ridge-west", "forest", -78, 164, 58, 42, 0.7],
-  ["meadow-burrow", "meadow", -54, -130, 76, 54, 2.7],
-  ["meadow-silver", "meadow", -6, 8, 86, 58, 1.8],
-  ["ridge-crown", "ridge", 6, 204, 86, 46, 0.3],
+  ["forest-southwest", "forest", -98, -108, 64, 48, 0.35],
+  ["forest-low-east", "forest", 90, -42, 72, 58, 1.2],
+  ["forest-fir-gate", "forest", 52, 80, 78, 50, 1.9],
+  ["forest-ridge-west", "forest", -84, 170, 60, 44, 0.85],
+  ["meadow-burrow", "meadow", -50, -126, 82, 58, 2.4],
+  ["meadow-silver", "meadow", -4, 4, 92, 62, 1.5],
+  ["ridge-crown", "ridge", 4, 210, 94, 52, 0.45],
 ] as const;
 
 export const mapRegionPatches: readonly MapRegionPatch[] = mapRegionDefinitions.map(
@@ -169,6 +173,57 @@ export const mapRegionPatches: readonly MapRegionPatch[] = mapRegionDefinitions.
     };
   },
 );
+
+export interface MapLakePatch {
+  id: string;
+  center: MapPoint;
+  width: number;
+  height: number;
+  rotationDeg: number;
+}
+
+/** Still pools from sim — same footprint as in-world water (render radii). */
+export const mapLakePatches: readonly MapLakePatch[] = STARTING_WATER_POOLS.map((pool) => {
+  const { center, width, height } = patchFrameFromWorldEllipse(
+    pool.x,
+    pool.z,
+    pool.renderRadiusX * 0.88,
+    pool.renderRadiusZ * 0.88,
+  );
+  return {
+    id: pool.id,
+    center,
+    width: Math.max(width, 20),
+    height: Math.max(height, 16),
+    rotationDeg: (pool.x * 0.011 + pool.z * 0.007) * 3.1,
+  };
+});
+
+/** Northern hills / back ridge: soft mass behind alpine areas (viewBox-anchored). */
+export const mapHighlandBackdrop: {
+  center: MapPoint;
+  width: number;
+  height: number;
+  rotationDeg: number;
+} = (() => {
+  const { center, width, height } = patchFrameFromWorldEllipse(2, 198, 168, 52);
+  return { center, width: width * 1.12, height: height * 1.18, rotationDeg: -1.1 };
+})();
+
+const NORTH_RIDGE_Z_FRAC = 0.5;
+
+/** Simplified ridgeline along the high-z part of the island (silhouette “hills in back”). */
+export function buildMapNorthRidgePath(): string {
+  const zSpan = mapBounds.maxZ - mapBounds.minZ;
+  const zMin = mapBounds.minZ + zSpan * NORTH_RIDGE_Z_FRAC;
+  const arc = boundarySamples
+    .filter((p) => p.z >= zMin)
+    .sort((a, b) => a.x - b.x);
+  if (arc.length < 3) {
+    return "";
+  }
+  return buildPath(arc.map((p) => projectWorldToMap(p.x, p.z)));
+}
 
 export function createSvgElement<K extends keyof SVGElementTagNameMap>(tag: K) {
   return document.createElementNS(MAP_SVG_NS, tag);

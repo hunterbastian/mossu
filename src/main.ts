@@ -2,9 +2,18 @@ import "./styles.css";
 import type { MossuErrorDetail } from "./errorUi";
 import { reportMossuError, showMossuErrorOverlay } from "./errorUi";
 
+/** Set after runtime hooks attach; `ready` flips on the first animation frame (safe for Playwright to probe). */
+export type MossuE2eBridge = {
+  version: 1;
+  ready: boolean;
+  mode: "game" | "model_viewer";
+};
+
 declare global {
   interface Window {
     advanceTime?: (ms: number) => void;
+    /** Automation / Playwright: present once hooks are live; `ready` after one rAF post-`start()`. */
+    __MOSSU_E2E__?: MossuE2eBridge;
     mossuDebug?: {
       completeOpeningSequence?: () => void;
       teleportPlayerTo?: (x: number, z: number) => void;
@@ -115,7 +124,8 @@ window.addEventListener("unhandledrejection", (event) => {
   });
 });
 
-function attachRuntime(app: MossuAppRuntime) {
+function attachRuntime(app: MossuAppRuntime, mode: MossuE2eBridge["mode"]) {
+  window.__MOSSU_E2E__ = { version: 1, ready: false, mode };
   window.advanceTime = (ms) => app.advanceTime(ms);
   window.render_game_to_text = () => app.renderGameToText();
   if (new URLSearchParams(window.location.search).has("qaDebug") && app.debugCompleteOpeningSequence) {
@@ -126,6 +136,12 @@ function attachRuntime(app: MossuAppRuntime) {
     };
   }
   app.start();
+  // Let one frame run so rAF + first tick complete before e2e probes call advanceTime / render_game_to_text.
+  requestAnimationFrame(() => {
+    if (window.__MOSSU_E2E__) {
+      window.__MOSSU_E2E__.ready = true;
+    }
+  });
 }
 
 async function startGame() {
@@ -133,7 +149,7 @@ async function startGame() {
   const { GameApp } = await import("./render/app/GameApp");
   setLoadingStatus("Painting the island");
   const game = await GameApp.create(appContainer);
-  attachRuntime(game);
+  attachRuntime(game, "game");
   finishLoading();
 }
 
@@ -141,7 +157,7 @@ async function startModelViewer() {
   setLoadingStatus("Opening the model table");
   const { ModelViewerApp } = await import("./render/app/ModelViewerApp");
   const viewer = new ModelViewerApp(appContainer);
-  attachRuntime(viewer);
+  attachRuntime(viewer, "model_viewer");
   finishLoading();
 }
 

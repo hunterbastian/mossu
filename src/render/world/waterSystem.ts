@@ -264,11 +264,15 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
 
 const WATER_RIBBON_COLUMNS = [-1.1, -0.96, -0.78, -0.56, -0.3, 0, 0.3, 0.56, 0.78, 0.96, 1.1];
 const WATER_RIPPLE_LIMIT = 4;
-const WATER_VISUAL_FILL_SCALE = 1.32;
-const WATER_TERRAIN_FILL_CLEARANCE = 0.22;
-const WATER_EDGE_TERRAIN_CLEARANCE = 0.1;
-const LAKE_VISUAL_FILL_SCALE = 1.16;
-const WATER_UNDERFILL_OFFSET = -0.045;
+/** Extra width on river ribbons so the mesh stays over banks when terrain is rugged. */
+const WATER_VISUAL_FILL_SCALE = 1.55;
+/** Clearance from terrain under channel/basin water (higher = fewer shoreline gaps / z-fight). */
+const WATER_TERRAIN_FILL_CLEARANCE = 0.46;
+const WATER_EDGE_TERRAIN_CLEARANCE = 0.22;
+/** Ellipse scale for still pools; slightly larger than render radius to hide edge gaps. */
+const LAKE_VISUAL_FILL_SCALE = 1.36;
+/** Under-surface copy of the mesh; a bit lower hides cracks between the two layers. */
+const WATER_UNDERFILL_OFFSET = -0.1;
 
 interface WaterfallAccent {
   group: Group;
@@ -284,7 +288,10 @@ function getFilledWaterY(flatSurfaceY: number, x: number, z: number, bank = 0, e
   const terrainY = sampleTerrainHeight(x, z);
   const shoreInfluence = MathUtils.clamp(Math.max(bank, edgeBlend), 0, 1);
   const clearance = MathUtils.lerp(WATER_TERRAIN_FILL_CLEARANCE, WATER_EDGE_TERRAIN_CLEARANCE, shoreInfluence);
-  return Math.max(flatSurfaceY, terrainY + clearance);
+  const bankBoost = MathUtils.clamp(bank, 0, 1) * 0.14;
+  // Extra lift in channel / pool center so the surface reads solid over terrain, not a thin sheet
+  const channelLift = (1 - MathUtils.clamp(bank, 0, 1)) * 0.12;
+  return Math.max(flatSurfaceY, terrainY + clearance + bankBoost + channelLift);
 }
 
 function buildWaterRibbonGeometry(points: Vector3[], options: WaterSurfaceOptions) {
@@ -349,7 +356,7 @@ function buildWaterRibbonGeometry(points: Vector3[], options: WaterSurfaceOption
     const localSlope = MathUtils.clamp(rise / run * 6.5, 0, 1);
 
     WATER_RIBBON_COLUMNS.forEach((offset, columnIndex) => {
-      const edgeDip = Math.pow(MathUtils.clamp(Math.abs(offset), 0, 1), 2.4) * 0.025;
+      const edgeDip = Math.pow(MathUtils.clamp(Math.abs(offset), 0, 1), 2.4) * 0.012;
       const channel = MathUtils.clamp(1 - Math.abs(offset), 0, 1);
       const bank = 1 - channel;
       const x = sample.x + lateral.x * halfWidth * offset;
@@ -444,7 +451,8 @@ function createLakeGeometry(
       const terrainY = sampleTerrainHeight(x, z);
       const edgeBlend = MathUtils.smoothstep(1 - edgeSoftness, 1, ringT);
       const filledY = getFilledWaterY(surfaceY, x, z, MathUtils.clamp(ringT, 0, 1), edgeBlend);
-      const y = MathUtils.lerp(filledY, Math.max(surfaceY, terrainY + WATER_EDGE_TERRAIN_CLEARANCE), edgeBlend * 0.28);
+      // Keep outer rings closer to full fill; old 0.24 sagged the rim and read hollow
+      const y = MathUtils.lerp(filledY, Math.max(surfaceY, terrainY + WATER_EDGE_TERRAIN_CLEARANCE), edgeBlend * 0.1);
       positions.push(x, y, z);
       uvs.push(0.5 + Math.cos(angle) * ringT * 0.5, 0.5 + Math.sin(angle) * ringT * 0.5);
       channelValues.push(MathUtils.clamp(1 - ringT ** 1.3, 0, 1));
@@ -506,6 +514,20 @@ function createWebGLWaterController(
   const bedColor = new Color(profile.bedColor);
   const causticColor = new Color(profile.causticColor);
   const rippleUniforms = Array.from({ length: WATER_RIPPLE_LIMIT }, () => new Vector4(0, 0, -999, 0));
+  /** Time/ripple/flow uniforms shared with underfill so both surfaces get identical vertex displacement. */
+  const sharedWaterWaveUniforms = {
+    uTime: { value: 0 },
+    uRippleTime: { value: 0 },
+    uRippleCount: { value: 0 },
+    uRippleSources: { value: rippleUniforms },
+    uMapLookdown: { value: 0 },
+    uFlowSpeed: { value: options.flowSpeed ?? profile.flowSpeed },
+    uFlowDirection: { value: flowDirection },
+    uBaseWaveAmplitude: { value: profile.baseWaveAmplitude },
+    uDetailWaveAmplitude: { value: profile.detailWaveAmplitude },
+    uBaseFrequency: { value: profile.baseFrequency },
+    uDetailFrequency: { value: profile.detailFrequency },
+  };
   const material = new MeshStandardMaterial({
     color: shallowColor,
     roughness: profile.roughness,
@@ -518,26 +540,97 @@ function createWebGLWaterController(
   });
   const baseOpacity = material.opacity;
   const fillMaterial = new MeshBasicMaterial({
-    color: deepColor.clone().lerp(shallowColor, profile.key === "stillPool" ? 0.3 : 0.22),
+    color: deepColor.clone().lerp(shallowColor, profile.key === "stillPool" ? 0.36 : 0.28),
     transparent: true,
-    opacity: profile.key === "stillPool" ? 0.94 : 0.9,
+    opacity: profile.key === "stillPool" ? 0.97 : 0.95,
     depthWrite: false,
     side: DoubleSide,
   });
   const fillLayer = new Mesh(geometry, fillMaterial);
-  fillLayer.position.y = WATER_UNDERFILL_OFFSET;
   fillLayer.renderOrder = 1;
   fillLayer.name = `${profile.key}-water-underfill`;
   let shaderRef: GrassShader | undefined;
 
+  fillMaterial.onBeforeCompile = (shader: GrassShader) => {
+    shader.uniforms.uTime = sharedWaterWaveUniforms.uTime;
+    shader.uniforms.uRippleTime = sharedWaterWaveUniforms.uRippleTime;
+    shader.uniforms.uRippleCount = sharedWaterWaveUniforms.uRippleCount;
+    shader.uniforms.uRippleSources = sharedWaterWaveUniforms.uRippleSources;
+    shader.uniforms.uMapLookdown = sharedWaterWaveUniforms.uMapLookdown;
+    shader.uniforms.uFlowSpeed = sharedWaterWaveUniforms.uFlowSpeed;
+    shader.uniforms.uFlowDirection = sharedWaterWaveUniforms.uFlowDirection;
+    shader.uniforms.uBaseWaveAmplitude = sharedWaterWaveUniforms.uBaseWaveAmplitude;
+    shader.uniforms.uDetailWaveAmplitude = sharedWaterWaveUniforms.uDetailWaveAmplitude;
+    shader.uniforms.uBaseFrequency = sharedWaterWaveUniforms.uBaseFrequency;
+    shader.uniforms.uDetailFrequency = sharedWaterWaveUniforms.uDetailFrequency;
+    const underfillY = WATER_UNDERFILL_OFFSET;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        uniform float uTime;
+        uniform float uRippleTime;
+        uniform int uRippleCount;
+        uniform vec4 uRippleSources[${WATER_RIPPLE_LIMIT}];
+        uniform float uMapLookdown;
+        uniform float uFlowSpeed;
+        uniform float uFlowDirection;
+        uniform float uBaseWaveAmplitude;
+        uniform float uDetailWaveAmplitude;
+        uniform float uBaseFrequency;
+        uniform float uDetailFrequency;
+        attribute float aChannel;
+        attribute float aBank;
+        attribute float aSlope;
+        attribute float aFlowT;
+        attribute float aFlowCurl;
+        float waterRippleRingFill(vec2 worldXZ, float scale) {
+          float ripple = 0.0;
+          for (int i = 0; i < ${WATER_RIPPLE_LIMIT}; i++) {
+            if (i < uRippleCount) {
+              vec4 source = uRippleSources[i];
+              float age = max(0.0, uRippleTime - source.z);
+              float life = 1.45;
+              float alive = step(age, life) * smoothstep(0.02, 0.14, age);
+              float distanceToSource = distance(worldXZ, source.xy);
+              float front = age * (6.8 + source.w * 1.8);
+              float ring = exp(-abs(distanceToSource - front) * (1.65 + source.w * 0.35));
+              float wakeCore = exp(-distanceToSource * 0.42) * 0.18;
+              ripple += (ring + wakeCore) * max(0.0, 1.0 - age / life) * source.w * alive * scale;
+            }
+          }
+          return ripple;
+        }`,
+      )
+      .replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+        float slopeBoostF = 0.55 + aSlope * 0.95;
+        float channelMaskF = 0.35 + aChannel * 0.65;
+        float flowCurlF = aFlowCurl;
+        float flowWarpF = sin(aFlowT * 15.0 + uv.x * 9.0 + position.x * 0.025 + uTime * 0.45 + flowCurlF * 1.7)
+          + cos(aFlowT * 11.0 - uv.x * 12.0 + position.z * 0.018 - uTime * 0.38 + flowCurlF * 2.3);
+        float broadFlowF = sin(aFlowT * uBaseFrequency - uTime * uFlowSpeed * 1.35 * uFlowDirection + position.x * 0.03 + position.z * 0.015 + flowWarpF * 0.45 + flowCurlF * 2.2);
+        float detailFlowF = cos((aFlowT + uv.x * 0.18 + flowCurlF * 0.035) * uDetailFrequency - uTime * uFlowSpeed * 2.25 * uFlowDirection + position.z * 0.04 + flowWarpF * 0.7);
+        float crossRippleF = sin(uv.x * 18.0 + uTime * 1.4 + aFlowT * 22.0 + flowWarpF * 0.6 + flowCurlF * 3.0);
+        float localRippleF = waterRippleRingFill(position.xz, (0.28 + aChannel * 0.72) * (1.0 - aBank * 0.2));
+        float waveVisF = mix(1.0, 0.08, uMapLookdown);
+        transformed.y += broadFlowF * uBaseWaveAmplitude * (0.4 + channelMaskF * 0.6) * slopeBoostF * waveVisF;
+        transformed.y += detailFlowF * uDetailWaveAmplitude * (0.35 + aSlope * 0.85) * waveVisF;
+        transformed.y += crossRippleF * uDetailWaveAmplitude * 0.45 * (0.3 + aBank * 0.7) * waveVisF;
+        transformed.y += localRippleF * 0.22 * waveVisF;
+        transformed.y += ${underfillY};`,
+      );
+  };
+
   material.onBeforeCompile = (shader: GrassShader) => {
-    shader.uniforms.uTime = { value: 0 };
-    shader.uniforms.uRippleTime = { value: 0 };
-    shader.uniforms.uRippleCount = { value: 0 };
-    shader.uniforms.uRippleSources = { value: rippleUniforms };
-    shader.uniforms.uMapLookdown = { value: 0 };
-    shader.uniforms.uFlowSpeed = { value: options.flowSpeed ?? profile.flowSpeed };
-    shader.uniforms.uFlowDirection = { value: flowDirection };
+    shader.uniforms.uTime = sharedWaterWaveUniforms.uTime;
+    shader.uniforms.uRippleTime = sharedWaterWaveUniforms.uRippleTime;
+    shader.uniforms.uRippleCount = sharedWaterWaveUniforms.uRippleCount;
+    shader.uniforms.uRippleSources = sharedWaterWaveUniforms.uRippleSources;
+    shader.uniforms.uMapLookdown = sharedWaterWaveUniforms.uMapLookdown;
+    shader.uniforms.uFlowSpeed = sharedWaterWaveUniforms.uFlowSpeed;
+    shader.uniforms.uFlowDirection = sharedWaterWaveUniforms.uFlowDirection;
     shader.uniforms.uWaterShallow = { value: shallowColor };
     shader.uniforms.uWaterDeep = { value: deepColor };
     shader.uniforms.uWaterFoam = { value: foamColor };
@@ -548,10 +641,10 @@ function createWebGLWaterController(
     shader.uniforms.uSedimentColor = { value: sedimentColor };
     shader.uniforms.uBedColor = { value: bedColor };
     shader.uniforms.uCausticColor = { value: causticColor };
-    shader.uniforms.uBaseWaveAmplitude = { value: profile.baseWaveAmplitude };
-    shader.uniforms.uDetailWaveAmplitude = { value: profile.detailWaveAmplitude };
-    shader.uniforms.uBaseFrequency = { value: profile.baseFrequency };
-    shader.uniforms.uDetailFrequency = { value: profile.detailFrequency };
+    shader.uniforms.uBaseWaveAmplitude = sharedWaterWaveUniforms.uBaseWaveAmplitude;
+    shader.uniforms.uDetailWaveAmplitude = sharedWaterWaveUniforms.uDetailWaveAmplitude;
+    shader.uniforms.uBaseFrequency = sharedWaterWaveUniforms.uBaseFrequency;
+    shader.uniforms.uDetailFrequency = sharedWaterWaveUniforms.uDetailFrequency;
     shader.uniforms.uShorelineFoamStrength = { value: profile.shorelineFoamStrength };
     shader.uniforms.uShorelineMilkStrength = { value: profile.shorelineMilkStrength };
     shader.uniforms.uSlopeFoamStrength = { value: profile.slopeFoamStrength };
@@ -685,6 +778,10 @@ function createWebGLWaterController(
         varying float vWaterSlope;
         varying float vWaterFlowT;
         varying float vWaterFlowCurl;
+        uniform vec3 uSceneSunColor;
+        uniform vec3 uSceneAmbient;
+        uniform vec3 uSceneHorizon;
+        uniform float uSceneElevationMood;
 
         float waterHash(vec2 p) {
           return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -820,9 +917,9 @@ function createWebGLWaterController(
           smoothstep(0.84, 1.0, sparkleScore),
           6.0
         ) * step(0.88, sparkleScore) * shallowMask * (0.16 + fresnel * 0.7) * uSparkleStrength;
-        vec3 bodyFill = mix(uWaterShallow, uWaterDeep, clamp(channelDepth * 0.62 + 0.2, 0.0, 1.0));
+        vec3 bodyFill = mix(uWaterShallow, uWaterDeep, clamp(channelDepth * 0.74 + 0.16, 0.0, 1.0));
         bodyFill = mix(bodyFill, uReflectionColor, fresnel * 0.08 + shallowMask * 0.03);
-        vec3 finalWater = mix(bodyFill, waterTint, 0.54);
+        vec3 finalWater = mix(bodyFill, waterTint, 0.66);
         finalWater = mix(finalWater, bedTint, bedVisibility);
         finalWater += uCausticColor * causticMask;
         finalWater *= 1.0 - depthShadow * 0.16;
@@ -860,9 +957,18 @@ function createWebGLWaterController(
         mapWater = mix(mapWater, vec3(0.08, 0.34, 0.5), deepCoreLine * 0.18);
         finalWater = mix(finalWater, mapWater, uMapLookdown);
         alphaMask = mix(alphaMask, clamp(0.78 + channelDepth * 0.12 - bankMask * 0.06, 0.7, 0.94), uMapLookdown);
+        float wLow = 1.0 - uSceneElevationMood;
+        finalWater = mix(finalWater, finalWater * uSceneSunColor, 0.06 + 0.05 * wLow);
+        finalWater = mix(finalWater, finalWater * uSceneHorizon, 0.05 * (0.4 + 0.6 * wLow));
+        finalWater = mix(finalWater, finalWater * uSceneAmbient, 0.05);
         vec4 diffuseColor = vec4(finalWater, opacity * alphaMask);`,
       );
 
+    shader.uniforms.uSceneSunColor = { value: new Color(0xffffff) };
+    shader.uniforms.uSceneAmbient = { value: new Color(0.55, 0.62, 0.8) };
+    shader.uniforms.uSceneHorizon = { value: new Color(0.95, 0.88, 0.82) };
+    shader.uniforms.uSceneElevationMood = { value: 0 };
+    material.userData.waterShader = shader;
     shaderRef = shader;
   };
 
@@ -873,21 +979,14 @@ function createWebGLWaterController(
     mesh,
     update(elapsed: number, ripples: readonly WaterRippleSource[] = [], mapLookdown = false) {
       material.opacity = mapLookdown ? 0.98 : baseOpacity;
-      if (shaderRef) {
-        shaderRef.uniforms.uTime.value = elapsed + phaseOffset;
-        shaderRef.uniforms.uRippleTime.value = elapsed;
-        shaderRef.uniforms.uRippleCount.value = Math.min(WATER_RIPPLE_LIMIT, ripples.length);
-        shaderRef.uniforms.uMapLookdown.value = mapLookdown ? 1 : 0;
-        const sources = shaderRef.uniforms.uRippleSources.value as Vector4[];
-        for (let i = 0; i < WATER_RIPPLE_LIMIT; i += 1) {
-          const ripple = ripples[i];
-          sources[i].set(
-            ripple?.x ?? 0,
-            ripple?.z ?? 0,
-            ripple?.startTime ?? -999,
-            ripple?.strength ?? 0,
-          );
-        }
+      sharedWaterWaveUniforms.uTime.value = elapsed + phaseOffset;
+      sharedWaterWaveUniforms.uRippleTime.value = elapsed;
+      sharedWaterWaveUniforms.uRippleCount.value = Math.min(WATER_RIPPLE_LIMIT, ripples.length);
+      sharedWaterWaveUniforms.uMapLookdown.value = mapLookdown ? 1 : 0;
+      const sources = sharedWaterWaveUniforms.uRippleSources.value as Vector4[];
+      for (let i = 0; i < WATER_RIPPLE_LIMIT; i += 1) {
+        const ripple = ripples[i];
+        sources[i].set(ripple?.x ?? 0, ripple?.z ?? 0, ripple?.startTime ?? -999, ripple?.strength ?? 0);
       }
     },
     dispose() {

@@ -213,7 +213,7 @@ export class MossuAvatar {
   }
 
   triggerKaruCall() {
-    this.callPulse = 0.72;
+    this.callPulse = 0.52;
   }
 
   update(player: PlayerState, dt: number) {
@@ -245,10 +245,10 @@ export class MossuAvatar {
       this.rollPulse = 0.24;
     }
     if (startedFloating) {
-      this.floatPulse = 0.34;
+      this.floatPulse = 0.26;
     }
     if (endedFloating && (landed || player.grounded)) {
-      this.floatLandPulse = 0.34;
+      this.floatLandPulse = 0.26;
     }
     if (jumped) {
       this.jumpPulse = 0.22;
@@ -262,15 +262,15 @@ export class MossuAvatar {
 
     const moveT = this.movePulse / 0.18;
     const rollT = this.rollPulse / 0.24;
-    const floatStartT = this.floatPulse / 0.34;
-    const floatLandT = this.floatLandPulse / 0.34;
+    const floatStartT = this.floatPulse / 0.26;
+    const floatLandT = this.floatLandPulse / 0.26;
     const jumpT = this.jumpPulse / 0.22;
     const landT = this.landPulse / 0.34;
     const swimT = this.swimPulse / 0.24;
     this.blinkClock += dt;
     const bobStrength = player.swimming ? 1.35 : floating ? 0.86 : player.grounded ? 1 : 0.35;
     this.bob += dt * MathUtils.clamp(planarSpeed * 0.09, 0.3, 3);
-    this.floatBlend = MathUtils.damp(this.floatBlend, floating ? 1 : 0, floating ? 7.4 : 8.8, dt);
+    this.floatBlend = MathUtils.damp(this.floatBlend, floating ? 1 : 0, floating ? 10.5 : 12, dt);
     const floatT = this.floatBlend;
     const breezeHover = floatT * (0.28 + Math.sin(this.bob * 1.35) * 0.08) + floatStartT * 0.1 - floatLandT * 0.08;
     this.group.position.y += Math.sin(this.bob * 2.7) * 0.06 * bobStrength + jumpT * 0.12 - landT * 0.16 + swimT * 0.08 + breezeHover;
@@ -285,7 +285,7 @@ export class MossuAvatar {
       1 - Math.exp(-dt * 9),
     );
 
-    const callT = this.callPulse > 0 ? Math.sin((this.callPulse / 0.72) * Math.PI) : 0;
+    const callT = this.callPulse > 0 ? Math.sin((this.callPulse / 0.52) * Math.PI) : 0;
     this.secondaryVelocity
       .set(player.velocity.x, 0, player.velocity.z)
       .applyAxisAngle(this.upAxis, -this.locomotionRoot.rotation.y);

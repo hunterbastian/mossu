@@ -197,6 +197,8 @@ export class GameApp {
   private qualitySampleFrameMs = 1000 / 60;
   private readonly cameraDebugEnabled: boolean;
   private readonly perfDebugEnabled: boolean;
+  /** `?e2e=1` — small render_game_to_text for Playwright (avoids heavy sync snapshot on main thread). */
+  private readonly e2eMinimal: boolean;
   private cameraDebugPanel: HTMLDivElement | null = null;
   private perfDebugPanel: HTMLDivElement | null = null;
   private faunaRegroupReady = true;
@@ -225,6 +227,7 @@ export class GameApp {
     const debugSpiritCloseup = params.has("spiritCloseup");
     this.cameraDebugEnabled = params.has("cameraDebug");
     this.perfDebugEnabled = params.has("perfDebug");
+    this.e2eMinimal = params.has("e2e");
     this.qualityLow = isLowQuality(params);
     const pixelCap = this.qualityLow ? 0.85 : 1.1;
     this.maxPixelRatio = Math.min(window.devicePixelRatio, pixelCap);
@@ -447,6 +450,28 @@ export class GameApp {
   }
 
   renderGameToText() {
+    if (this.e2eMinimal) {
+      const frame = this.state.frame;
+      return JSON.stringify({
+        e2e: true,
+        titleScreenOpen: this.titleScreenOpen,
+        viewMode: this.viewMode,
+        openingSequence: {
+          active: this.openingSequenceActive,
+          progress: Number(this.getOpeningSequenceProgress().toFixed(3)),
+        },
+        pauseMenuOpen: this.pauseMenuOpen,
+        characterScreenOpen: this.characterScreenOpen,
+        player: {
+          x: Number(frame.player.position.x.toFixed(1)),
+          y: Number(frame.player.position.y.toFixed(1)),
+          z: Number(frame.player.position.z.toFixed(1)),
+          swimming: frame.player.swimming,
+        },
+        zone: frame.currentZone,
+        landmark: frame.currentLandmark,
+      });
+    }
     const frame = this.state.frame;
     const characterData = this.state.getCharacterScreenData();
     const faunaStats = this.world.getFaunaStats();

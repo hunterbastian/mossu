@@ -12,6 +12,7 @@ Current wrap-up status:
 - Latest verification completed: `tsc --noEmit`, `tsc -p tsconfig.contracts.json`, contract runner, production `vite build`, `git diff --check`, and the required web-game client attempt.
 - Browser artifact: `output/far-grass-impostors/shot-0.png` and `state-0.json` were captured; the helper still timed out on title-button click stability, but the captured state shows the opening sequence entered.
 - Next recommended real-browser check: open the built or dev app in Chrome, confirm the instant title shell feels acceptable, recruit a few Karu and idle near the opening meadow, inspect distant grass patches from the opening meadow/highland views, and watch `?perfDebug=1` for grass LOD/impostor counts while moving.
+- Water underfill fix: the cheap underfill mesh reused the same geometry but not the animated vertex displacement, so gaps could show terrain beside/under the wavy surface; underfill now shares the same wave + ripple uniforms as the main water and applies the depth offset in the vertex shader; underfill opacity slightly raised (0.9 → 0.92 for non-still profiles). Verification: `npm run qa` passed.
 
 Karu idle companion wander pass:
 
@@ -645,3 +646,12 @@ Breeze Float animation polish pass:
 - `vite build` passes and still emits the existing async chunk warning.
 - `git diff --check` passes.
 - Browser QA caveat: Vite preview still fails with `ENOSPC` while writing its temp config, the required `develop-web-game` client still cannot resolve Playwright from its skill folder, and custom headless Chrome probes remained unstable in this environment. The deterministic contract now verifies the new floating state; final visual judgment should be done in real Chrome.
+
+Floating island shell read pass (WorldRenderer `buildFloatingIslandShell`):
+- Named group `floating-island-shell`; split lower mass into upper taper + darker lower taper + cool underbelly sphere; rim torus lip; three horizontal mist discs under the break; ten small downward cones for hanging rock read; cliff bulges nudged outward; moss band slightly thicker with subtle emissive.
+- Verification: `npm run qa` passed.
+
+Ghibli-style tree pass (`terrainDecorations`):
+- Instanced round forest: more canopy blobs, puff clusters, roots/branches, blossom reads; pine stack split into rotated tiers + top hip sphere; shared wind material gains `vFoliage` sun-tint, soft light lift, stronger sway/gust, cache key `mossu-instanced-tree-wind-ghibli`.
+- `makeRoundTree` / `makePineTree` / saplings aligned with the same design language; landmark trees: extra lobes, emissive leaves, slightly softer trunk, more sphere segments.
+- Verification: `npm run qa` passed.

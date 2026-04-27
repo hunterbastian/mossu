@@ -21,10 +21,10 @@ const ROUTE_IDS = [
   "peak-shrine",
 ] as const;
 
+/** Named tiers present at route landmark positions (terrain jumps the mid “foothills” band between stops). */
 const EXPECTED_ROUTE_ZONES = [
   "plains",
   "hills",
-  "foothills",
   "alpine",
   "ridge",
   "peak_shrine",

@@ -4789,6 +4789,39 @@ canvas.is-pointer-locked {
   stroke-linejoin: round;
 }
 
+.world-map__upland-backdrop {
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.world-map__upland-backdrop ellipse {
+  opacity: 0.55;
+  filter: blur(0.3px);
+}
+
+.world-map__north-ridge-crest {
+  fill: none;
+  stroke: rgba(88, 124, 118, 0.55);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.7;
+  pointer-events: none;
+  filter: drop-shadow(0 -0.08rem 0.12rem rgba(40, 72, 68, 0.22));
+}
+
+.world-map__lake-layer {
+  pointer-events: none;
+}
+
+.world-map__lake-bloom {
+  fill: url("#world-map-lake-gradient");
+  stroke: rgba(60, 110, 122, 0.35);
+  stroke-width: 0.4;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0.08rem 0.15rem rgba(34, 80, 92, 0.22));
+}
+
 .world-map__region-patch {
   opacity: 0.82;
   stroke: rgba(255, 255, 255, 0.16);
@@ -4850,6 +4883,17 @@ canvas.is-pointer-locked {
   stroke-width: 2;
 }
 
+.world-map__marker--minor circle:first-of-type {
+  fill: rgba(255, 253, 245, 0.72);
+  stroke: rgba(64, 107, 96, 0.2);
+  stroke-width: 1.5;
+  opacity: 0.9;
+}
+
+.world-map__marker--minor circle:last-of-type {
+  opacity: 0.9;
+}
+
 .world-map__atlas-marker path {
   fill: none;
   stroke: #4e7e87;
@@ -4891,6 +4935,10 @@ canvas.is-pointer-locked {
   stroke: rgba(255, 248, 219, 0.9);
   stroke-width: 5;
   stroke-linejoin: round;
+}
+
+.world-map__marker--minor .world-map__marker-label {
+  display: none;
 }
 
 .world-map__compass circle {

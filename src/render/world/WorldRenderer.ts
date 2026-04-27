@@ -26,6 +26,7 @@ import {
   Quaternion,
   Scene,
   SphereGeometry,
+  TorusGeometry,
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -84,6 +85,11 @@ import {
 } from "./terrainDecorations";
 import { markCameraCollider } from "./sceneHelpers";
 import {
+  getAtmosphereHorizonTints,
+  getSunDirectionWorld,
+  writePatchSceneLightingUniforms,
+} from "./sceneLighting";
+import {
   buildStartingWaterSystem,
   buildRiverSystem,
   buildHighlandWaterways,
@@ -94,9 +100,10 @@ import {
 
 const WORLD_SIZE = 560;
 const TERRAIN_SEGMENTS = 160;
-const GRASS_COUNT = 5600;
-const FAR_GRASS_PATCH_COUNT = 520;
-const ALPINE_GRASS_COUNT = 1000;
+/** Instanced blade budgets — raise together when tuning meadow lushness vs GPU cost */
+const GRASS_COUNT = 11500;
+const FAR_GRASS_PATCH_COUNT = 1150;
+const ALPINE_GRASS_COUNT = 1850;
 const LANDING_SPLASH_PARTICLES = 18;
 const SNOW_TRAIL_PARTICLES = 20;
 const WATER_RIPPLE_LIMIT = 4;
@@ -195,8 +202,13 @@ function colorForTerrain(x: number, y: number, z: number) {
   const normal = sampleTerrainNormal(x, z);
   const slope = 1 - normal.y;
   const painterlyNoise = Math.sin(x * 0.07) * 0.04 + Math.cos(z * 0.05) * 0.03 + Math.sin((x - z) * 0.03) * 0.05;
+  const microWafer = Math.sin(x * 0.037 - z * 0.029) * 0.5 + 0.5;
+  const microFine = Math.sin(x * 0.091 + z * 0.073) * Math.cos(x * 0.044 - z * 0.051) * 0.5 + 0.5;
+  const microBreakup = MathUtils.clamp(microWafer * 0.45 + microFine * 0.38 + painterlyNoise * 0.5, 0, 1);
   const patch = Math.round((Math.sin(x * 0.12 + z * 0.08) * 0.5 + 0.5) * 5) / 5;
-  const mixValue = MathUtils.clamp(patch * 0.5 + painterlyNoise + y / 220, 0, 1);
+  const mixValue = MathUtils.clamp(patch * 0.5 + microBreakup * 0.22 + painterlyNoise + y / 220, 0, 1);
+  const northSilhouette = MathUtils.clamp(MathUtils.smoothstep(z, 8, 168), 0, 1);
+  const journeyNorth = MathUtils.clamp(MathUtils.smoothstep(z, -40, 200), 0, 1);
   const openingMask = sampleOpeningMeadowMask(x, z);
   const riverDampBank = sampleRiverDampBankMask(x, z);
   const startingWaterDampBank = sampleStartingWaterDampBankMask(x, z);
@@ -216,15 +228,16 @@ function colorForTerrain(x: number, y: number, z: number) {
   const heightGrass = MathUtils.clamp(MathUtils.smoothstep(y, 8, 82), 0, 1);
   const foothillTint = MathUtils.clamp(MathUtils.smoothstep(y, 38, 98), 0, 1);
   const alpineTint = MathUtils.clamp(MathUtils.smoothstep(y, 84, 148), 0, 1);
-  const slopeRock = MathUtils.smoothstep(slope, 0.16, 0.62);
-  const altitudeRock = MathUtils.smoothstep(y, 72, 138) * 0.26;
+  const slopeRock = MathUtils.smoothstep(slope, 0.12, 0.6);
+  const cliffSilhouette = MathUtils.clamp(northSilhouette * MathUtils.smoothstep(slope, 0.22, 0.55), 0, 0.18);
+  const altitudeRock = MathUtils.smoothstep(y, 68, 142) * 0.3;
   const zoneRockBoost =
-    zone === "foothills" ? 0.1 :
-    zone === "alpine" ? 0.3 :
-    zone === "ridge" ? 0.44 :
-    zone === "peak_shrine" ? 0.5 :
+    zone === "foothills" ? 0.14 :
+    zone === "alpine" ? 0.36 :
+    zone === "ridge" ? 0.52 :
+    zone === "peak_shrine" ? 0.54 :
     0;
-  const rockMask = MathUtils.clamp(slopeRock + altitudeRock + zoneRockBoost, 0, 0.92);
+  const rockMask = MathUtils.clamp(slopeRock + altitudeRock + zoneRockBoost + cliffSilhouette, 0, 0.94);
   const snowBase =
     MathUtils.smoothstep(y, 124, 168) * 0.86 +
     MathUtils.smoothstep(z, 176, 232) * 0.24 +
@@ -235,7 +248,31 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color("#9dc866"), 0.42 + mixValue * 0.32 + heightGrass * 0.14)
     .lerp(new Color("#c7df73"), openingMask * (0.14 + fieldBands * 0.18) + meadowBloom * 1.1)
     .lerp(new Color("#7fa45c"), foothillTint * 0.2)
-    .lerp(new Color("#94a184"), alpineTint * 0.18);
+    .lerp(new Color("#94a184"), alpineTint * 0.22)
+    .lerp(new Color("#5f7a52"), microBreakup * 0.1)
+    .lerp(new Color("#8ebd64"), (1 - microFine) * 0.06 * (1 - northSilhouette * 0.5))
+    .lerp(new Color("#5c6a58"), journeyNorth * 0.1 + northSilhouette * 0.08);
+  const wildflowerPunch = MathUtils.clamp(habitat.meadow * (1 - rockMask) * microWafer, 0, 0.14);
+  grass.lerp(new Color("#c4d67a"), wildflowerPunch);
+  const zoneGreenRead =
+    zone === "plains" ? { lerp: new Color("#7ec24e"), w: 0.16 } :
+    zone === "hills" ? { lerp: new Color("#8dc055"), w: 0.18 } :
+    zone === "foothills" ? { lerp: new Color("#6a8f4e"), w: 0.22 } :
+    zone === "alpine" ? { lerp: new Color("#5d8870"), w: 0.28 } :
+    zone === "ridge" ? { lerp: new Color("#4d725e"), w: 0.26 } :
+    zone === "peak_shrine" ? { lerp: new Color("#3d5f52"), w: 0.22 } :
+    { lerp: grass, w: 0 };
+  if (zoneGreenRead.w > 0) {
+    grass.lerp(zoneGreenRead.lerp, zoneGreenRead.w);
+  }
+  // Second splat: different frequency/phase from micro breakup; subtle cool/warm tiles for zone read
+  const zoneSplatB = MathUtils.clamp(
+    Math.sin(x * 0.026 - z * 0.034) * Math.cos(x * 0.019 + z * 0.027) * 0.5 + 0.5,
+    0,
+    1,
+  );
+  grass.lerp(new Color("#5a7d48"), zoneSplatB * 0.11);
+  grass.lerp(new Color("#82a86a"), (1 - zoneSplatB) * microBreakup * 0.07);
   const rock = new Color("#b5ad9c")
     .lerp(new Color("#d6d1c4"), 0.18 + mixValue * 0.22)
     .lerp(new Color("#8f958d"), MathUtils.clamp(slope * 1.3 + alpineTint * 0.34, 0, 0.78));
@@ -252,11 +289,11 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color("#665747"), 0.08 + slope * 0.08);
 
   const terrainColor = grass
-    .lerp(new Color("#c9e079"), habitat.meadow * (0.18 + openingMask * 0.1))
-    .lerp(new Color("#65864f"), habitat.forest * 0.12)
+    .lerp(new Color("#c9e079"), habitat.meadow * (0.2 + openingMask * 0.12))
+    .lerp(new Color("#65864f"), habitat.forest * 0.2)
     .lerp(new Color("#7f9b78"), habitat.shore * 0.14)
     .lerp(paintedEarth, paintedGround * (0.34 + (1 - slopeRock) * 0.22))
-    .lerp(wornDirt, routeDirt * 0.58 * (1 - rockMask * 0.88))
+    .lerp(wornDirt, routeDirt * 0.66 * (1 - rockMask * 0.88))
     .lerp(sandbar, sandbarLine * 0.34)
     .lerp(new Color("#5d9581"), wetBankLine * 0.24)
     .lerp(new Color("#748b69"), coveShade * 0.13)
@@ -265,7 +302,16 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color("#f0d985"), meadowBloom * (0.36 + openingMask * 0.2))
     .lerp(rock, rockMask * (1 - snowMask * 0.46))
     .lerp(snow, snowMask);
-  return terrainColor.lerp(new Color("#cdeef4"), MathUtils.smoothstep(islandEdge, 0.74, 1) * 0.74);
+  // One cohesive landmass: slightly richer "heart" inland, sun-worn rim before the void sea lerp
+  const islandHeart = (1 - MathUtils.clamp(islandEdge, 0, 1)) ** 1.2;
+  let out = new Color(terrainColor).lerp(
+    new Color("#6d9458"),
+    islandHeart * 0.1 * (1 - snowMask * 0.45),
+  );
+  const islandRimMask = MathUtils.clamp((islandEdge - 0.36) * 1.05, 0, 1)
+    * (1 - MathUtils.smoothstep(0.88, 0.99, islandEdge));
+  out = out.lerp(new Color("#9fb89a"), islandRimMask * 0.12 * (1 - snowMask * 0.55));
+  return out.lerp(new Color("#cdeef4"), MathUtils.smoothstep(islandEdge, 0.74, 1) * 0.74);
 }
 
 function makeTerrainMesh() {
@@ -649,9 +695,21 @@ function buildValleyMist() {
 
 function buildFloatingIslandShell() {
   const group = new Group();
-  const upperMaterial = new MeshStandardMaterial({ color: "#d3ccb9", roughness: 1, side: DoubleSide });
-  const lowerMaterial = new MeshStandardMaterial({ color: "#b6af9d", roughness: 1, side: DoubleSide });
-  const mossMaterial = new MeshStandardMaterial({ color: "#7ea36a", roughness: 1, side: DoubleSide });
+  group.name = "floating-island-shell";
+
+  const upperMaterial = new MeshStandardMaterial({ color: "#d4cdb8", roughness: 0.98, side: DoubleSide });
+  const lowerMaterial = new MeshStandardMaterial({ color: "#a9a191", roughness: 0.99, side: DoubleSide });
+  const lowerShadowMaterial = new MeshStandardMaterial({ color: "#6e675c", roughness: 0.99, side: DoubleSide });
+  const underbellyMaterial = new MeshStandardMaterial({ color: "#2e3532", roughness: 0.99, side: DoubleSide, metalness: 0.02 });
+  const mossMaterial = new MeshStandardMaterial({
+    color: "#6f965d",
+    roughness: 0.97,
+    side: DoubleSide,
+    emissive: new Color("#1a2a16"),
+    emissiveIntensity: 0.22,
+  });
+  const rimLipMaterial = new MeshStandardMaterial({ color: "#8a9f72", roughness: 0.9, side: DoubleSide });
+  const hangMaterial = new MeshStandardMaterial({ color: "#4a4740", roughness: 0.97, side: DoubleSide });
   const perimeter: Vector3[] = [];
   const center = new Vector3();
 
@@ -673,39 +731,104 @@ function buildFloatingIslandShell() {
   });
   rimHeight /= perimeter.length;
 
-  const upperSkirt = new Mesh(new CylinderGeometry(1.02, 0.88, 88, 40, 5, true), upperMaterial);
+  const maxR = Math.max(radiusX, radiusZ);
+  const upperSkirt = new Mesh(new CylinderGeometry(1.04, 0.86, 90, 40, 5, true), upperMaterial);
   upperSkirt.scale.set(radiusX * 1.02, 1, radiusZ * 1.04);
-  upperSkirt.position.set(center.x, rimHeight - 56, center.z);
+  upperSkirt.position.set(center.x, rimHeight - 57, center.z);
   markCameraCollider(upperSkirt);
 
-  const mossBand = new Mesh(new CylinderGeometry(1, 0.96, 10, 40, 1, true), mossMaterial);
+  const mossBand = new Mesh(new CylinderGeometry(1, 0.95, 12, 40, 1, true), mossMaterial);
   mossBand.scale.set(radiusX * 1.03, 1, radiusZ * 1.05);
   mossBand.position.set(center.x, rimHeight - 8, center.z);
   markCameraCollider(mossBand);
 
-  const lowerSkirt = new Mesh(new CylinderGeometry(0.88, 0.42, 124, 40, 6, true), lowerMaterial);
-  lowerSkirt.scale.set(radiusX * 0.96, 1, radiusZ * 0.98);
-  lowerSkirt.position.set(center.x, rimHeight - 158, center.z);
-  markCameraCollider(lowerSkirt);
+  /** Upper taper: soil → overhang; lower taper: stronger shadow and pinching before the belly. */
+  const lowerSkirtTop = new Mesh(new CylinderGeometry(0.86, 0.62, 64, 40, 5, true), lowerMaterial);
+  lowerSkirtTop.scale.set(radiusX * 0.95, 1, radiusZ * 0.98);
+  lowerSkirtTop.position.set(center.x, rimHeight - 127, center.z);
+  markCameraCollider(lowerSkirtTop);
 
-  const lowerBelly = new Mesh(new SphereGeometry(1.2, 20, 18), lowerMaterial);
-  lowerBelly.scale.set(radiusX * 0.56, 58, radiusZ * 0.5);
-  lowerBelly.position.set(center.x, rimHeight - 238, center.z);
+  const lowerSkirtBottom = new Mesh(new CylinderGeometry(0.62, 0.3, 64, 40, 5, true), lowerShadowMaterial);
+  lowerSkirtBottom.scale.set(radiusX * 0.95, 1, radiusZ * 0.98);
+  lowerSkirtBottom.position.set(center.x, rimHeight - 191, center.z);
+  markCameraCollider(lowerSkirtBottom);
+
+  const lowerBelly = new Mesh(new SphereGeometry(1.2, 22, 18), underbellyMaterial);
+  lowerBelly.scale.set(radiusX * 0.55, 54, radiusZ * 0.5);
+  lowerBelly.position.set(center.x, rimHeight - 240, center.z);
   markCameraCollider(lowerBelly);
 
-  group.add(upperSkirt, mossBand, lowerSkirt, lowerBelly);
+  const rimLip = new TorusGeometry(1, 0.04, 8, 56);
+  const rimMesh = new Mesh(rimLip, rimLipMaterial);
+  rimMesh.rotation.x = Math.PI / 2;
+  rimMesh.position.set(center.x, rimHeight - 2.2, center.z);
+  rimMesh.scale.set(radiusX * 0.96, 1, radiusZ * 0.96);
+  markCameraCollider(rimMesh);
+
+  const mist1 = new Mesh(
+    new CircleGeometry(maxR * 1.14, 56),
+    new MeshBasicMaterial({
+      color: "#d0e2ec",
+      transparent: true,
+      opacity: 0.13,
+      depthWrite: false,
+      side: DoubleSide,
+    }),
+  );
+  mist1.rotation.x = -Math.PI / 2;
+  mist1.position.set(center.x, rimHeight - 30, center.z);
+
+  const mist2 = new Mesh(
+    new CircleGeometry(maxR * 0.88, 48),
+    new MeshBasicMaterial({
+      color: "#9aadb8",
+      transparent: true,
+      opacity: 0.08,
+      depthWrite: false,
+      side: DoubleSide,
+    }),
+  );
+  mist2.rotation.x = -Math.PI / 2;
+  mist2.position.set(center.x, rimHeight - 56, center.z);
+
+  const mist3 = new Mesh(
+    new CircleGeometry(maxR * 0.64, 40),
+    new MeshBasicMaterial({
+      color: "#7a8a94",
+      transparent: true,
+      opacity: 0.06,
+      depthWrite: false,
+      side: DoubleSide,
+    }),
+  );
+  mist3.rotation.x = -Math.PI / 2;
+  mist3.position.set(center.x, rimHeight - 88, center.z);
+
+  group.add(upperSkirt, mossBand, lowerSkirtTop, lowerSkirtBottom, lowerBelly, rimMesh, mist1, mist2, mist3);
+
+  for (let h = 0; h < 10; h += 1) {
+    const ang = (h / 10) * Math.PI * 2 + 0.41;
+    const hang = new Mesh(new ConeGeometry(1.4 + (h % 3) * 0.9, 5.5 + (h % 4) * 2, 5), hangMaterial);
+    hang.position.set(
+      center.x + Math.cos(ang) * radiusX * 0.8,
+      rimHeight - 20 - (h % 3) * 2.5,
+      center.z + Math.sin(ang) * radiusZ * 0.8,
+    );
+    hang.rotation.set(Math.PI, 0, -ang);
+    markCameraCollider(hang);
+    group.add(hang);
+  }
 
   perimeter.forEach((point, index) => {
-    const cliffBulge = markCameraCollider(new Mesh(new SphereGeometry(1.08, 10, 8), index % 3 === 0 ? lowerMaterial : upperMaterial));
-    cliffBulge.scale.set(
-      14 + (index % 4) * 4,
-      22 + (index % 3) * 8,
-      16 + (index % 5) * 3,
+    const useUpper = index % 3 === 0;
+    const cliffBulge = markCameraCollider(
+      new Mesh(new SphereGeometry(1.08, 10, 8), useUpper ? upperMaterial : lowerMaterial),
     );
+    cliffBulge.scale.set(14 + (index % 4) * 4, 24 + (index % 3) * 8, 16 + (index % 5) * 3);
     cliffBulge.position.set(
-      point.x * 0.96 + center.x * 0.04,
-      point.y - 26 - (index % 4) * 7,
-      point.z * 0.96 + center.z * 0.04,
+      point.x * 0.99 + center.x * 0.01,
+      point.y - 28 - (index % 4) * 7.5,
+      point.z * 0.99 + center.z * 0.01,
     );
     group.add(cliffBulge);
   });
@@ -1080,6 +1203,11 @@ export class WorldRenderer {
   private readonly ambientLight = new AmbientLight("#fffdf0", 0.9);
   private readonly skyFill = new HemisphereLight("#c7f5ff", "#eadb9a", 1.08);
   private readonly skyBounce = new DirectionalLight("#e7fdff", 0.36);
+  private readonly scenePatchHaze = new Color();
+  private readonly scenePatchBright = new Color();
+  private readonly scenePatchShadow = new Color();
+  private readonly scenePatchHorizon = new Color();
+  private readonly scenePatchSunDir = new Vector3();
   private elevationMood = 0;
   private grassLodFrame = 0;
 
@@ -1090,9 +1218,9 @@ export class WorldRenderer {
   private readonly openingNestVista = batchStaticDecorations(buildOpeningNestVista(), "opening-nest-vista-batch");
   private readonly openingWaterComposition = batchStaticDecorations(buildOpeningWaterComposition(), "opening-water-composition-batch");
   private readonly islandShell = buildFloatingIslandShell();
-  private readonly groundLayer = batchStaticDecorations(buildGroundLayer(), "ground-layer-batch");
-  private readonly midLayer = batchStaticDecorations(buildMidLayer(), "mid-layer-batch");
-  private readonly treeClusters = batchStaticDecorations(buildTreeClusters(), "tree-cluster-batch");
+  private readonly groundLayer = new Group();
+  private readonly midLayer = new Group();
+  private readonly treeClusters = new Group();
   private readonly biomeTransitionAccents = batchStaticDecorations(buildBiomeTransitionAccents(), "biome-transition-batch");
   private readonly waterBankAccents = batchStaticDecorations(buildWaterBankAccents(), "water-bank-batch");
   private readonly anchorSceneAccents = batchStaticDecorations(buildAnchorSceneAccents(), "anchor-scene-batch");
@@ -1101,7 +1229,7 @@ export class WorldRenderer {
   private readonly mountainAtmosphere = new Group();
   private readonly valleyMist = new Group();
   private readonly shadowVolumes = new Group();
-  private readonly landmarkTrees = batchStaticDecorations(buildLandmarkTrees(), "landmark-tree-batch");
+  private readonly landmarkTrees = new Group();
   private readonly mountainSilhouettes = new Group();
   private readonly sun = new DirectionalLight("#fff0cf", 3.12);
   private readonly mossuContactShadow = new Mesh(
@@ -1143,6 +1271,8 @@ export class WorldRenderer {
   private readonly mapMarkerGroup = new Group();
   private readonly forageableGroup = new Group();
   private readonly forageableVisuals: ForageableVisual[] = [];
+  private readonly startupContentQueue: Array<() => void> = [];
+  private startupIdleBuildHandle = 0;
   private readonly playerMapMarker: MapMarker = {
     group: createMapMarker("#78f3ff", 3.2, 12, 0.42),
     baseScale: 1,
@@ -1224,7 +1354,7 @@ export class WorldRenderer {
         crossPlanes: 2,
         bladeWidth: 0.74,
         bladeHeight: 3.85,
-        placementMultiplier: 1.28,
+        placementMultiplier: 1.52,
         scaleMultiplier: 1.16,
         widthMultiplier: 1.06,
         fadeInStart: 5,
@@ -1234,12 +1364,12 @@ export class WorldRenderer {
         rootFillBoost: 0.06,
         selfShadowStrength: 0.72,
         distanceCompressionBoost: 0.04,
-        playerPushRadius: 12.4,
-        playerPushStrength: 1.36,
-        windExaggeration: 1.16,
+        playerPushRadius: 14,
+        playerPushStrength: 1.58,
+        windExaggeration: 1.38,
         windTimeScale: 1,
-        broadWindScale: 1,
-        fineWindScale: 1,
+        broadWindScale: 1.08,
+        fineWindScale: 1.25,
         lod: {
           label: "near",
           innerRadius: 0,
@@ -1260,7 +1390,7 @@ export class WorldRenderer {
         crossPlanes: 1,
         bladeWidth: 0.94,
         bladeHeight: 3.32,
-        placementMultiplier: 1.2,
+        placementMultiplier: 1.42,
         scaleMultiplier: 1.08,
         widthMultiplier: 1.12,
         fadeInStart: 24,
@@ -1270,12 +1400,12 @@ export class WorldRenderer {
         rootFillBoost: 0.18,
         selfShadowStrength: 0.58,
         distanceCompressionBoost: 0.14,
-        playerPushRadius: 12,
-        playerPushStrength: 1.2,
-        windExaggeration: 1.1,
-        windTimeScale: 0.72,
-        broadWindScale: 0.82,
-        fineWindScale: 0.34,
+        playerPushRadius: 13.5,
+        playerPushStrength: 1.42,
+        windExaggeration: 1.28,
+        windTimeScale: 0.82,
+        broadWindScale: 0.96,
+        fineWindScale: 0.55,
         lod: {
           label: "mid",
           innerRadius: 48,
@@ -1293,9 +1423,9 @@ export class WorldRenderer {
       new Color("#5f7648"),
       new Color("#c9df76"),
       {
-        placementMultiplier: 1.08,
+        placementMultiplier: 1.28,
         scaleMultiplier: 1.04,
-        opacity: 0.24,
+        opacity: 0.26,
       },
     );
     const alpineGrass = createGrassMesh(
@@ -1306,14 +1436,14 @@ export class WorldRenderer {
       {
         crossPlanes: 1,
         bladeHeight: 2.48,
-        placementMultiplier: 0.92,
+        placementMultiplier: 1.12,
         scaleMultiplier: 0.86,
         selfShadowStrength: 0.42,
         distanceCompressionBoost: 0.24,
-        windExaggeration: 1.12,
-        windTimeScale: 0.52,
-        broadWindScale: 0.86,
-        fineWindScale: 0.13,
+        windExaggeration: 1.26,
+        windTimeScale: 0.58,
+        broadWindScale: 0.96,
+        fineWindScale: 0.24,
         lod: {
           label: "alpine",
           innerRadius: 34,
@@ -1582,7 +1712,7 @@ export class WorldRenderer {
     this.mossu.update(frame.player, dt);
     this.updateMossuContactShadow(frame, mapLookdown);
     this.skyDome.position.copy(frame.player.position);
-    this.updateSceneMood(frame, dt, viewCamera);
+    this.updateSceneMood(frame, dt, viewCamera, elapsed);
     this.scene.fog = mapLookdown ? null : this.gameplayFog;
     if (!mapLookdown) {
       this.updateWind(frame, elapsed);
@@ -1751,8 +1881,8 @@ export class WorldRenderer {
     const playerPush = frame.player.fallingToVoid || !frame.player.grounded
       ? 0
       : frame.player.rolling
-        ? MathUtils.clamp(planarSpeed / 28, 0.18, 1)
-        : MathUtils.clamp(planarSpeed / 20, 0, 0.28);
+        ? MathUtils.clamp(planarSpeed / 24, 0.22, 1)
+        : MathUtils.clamp(planarSpeed / 14, 0, 0.48);
     this.windMeshes.forEach((mesh) => {
       const shader = mesh.userData.shader;
       if (shader) {
@@ -1770,7 +1900,7 @@ export class WorldRenderer {
     });
   }
 
-  private updateSceneMood(frame: FrameState, dt: number, viewCamera: Camera) {
+  private updateSceneMood(frame: FrameState, dt: number, viewCamera: Camera, elapsed: number) {
     const playerHeight = sampleTerrainHeight(frame.player.position.x, frame.player.position.z);
     const heightMood = MathUtils.smoothstep(playerHeight, 34, 128);
     const routeMood = MathUtils.smoothstep(frame.player.position.z, 64, 202);
@@ -1786,15 +1916,50 @@ export class WorldRenderer {
     this.gameplayFog.color.copy(this.lowlandFogColor).lerp(this.highlandFogColor, this.elevationMood);
     this.gameplayFog.density = MathUtils.lerp(0.00108, 0.00136, this.elevationMood);
     this.sun.color.copy(this.lowlandSunColor).lerp(this.highlandSunColor, this.elevationMood);
-    this.sun.intensity = MathUtils.lerp(3.42, 2.92, this.elevationMood);
-    this.ambientLight.intensity = MathUtils.lerp(0.86, 0.76, this.elevationMood);
+    this.sun.intensity = MathUtils.lerp(3.55, 3.1, this.elevationMood);
+    this.ambientLight.intensity = MathUtils.lerp(0.9, 0.8, this.elevationMood);
     this.skyFill.color.copy(this.lowlandSkyFillColor).lerp(this.highlandSkyFillColor, this.elevationMood);
     this.skyFill.groundColor.copy(this.lowlandGroundFillColor).lerp(this.highlandGroundFillColor, this.elevationMood);
     this.skyFill.intensity = MathUtils.lerp(1.12, 1.0, this.elevationMood);
     this.skyBounce.intensity = MathUtils.lerp(0.42, 0.5, this.elevationMood);
     this.meadowGlow.intensity = MathUtils.lerp(0.66, 0.28, this.elevationMood);
     this.alpineGlow.intensity = MathUtils.lerp(0.38, 0.72, this.elevationMood);
-    syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera);
+    syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera, elapsed);
+
+    getAtmosphereHorizonTints(
+      this.elevationMood,
+      this.scenePatchHorizon,
+      this.scenePatchHaze,
+      this.scenePatchBright,
+      this.scenePatchShadow,
+    );
+    getSunDirectionWorld(this.sun, this.scenePatchSunDir);
+    const applyPatch = (shader: GrassShader | undefined) => {
+      if (!shader) {
+        return;
+      }
+      writePatchSceneLightingUniforms(
+        shader,
+        this.sun,
+        this.ambientLight,
+        this.skyFill,
+        this.scenePatchHorizon,
+        this.scenePatchSunDir,
+        this.elevationMood,
+      );
+    };
+    this.windMeshes.forEach((mesh) => {
+      applyPatch(mesh.userData.shader);
+    });
+    this.treeWindMeshes.forEach((mesh) => {
+      applyPatch(mesh.userData.windShader);
+    });
+    this.waterControllers.forEach((controller) => {
+      const mat = controller.mesh.material as MeshStandardMaterial & {
+        userData?: { waterShader?: GrassShader };
+      };
+      applyPatch(mat.userData?.waterShader);
+    });
   }
 
   private updateWaterInteractions(frame: FrameState, elapsed: number, mapLookdown: boolean) {

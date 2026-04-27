@@ -369,6 +369,10 @@ export function createGrassMesh(
     shader.uniforms.uWindTimeScale = { value: options.windTimeScale ?? 1 };
     shader.uniforms.uBroadWindScale = { value: options.broadWindScale ?? 1 };
     shader.uniforms.uFineWindScale = { value: options.fineWindScale ?? 1 };
+    shader.uniforms.uSceneSunColor = { value: new Color("#fff8e8") };
+    shader.uniforms.uSceneAmbient = { value: new Color("#b8c8e0") };
+    shader.uniforms.uSceneHorizon = { value: new Color("#f3e3d4") };
+    shader.uniforms.uSceneElevationMood = { value: 0 };
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
@@ -389,6 +393,7 @@ export function createGrassMesh(
         varying float vElevationMood;
         varying float vSceneDepthMood;
         varying float vGustSignal;
+        varying float vIslandEdge;
         varying vec3 vTint;
         uniform float uTime;
         uniform vec3 uPlayerPosition;
@@ -407,6 +412,10 @@ export function createGrassMesh(
         uniform float uWindTimeScale;
         uniform float uBroadWindScale;
         uniform float uFineWindScale;
+        uniform vec3 uSceneSunColor;
+        uniform vec3 uSceneAmbient;
+        uniform vec3 uSceneHorizon;
+        uniform float uSceneElevationMood;
       `,
       )
       .replace(
@@ -418,6 +427,10 @@ export function createGrassMesh(
         vTint = instanceTint;
         vPatchLight = sin(instanceRoot.x * 0.018 - instanceRoot.z * 0.014 + 1.2) * 0.5 + 0.5;
         vStrokeSeed = fract(sin(instancePhase * 2.7 + instanceRoot.x * 0.037 + instanceRoot.z * 0.051) * 43758.5453123);
+        float isleNx = abs((instanceRoot.x - (-6.0)) / 226.0);
+        float isleNz = abs((instanceRoot.z - 30.0) / 248.0);
+        float isleCont = pow(pow(isleNx, 3.4) + pow(isleNz, 3.4), 0.294117647);
+        vIslandEdge = smoothstep(0.7, 0.985, isleCont);
         vElevationMood = clamp(
           smoothstep(42.0, 132.0, instanceRoot.y) * 0.72 +
           smoothstep(78.0, 206.0, instanceRoot.z) * 0.38,
@@ -448,7 +461,11 @@ export function createGrassMesh(
         vec2 baseWindDirection = normalize(vec2(0.92, 0.39));
         vec2 crossWindDirection = vec2(-baseWindDirection.y, baseWindDirection.x);
         float windTime = uTime * uWindTimeScale;
-        float breath = 0.84 + sin(windTime * 0.18 + sin(windTime * 0.041) * 1.7) * 0.16;
+        float windVariation = 0.86 + 0.18 * sin(
+          windTime * 0.44 + instancePhase * 2.1 +
+          dot(instanceRoot.xz, vec2(0.019, -0.016)) + sin(windTime * 0.07) * 1.1
+        ) + 0.1 * sin(windTime * 1.12 + vStrokeSeed * 8.0);
+        float breath = (0.84 + sin(windTime * 0.18 + sin(windTime * 0.041) * 1.7) * 0.16) * windVariation;
         float macroWind = (
           sin(dot(instanceRoot.xz, baseWindDirection) * 0.016 - windTime * 0.34 + instancePhase * 0.08) +
           cos(dot(instanceRoot.xz, crossWindDirection) * 0.011 + windTime * 0.22)
@@ -459,27 +476,28 @@ export function createGrassMesh(
         float gustFront = smoothstep(0.48, 0.96, sin(gustPhaseA));
         float gustShoulder = smoothstep(0.38, 0.92, sin(gustPhaseB)) * 0.54;
         float gustRebound = -smoothstep(0.62, 0.98, sin(gustPhaseA - 1.24)) * 0.24;
-        float gustExposure = mix(1.0 + vHeroField * 0.2, 1.14 + vElevationMood * 0.16, vSceneDepthMood);
-        float gustWind = (gustFront + gustShoulder) * (0.58 + gustLane * 0.42) * gustExposure;
+        float gustExposure = mix(1.06 + vHeroField * 0.24, 1.18 + vElevationMood * 0.18, vSceneDepthMood);
+        float gustWind = (gustFront + gustShoulder) * (0.62 + gustLane * 0.46) * gustExposure;
         float detailFlutter = sin(instanceRoot.x * 0.12 + windTime * 4.9 + instancePhase * 2.8)
           * cos(instanceRoot.z * 0.086 - windTime * 3.7 + instancePhase);
         detailFlutter *= mix(1.0, 0.42, vSceneDepthMood);
         float windLod = clamp(vDistanceBlend * 0.68 + vElevationMood * 0.34, 0.0, 1.0);
         float broadBend = (
-          macroWind * mix(0.58, 0.72, vSceneDepthMood) +
-          gustWind * mix(0.34, 0.54, vElevationMood) +
+          macroWind * mix(0.68, 0.82, vSceneDepthMood) +
+          gustWind * mix(0.42, 0.64, vElevationMood) +
           gustRebound
-        ) * breath * uWindExaggeration * uBroadWindScale * mix(0.98, 1.18, vElevationMood);
+        ) * breath * uWindExaggeration * uBroadWindScale * mix(0.98, 1.22, vElevationMood);
         float fineMotion = detailFlutter * (1.0 - windLod) * uWindExaggeration * uFineWindScale;
         vGustSignal = clamp(gustWind * (1.0 - vDistanceBlend * 0.28), 0.0, 1.0);
         vec2 windDirection = normalize(baseWindDirection + crossWindDirection * (macroWind * 0.08 + gustWind * 0.18));
         float tuftWeight = pow(uv.y, 1.24);
         float tipWeight = pow(uv.y, 1.78);
-        float sweep = (mix(0.21, 0.16, vSceneDepthMood) + vHeroField * 0.14 + broadBend * 0.18) * tuftWeight * instanceScale;
-        float bend = (0.045 + broadBend * 0.05 + gustWind * mix(0.018, 0.042, vElevationMood)) * tuftWeight * instanceScale;
-        float flutter = fineMotion * tipWeight * instanceScale * (0.034 + vHeroField * 0.018);
-        float baseLean = (mix(0.13, 0.08, vSceneDepthMood) + vHeroField * 0.1) * tuftWeight;
-        float playerDisplace = playerMask * (0.14 + tipWeight * 1.48);
+        float edgeWind = 1.0 + vIslandEdge * 0.14;
+        float sweep = (mix(0.26, 0.19, vSceneDepthMood) + vHeroField * 0.18 + broadBend * 0.27) * edgeWind * tuftWeight * instanceScale;
+        float bend = (0.054 + broadBend * 0.068 + gustWind * mix(0.024, 0.052, vElevationMood)) * tuftWeight * instanceScale;
+        float flutter = fineMotion * tipWeight * instanceScale * (0.052 + vHeroField * 0.028);
+        float baseLean = (mix(0.16, 0.1, vSceneDepthMood) + vHeroField * 0.12) * tuftWeight;
+        float playerDisplace = playerMask * (0.22 + tipWeight * 1.85);
         transformed.x *= mix(0.84, 0.98, instanceWidth - 0.64);
         transformed.x += windDirection.x * (sweep + baseLean) + bend * sin(instancePhase) + flutter;
         transformed.z += windDirection.y * (sweep + baseLean) + bend * cos(instancePhase) - flutter * 0.42;
@@ -506,10 +524,15 @@ export function createGrassMesh(
         varying float vElevationMood;
         varying float vSceneDepthMood;
         varying float vGustSignal;
+        varying float vIslandEdge;
         varying vec3 vTint;
         uniform float uRootFillBoost;
         uniform float uSelfShadowStrength;
         uniform float uDistanceCompressionBoost;
+        uniform vec3 uSceneSunColor;
+        uniform vec3 uSceneAmbient;
+        uniform vec3 uSceneHorizon;
+        uniform float uSceneElevationMood;
       `,
       )
       .replace(
@@ -549,6 +572,21 @@ export function createGrassMesh(
         distantMass = mix(distantMass, vTint * vec3(0.78, 1.0, 0.58), (vPatchLight * 0.42 + vHeroField * 0.1) * (1.0 - vElevationMood * 0.42));
         float distanceCompression = clamp(vDistanceBlend + uDistanceCompressionBoost, 0.0, 1.0);
         meadowColor = mix(meadowColor, distantMass, distanceCompression * 0.7);
+        // Far: collapse to cheap blended color (fewer highlights / less band detail)
+        float farCheapMix = pow(clamp(vDistanceBlend * 0.92 + vSceneDepthMood * 0.2, 0.0, 1.0), 1.35);
+        vec3 cheapFar = mix(
+          vTint * vec3(0.5, 0.65, 0.46),
+          uSceneHorizon * vec3(0.75, 0.82, 0.7),
+          0.22 + vElevationMood * 0.2
+        );
+        meadowColor = mix(meadowColor, cheapFar, farCheapMix * 0.62);
+        float islandInland = 1.0 - vIslandEdge;
+        meadowColor = mix(meadowColor, meadowColor * vec3(1.03, 1.05, 0.99), islandInland * 0.1 * (1.0 - vSceneDepthMood * 0.5));
+        meadowColor = mix(
+          meadowColor,
+          mix(meadowColor, uSceneHorizon * vec3(0.9, 0.99, 0.84), 0.24),
+          vIslandEdge * 0.32 * (1.0 - vSceneDepthMood * 0.35)
+        );
         float rootShadow = smoothstep(1.0, 0.08, vBladeMix) * (0.16 + uSelfShadowStrength * 0.22);
         float bodyShadow = (1.0 - sunStripe) * smoothstep(0.24, 0.94, vBladeMix) * (0.08 + uSelfShadowStrength * 0.18);
         float coreShadow = (1.0 - smoothstep(0.0, 0.72, vSoftEdge)) * smoothstep(0.12, 0.92, vBladeMix) * (0.04 + uSelfShadowStrength * 0.08);
@@ -557,6 +595,10 @@ export function createGrassMesh(
         meadowColor = mix(rooted * vec3(1.08, 1.04, 0.96), meadowColor, 1.0 - rootFill * 0.22);
         alphaShape = max(alphaShape, rootFill * vDistanceBand);
         alphaShape = mix(alphaShape, 0.985, vDistanceBlend * 0.48);
+        float sceneLow = 1.0 - uSceneElevationMood;
+        meadowColor = mix(meadowColor, meadowColor * uSceneSunColor, 0.1 + 0.06 * sceneLow);
+        meadowColor = mix(meadowColor, meadowColor * uSceneHorizon, 0.07 * (0.45 + 0.55 * sceneLow));
+        meadowColor = mix(meadowColor, meadowColor * uSceneAmbient, 0.09);
         vec4 diffuseColor = vec4(meadowColor, opacity * alphaShape * vPlayerFade);`,
       )
       .replace(

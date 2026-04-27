@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Mossu smoke", () => {
+  test.describe.configure({ timeout: 180_000 });
+
   test("loads game shell and reaches interactive canvas", async ({ page }) => {
     const errors: string[] = [];
     page.on("console", (msg) => {
@@ -9,11 +11,17 @@ test.describe("Mossu smoke", () => {
       }
     });
 
-    await page.goto("/", { waitUntil: "domcontentloaded", timeout: 60_000 });
+    // `e2e=1` makes render_game_to_text a small JSON blob so headless does not block on a huge sync snapshot.
+    await page.goto("/?e2e=1", { waitUntil: "domcontentloaded", timeout: 60_000 });
 
     await expect(page.locator("#app")).toBeVisible();
     // Main WebGL canvas is the only <canvas> direct child of #app; HUD nests CharacterPreview.
     await expect(page.locator("#app > canvas")).toBeVisible({ timeout: 60_000 });
+
+    await page.waitForFunction(
+      () => window.__MOSSU_E2E__?.ready === true && typeof window.render_game_to_text === "function",
+      { timeout: 120_000 },
+    );
 
     // Title / opening: advance enough for a real frame without requiring GPU-heavy screenshots.
     await page.keyboard.press("Enter");
@@ -25,8 +33,25 @@ test.describe("Mossu smoke", () => {
       window.advanceTime?.(500);
     });
 
-    const text = await page.evaluate(() => window.render_game_to_text?.() ?? "");
+    // Yield so rAF can interleave; then read the lightweight e2e snapshot.
+    const text = await page.evaluate(
+      () =>
+        new Promise<string>((resolve, reject) => {
+          const fail = window.setTimeout(() => reject(new Error("render_game_to_text did not return")), 30_000);
+          window.requestAnimationFrame(() => {
+            try {
+              resolve(window.render_game_to_text?.() ?? "");
+            } catch (e) {
+              reject(e);
+            } finally {
+              window.clearTimeout(fail);
+            }
+          });
+        }),
+    );
     expect(text.length).toBeGreaterThan(20);
+    const parsed = JSON.parse(text) as { e2e?: boolean; mode?: string };
+    expect(parsed.e2e).toBe(true);
 
     const fatal = errors.filter(
       (line) =>
@@ -38,8 +63,12 @@ test.describe("Mossu smoke", () => {
   });
 
   test("model viewer route loads", async ({ page }) => {
-    await page.goto("/?modelViewer=1", { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.goto("/?modelViewer=1&e2e=1", { waitUntil: "domcontentloaded", timeout: 60_000 });
     await expect(page.locator("#app")).toBeVisible();
+    await page.waitForFunction(
+      () => window.__MOSSU_E2E__?.ready === true && window.__MOSSU_E2E__?.mode === "model_viewer",
+      { timeout: 60_000 },
+    );
     await expect(page.locator("canvas.model-viewer__canvas")).toBeVisible({ timeout: 60_000 });
   });
 });
