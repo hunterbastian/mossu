@@ -16,6 +16,7 @@ import {
 } from "three";
 import {
   BiomeZone,
+  MOSSU_PLAYFIELD_EXTENT,
   sampleBiomeZone,
   sampleGrassDensity,
   sampleHabitatLayer,
@@ -25,8 +26,6 @@ import {
   sampleTerrainHeight,
   sampleTerrainNormal,
 } from "../../simulation/world";
-
-const WORLD_SIZE = 560;
 
 export interface GrassShader {
   uniforms: Record<string, { value: unknown }>;
@@ -223,8 +222,8 @@ export function createGrassMesh(
   let placed = 0;
 
   while (placed < count) {
-    const x = (Math.random() - 0.5) * (WORLD_SIZE - 32);
-    const z = (Math.random() - 0.5) * (WORLD_SIZE - 32);
+    const x = (Math.random() - 0.5) * (MOSSU_PLAYFIELD_EXTENT - 32);
+    const z = (Math.random() - 0.5) * (MOSSU_PLAYFIELD_EXTENT - 32);
     const height = sampleTerrainHeight(x, z);
     const zone = sampleBiomeZone(x, z, height);
     if (!zoneFilter(zone)) {
@@ -601,8 +600,8 @@ export function createGrassPatchImpostorMesh(
 
   while (placed < count && attempts < maxAttempts) {
     attempts += 1;
-    const x = (Math.random() - 0.5) * (WORLD_SIZE - 40);
-    const z = (Math.random() - 0.5) * (WORLD_SIZE - 40);
+    const x = (Math.random() - 0.5) * (MOSSU_PLAYFIELD_EXTENT - 40);
+    const z = (Math.random() - 0.5) * (MOSSU_PLAYFIELD_EXTENT - 40);
     const height = sampleTerrainHeight(x, z);
     const zone = sampleBiomeZone(x, z, height);
     if (!zoneFilter(zone)) {

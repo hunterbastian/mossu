@@ -31,6 +31,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { FrameState } from "../../simulation/gameState";
 import {
   ForageableKind,
+  MOSSU_PLAYFIELD_EXTENT,
   sampleBaseTerrainHeight,
   sampleBiomeZone,
   sampleHabitatLayer,
@@ -42,7 +43,7 @@ import {
   sampleStartingWaterDampBankMask,
   sampleStartingWaterWetness,
   sampleTerrainHeight,
-  sampleTerrainNormal,
+  sampleTerrainNormalInto,
   sampleWaterBankShape,
   sampleWaterState,
   shadowPockets,
@@ -91,7 +92,8 @@ import {
   WaterRippleSource,
 } from "./waterSystem";
 
-const WORLD_SIZE = 560;
+const scratchTerrainNormal = new Vector3();
+
 const TERRAIN_SEGMENTS = 160;
 const GRASS_COUNT = 5600;
 const FAR_GRASS_PATCH_COUNT = 520;
@@ -191,8 +193,8 @@ function colorForTerrain(x: number, y: number, z: number) {
   const zone = sampleBiomeZone(x, z, y);
   const habitat = sampleHabitatLayer(x, z, y);
   const islandEdge = sampleIslandEdgeFactor(x, z);
-  const normal = sampleTerrainNormal(x, z);
-  const slope = 1 - normal.y;
+  sampleTerrainNormalInto(scratchTerrainNormal, x, z);
+  const slope = 1 - scratchTerrainNormal.y;
   const painterlyNoise = Math.sin(x * 0.07) * 0.04 + Math.cos(z * 0.05) * 0.03 + Math.sin((x - z) * 0.03) * 0.05;
   const patch = Math.round((Math.sin(x * 0.12 + z * 0.08) * 0.5 + 0.5) * 5) / 5;
   const mixValue = MathUtils.clamp(patch * 0.5 + painterlyNoise + y / 220, 0, 1);
@@ -268,7 +270,7 @@ function colorForTerrain(x: number, y: number, z: number) {
 }
 
 function makeTerrainMesh() {
-  const geometry = new PlaneGeometry(WORLD_SIZE, WORLD_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
+  const geometry = new PlaneGeometry(MOSSU_PLAYFIELD_EXTENT, MOSSU_PLAYFIELD_EXTENT, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
   geometry.rotateX(-Math.PI / 2);
 
   const positions = geometry.attributes.position as BufferAttribute;
@@ -352,7 +354,8 @@ function buildTerrainFormStrokes() {
     const x = band.x + localX * c - localZ * s;
     const z = band.z + localX * s + localZ * c;
     const y = sampleTerrainHeight(x, z);
-    const slope = 1 - sampleTerrainNormal(x, z).y;
+    sampleTerrainNormalInto(scratchTerrainNormal, x, z);
+    const slope = 1 - scratchTerrainNormal.y;
     const size = MathUtils.lerp(3.8, 10.4, terrainFormHash(i + 71)) * MathUtils.lerp(1, 1.36, slope);
     const flatten = MathUtils.lerp(0.16, 0.38, terrainFormHash(i + 97));
     dummy.position.set(x, y + 0.052 + slope * 0.05, z);
@@ -1894,7 +1897,7 @@ export class WorldRenderer {
       const x = origin.x + Math.cos(angle) * radius;
       const z = origin.z + Math.sin(angle) * radius;
       const y = sampleTerrainHeight(x, z) + 0.04;
-      this.landingNormal.copy(sampleTerrainNormal(x, z));
+      sampleTerrainNormalInto(this.landingNormal, x, z);
 
       particle.origin.set(x, y, z);
       particle.normal.copy(this.landingNormal);

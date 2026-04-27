@@ -2,7 +2,7 @@ import { MathUtils, Vector3 } from "three";
 import type { InputSnapshot } from "./input";
 import type { PlayerState, SaveState } from "./gameState";
 import type { PlayerSimulationRuntime } from "./playerSimulationRuntime";
-import { sampleTerrainNormal } from "./world";
+import { sampleTerrainNormalInto } from "./world";
 import {
   AIR_ACCELERATION,
   AIR_DECELERATION,
@@ -117,7 +117,7 @@ export function applyMovementPhysics(
   if (scratch.moveVector.lengthSq() > 1) {
     scratch.moveVector.normalize();
   }
-  scratch.groundNormal.copy(sampleTerrainNormal(player.position.x, player.position.z));
+  sampleTerrainNormalInto(scratch.groundNormal, player.position.x, player.position.z);
 
   if (scratch.moveVector.lengthSq() > 0.0001) {
     const inputMagnitude = MathUtils.clamp(scratch.moveVector.length(), 0, 1);

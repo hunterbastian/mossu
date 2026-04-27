@@ -1,5 +1,8 @@
 import { MathUtils, Vector2, Vector3 } from "three";
 
+/** World XZ extent of the generated island / terrain plane (matches render terrain mesh width). */
+export const MOSSU_PLAYFIELD_EXTENT = 560;
+
 export type AbilityId = "breeze_float";
 
 export type BiomeZone =
@@ -937,14 +940,21 @@ export function sampleIslandVoidThreshold(x: number, z: number) {
   return sampleBaseTerrainHeight(x, z) - 22 - edgeFactor * 120;
 }
 
-export function sampleTerrainNormal(x: number, z: number) {
+const _sampleTerrainNormalScratch = new Vector3();
+const _habitatTerrainNormalScratch = new Vector3();
+
+export function sampleTerrainNormalInto(out: Vector3, x: number, z: number): Vector3 {
   const eps = 0.5;
   const hL = sampleTerrainHeight(x - eps, z);
   const hR = sampleTerrainHeight(x + eps, z);
   const hD = sampleTerrainHeight(x, z - eps);
   const hU = sampleTerrainHeight(x, z + eps);
-  const normal = new Vector3(hL - hR, eps * 2, hD - hU);
-  return normal.normalize();
+  out.set(hL - hR, eps * 2, hD - hU);
+  return out.normalize();
+}
+
+export function sampleTerrainNormal(x: number, z: number) {
+  return sampleTerrainNormalInto(_sampleTerrainNormalScratch, x, z).clone();
 }
 
 export function sampleRiverCenter(z: number) {
@@ -1293,7 +1303,7 @@ function sampleScenicMeadowMask(x: number, z: number) {
 
 export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainHeight(x, z)): HabitatLayerSample {
   const biome = sampleBiomeZone(x, z, height);
-  const slope = 1 - sampleTerrainNormal(x, z).y;
+  const slope = 1 - sampleTerrainNormalInto(_habitatTerrainNormalScratch, x, z).y;
   const route = sampleRoutePathInfo(x, z);
   const routeReadability = sampleRouteReadabilityClearing(x, z);
   const edgeState = sampleRiverEdgeState(x, z);
@@ -1377,7 +1387,7 @@ export function sampleGrassDensity(x: number, z: number) {
   const height = sampleTerrainHeight(x, z);
   const zone = sampleBiomeZone(x, z, height);
   const habitat = sampleHabitatLayer(x, z, height);
-  const slope = 1 - sampleTerrainNormal(x, z).y;
+  const slope = 1 - sampleTerrainNormalInto(_habitatTerrainNormalScratch, x, z).y;
   if (!isGrassZone(zone) || slope > 0.58) {
     return 0;
   }
