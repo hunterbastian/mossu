@@ -547,6 +547,24 @@ export class FollowCamera {
     return Math.atan2(this.planarLook.x, this.planarLook.z);
   }
 
+  debugSnapToPlayerHeading(player: PlayerState, heading = player.heading) {
+    const routeDirection = new Vector3(Math.sin(heading), 0, Math.cos(heading));
+    if (routeDirection.lengthSq() < 0.0001) {
+      routeDirection.copy(START_DIRECTION);
+    } else {
+      routeDirection.normalize();
+    }
+    const focus = player.position
+      .clone()
+      .add(this.focusOffset.set(0, CAMERA_PROFILES.walk.focusHeight, 0));
+    const cameraPosition = focus
+      .clone()
+      .addScaledVector(routeDirection, -DEFAULT_DISTANCE)
+      .add(this.focusOffset.set(0, 7.2, 0));
+    this.resetGameplayRig(focus, cameraPosition);
+    this.manualLookCooldown = 0;
+  }
+
   getViewMode() {
     return this.viewMode;
   }

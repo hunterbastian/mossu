@@ -8,6 +8,7 @@ declare global {
     mossuDebug?: {
       completeOpeningSequence?: () => void;
       teleportPlayerTo?: (x: number, z: number) => void;
+      applySaveState?: (payload: MossuDebugSaveStatePayload) => void;
     };
     render_game_to_text?: () => string;
     mossuReportError?: (details: MossuErrorDetail) => void;
@@ -18,8 +19,23 @@ interface MossuAppRuntime {
   advanceTime: (ms: number) => void;
   debugCompleteOpeningSequence?: () => void;
   debugTeleportPlayerTo?: (x: number, z: number) => void;
+  debugApplySaveState?: (payload: MossuDebugSaveStatePayload) => void;
   renderGameToText: () => string;
   start: () => void;
+}
+
+interface MossuDebugSaveStatePayload {
+  player?: {
+    x?: number;
+    y?: number;
+    z?: number;
+    heading?: number;
+  };
+  save?: {
+    unlockedAbilities?: string[];
+    catalogedLandmarkIds?: string[];
+    gatheredForageableIds?: string[];
+  };
 }
 
 const container = document.querySelector<HTMLDivElement>("#app");
@@ -31,6 +47,25 @@ const appContainer = container;
 
 /** Prevents stacking fatal overlays / handler feedback loops after the first runtime fatal. */
 let runtimeFatalUiLocked = false;
+
+function setLoadingStatus(message: string) {
+  const status = appContainer.querySelector<HTMLElement>("[data-loading-status]");
+  if (status) {
+    status.textContent = message;
+  }
+}
+
+function finishLoading() {
+  const loader = appContainer.querySelector<HTMLElement>(".instant-title");
+  if (!loader) {
+    return;
+  }
+
+  loader.classList.add("instant-title--leaving");
+  window.setTimeout(() => {
+    loader.remove();
+  }, 420);
+}
 
 function surfaceRuntimeError(details: MossuErrorDetail) {
   if (runtimeFatalUiLocked) {
@@ -87,23 +122,27 @@ function attachRuntime(app: MossuAppRuntime) {
     window.mossuDebug = {
       completeOpeningSequence: () => app.debugCompleteOpeningSequence?.(),
       teleportPlayerTo: (x, z) => app.debugTeleportPlayerTo?.(x, z),
+      applySaveState: (payload) => app.debugApplySaveState?.(payload),
     };
   }
   app.start();
 }
 
 async function startGame() {
+  setLoadingStatus("Gathering the meadow");
   const { GameApp } = await import("./render/app/GameApp");
-  appContainer.textContent = "";
+  setLoadingStatus("Painting the island");
   const game = await GameApp.create(appContainer);
   attachRuntime(game);
+  finishLoading();
 }
 
 async function startModelViewer() {
+  setLoadingStatus("Opening the model table");
   const { ModelViewerApp } = await import("./render/app/ModelViewerApp");
-  appContainer.textContent = "";
   const viewer = new ModelViewerApp(appContainer);
   attachRuntime(viewer);
+  finishLoading();
 }
 
 async function bootstrap() {

@@ -2,6 +2,10 @@ Original prompt: lets keep improving the UI for the game and interactivlity
 
 Current wrap-up status:
 
+- Latest startup optimization pass: removed the visible "Waking up" loading copy/animation from the instant shell, deferred WebGL bloom/postprocessing initialization until idle, and moved optional world pieces (clouds, mountain atmosphere, valley mist, shadow volumes, highland waterways, forageables, mountain silhouettes, and Karu background life) into staged background slices after the first frame.
+- Verification for this pass: `npm run qa` passed, `npm run perf:guard` passed in headed Chrome at 98.6 fps average / 12.9ms p95, and the required web-game client produced `output/startup-optimization/shot-0.png` plus `state-0.json`.
+- Follow-up startup note: the first captured opening-frame state still reports an early 100ms frame while background scene work settles, so deeper "zero perceived hitch" work should split grass/tree/decor batch construction into smaller idle jobs or prebuild/cache static geometry data.
+- Follow-up pass (same thread): the instant title shell now shows short loading status copy (`[data-loading-status]`) while route chunks import, then fades out via `.instant-title--leaving` instead of a hard `textContent` clear; `GameApp` defers `EffectComposer` + bloom behind `requestIdleCallback` and dynamic `three/examples` imports; `?qaDebug=1` exposes `window.mossuDebug.applySaveState` for position/save replays; `npm run perf:guard` is wired in `package.json` with `scripts/perfGuard.mjs`.
 - Latest focus landed: grass spatial-cell LOD, far-grass painterly impostors, no explicit bootstrap loading screen, and gentle idle Karu wander around Mossu.
 - Current first-frame policy: `index.html` paints a tiny static Mossu title shell immediately; the real title/game app replaces it when the route chunk starts.
 - Current grass policy: near/mid/alpine remain real instanced blades with LOD; far meadow grass is one static patch-impostor mesh and is not part of `windMeshes`.

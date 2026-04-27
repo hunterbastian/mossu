@@ -1,0 +1,53 @@
+{
+  "name": "burrow-to-river-roll",
+  "description": "Saved Burrow Hollow route used by perf:guard. Starts from a real game save shape, then walks and rolls through the opening meadow toward the river path.",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "urlParams": {
+    "qaDebug": "1",
+    "perfDebug": "1"
+  },
+  "save": {
+    "player": {
+      "x": 0,
+      "z": -24,
+      "heading": 0
+    },
+    "save": {
+      "unlockedAbilities": ["breeze_float"],
+      "catalogedLandmarkIds": [],
+      "gatheredForageableIds": []
+    }
+  },
+  "segments": [
+    {
+      "label": "settle loaded save",
+      "durationMs": 1600,
+      "keys": []
+    },
+    {
+      "label": "walk out of burrow meadow",
+      "durationMs": 4200,
+      "keys": ["w"]
+    },
+    {
+      "label": "roll the opening trail",
+      "durationMs": 5200,
+      "keys": ["w", "Shift"]
+    },
+    {
+      "label": "sweep along the river bank",
+      "durationMs": 3600,
+      "keys": ["w", "d"]
+    }
+  ],
+  "guardrails": {
+    "minAverageFps": 24,
+    "maxP95FrameMs": 85,
+    "minFrameSamples": 180,
+    "minForwardProgress": 10,
+    "maxAbsX": 90
+  }
+}

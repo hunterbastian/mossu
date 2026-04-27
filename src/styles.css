@@ -66,6 +66,18 @@ canvas.is-pointer-locked {
   cursor: none;
 }
 
+.instant-title {
+  transition:
+    opacity 0.38s ease,
+    transform 0.38s ease;
+  pointer-events: none;
+}
+
+.instant-title--leaving {
+  opacity: 0;
+  transform: translateY(-0.8rem) scale(1.01);
+}
+
 .camera-debug,
 .perf-debug {
   position: fixed;

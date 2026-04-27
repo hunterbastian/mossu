@@ -1047,11 +1047,17 @@ function countInstancedTriangles(meshes: readonly InstancedMesh[]) {
   return meshes.reduce((total, mesh) => total + countGeometryTriangles(mesh.geometry) * mesh.count, 0);
 }
 
+function moveChildren(target: Group, source: Group) {
+  while (source.children.length > 0) {
+    target.add(source.children[0]);
+  }
+}
+
 export class WorldRenderer {
   readonly mossu = new MossuAvatar();
   readonly terrain = makeTerrainMesh();
   readonly skyDome: Mesh;
-  readonly clouds = buildClouds();
+  readonly clouds = new Group();
   readonly windMeshes: Array<InstancedMesh> = [];
   private readonly treeWindMeshes: Array<InstancedMesh> = [];
   private readonly grassImpostorMeshes: Array<InstancedMesh> = [];
@@ -1091,10 +1097,10 @@ export class WorldRenderer {
   private readonly waterBankAccents = batchStaticDecorations(buildWaterBankAccents(), "water-bank-batch");
   private readonly anchorSceneAccents = batchStaticDecorations(buildAnchorSceneAccents(), "anchor-scene-batch");
   private readonly highlandAccents = batchStaticDecorations(buildHighlandAccents(), "highland-accent-batch");
-  private readonly highlandWaterways = buildHighlandWaterways();
-  private readonly mountainAtmosphere = buildMountainAtmosphere();
-  private readonly valleyMist = buildValleyMist();
-  private readonly shadowVolumes = buildShadowPockets();
+  private readonly highlandWaterways: WaterSurfaceGroup = { group: new Group(), controllers: [] };
+  private readonly mountainAtmosphere = new Group();
+  private readonly valleyMist = new Group();
+  private readonly shadowVolumes = new Group();
   private readonly landmarkTrees = batchStaticDecorations(buildLandmarkTrees(), "landmark-tree-batch");
   private readonly mountainSilhouettes = new Group();
   private readonly sun = new DirectionalLight("#fff0cf", 3.12);
@@ -1113,7 +1119,7 @@ export class WorldRenderer {
   private readonly landingParticles: LandingSplashParticle[] = [];
   private readonly snowTrail = new Group();
   private readonly snowTrailParticles: SnowTrailParticle[] = [];
-  private readonly ambientBlobs: AmbientBlob[];
+  private readonly ambientBlobs: AmbientBlob[] = [];
   private readonly ambientNestGroup = new Group();
   private readonly ambientBlobGroup = new Group();
   private faunaStats: AmbientBlobUpdateStats = {
@@ -1136,7 +1142,7 @@ export class WorldRenderer {
   private trailEmissionCarry = 0;
   private readonly mapMarkerGroup = new Group();
   private readonly forageableGroup = new Group();
-  private readonly forageableVisuals = buildForageableVisuals();
+  private readonly forageableVisuals: ForageableVisual[] = [];
   private readonly playerMapMarker: MapMarker = {
     group: createMapMarker("#78f3ff", 3.2, 12, 0.42),
     baseScale: 1,
@@ -1149,13 +1155,13 @@ export class WorldRenderer {
   };
   private readonly landmarkMapMarkers: Array<MapMarker> = [];
   private readonly atlasMapMarkers: Array<MapMarker> = [];
+  private readonly deferredWorldSlices: Array<() => void> = [];
+  private deferredWorldFrame = 0;
 
   constructor(private readonly scene: Scene, options: WorldRendererOptions = {}) {
     this.skyDome = buildSkyDome({
       webGpuCompatible: options.webGpuCompatibleMaterials ?? false,
     });
-    this.ambientBlobs = buildAmbientBlobs(options);
-    this.ambientNestGroup.add(batchStaticDecorations(buildAmbientBlobNests(this.ambientBlobs), "karu-nest-batch"));
     scene.background = this.lowlandBackground.clone();
     scene.fog = this.gameplayFog;
 
@@ -1323,18 +1329,6 @@ export class WorldRenderer {
     this.grassImpostorMeshes.push(meadowFarGrassPatches);
     scene.add(meadowFarGrassPatches, meadowNearGrass, meadowMidGrass, alpineGrass);
 
-    const stoneMaterial = new MeshStandardMaterial({ color: "#bcc8ba", roughness: 1 });
-    for (const [x, z, sx, sy, sz] of [
-      [-152, 184, 86, 118, 114],
-      [118, 198, 102, 136, 120],
-      [8, 232, 126, 162, 122],
-      [76, 240, 66, 94, 70],
-    ]) {
-      const mountain = new Mesh(new SphereGeometry(1.2, 16, 14), stoneMaterial);
-      mountain.scale.set(sx as number, sy as number, sz as number);
-      mountain.position.set(x as number, 12, z as number);
-      this.mountainSilhouettes.add(mountain);
-    }
     scene.add(this.mountainSilhouettes);
 
     const splashGeometry = new PlaneGeometry(0.3, 1.15, 1, 5);
@@ -1385,9 +1379,6 @@ export class WorldRenderer {
     }
 
     this.mapMarkerGroup.visible = false;
-    this.forageableVisuals.forEach((visual) => {
-      this.forageableGroup.add(visual.group);
-    });
     this.mapMarkerGroup.add(this.playerMapMarker.group);
     this.mapMarkerGroup.add(this.shrineMapMarker.group);
     worldLandmarks.forEach((landmark, index) => {
@@ -1427,11 +1418,7 @@ export class WorldRenderer {
       this.mapMarkerGroup.add(marker.group);
     });
 
-    this.ambientBlobs.forEach((blob) => {
-      this.ambientBlobGroup.add(blob.group);
-    });
-
-    this.waterControllers.push(...this.riverSystem.controllers, ...this.startingWater.controllers, ...this.highlandWaterways.controllers);
+    this.waterControllers.push(...this.riverSystem.controllers, ...this.startingWater.controllers);
     this.registerCameraCollider(this.terrain);
     this.collectCameraColliders(this.islandShell);
     this.collectCameraColliders(this.shrine);
@@ -1470,6 +1457,8 @@ export class WorldRenderer {
       this.shrine,
       this.mountainSilhouettes,
     ].forEach((object) => freezeStaticHierarchy(object));
+
+    this.queueDeferredWorldSlices(options);
   }
 
   getCameraCollisionMeshes() {
@@ -1495,6 +1484,77 @@ export class WorldRenderer {
 
   getFaunaStats() {
     return this.faunaStats;
+  }
+
+  private queueDeferredWorldSlices(options: WorldRendererOptions) {
+    this.deferredWorldSlices.push(
+      () => {
+        const clouds = buildClouds();
+        this.clouds.userData.cloudMaterial = clouds.userData.cloudMaterial;
+        moveChildren(this.clouds, clouds);
+      },
+      () => {
+        moveChildren(this.mountainAtmosphere, buildMountainAtmosphere());
+        freezeStaticHierarchy(this.mountainAtmosphere);
+      },
+      () => {
+        moveChildren(this.valleyMist, buildValleyMist());
+        freezeStaticHierarchy(this.valleyMist);
+      },
+      () => {
+        moveChildren(this.shadowVolumes, buildShadowPockets());
+        freezeStaticHierarchy(this.shadowVolumes);
+      },
+      () => {
+        const waterways = buildHighlandWaterways();
+        this.highlandWaterways.group.add(waterways.group);
+        this.highlandWaterways.controllers.push(...waterways.controllers);
+        this.waterControllers.push(...waterways.controllers);
+      },
+      () => {
+        const visuals = buildForageableVisuals();
+        this.forageableVisuals.push(...visuals);
+        visuals.forEach((visual) => {
+          this.forageableGroup.add(visual.group);
+        });
+      },
+      () => {
+        const stoneMaterial = new MeshStandardMaterial({ color: "#bcc8ba", roughness: 1 });
+        for (const [x, z, sx, sy, sz] of [
+          [-152, 184, 86, 118, 114],
+          [118, 198, 102, 136, 120],
+          [8, 232, 126, 162, 122],
+          [76, 240, 66, 94, 70],
+        ]) {
+          const mountain = new Mesh(new SphereGeometry(1.2, 16, 14), stoneMaterial);
+          mountain.scale.set(sx as number, sy as number, sz as number);
+          mountain.position.set(x as number, 12, z as number);
+          this.mountainSilhouettes.add(mountain);
+        }
+        freezeStaticHierarchy(this.mountainSilhouettes);
+      },
+      () => {
+        const blobs = buildAmbientBlobs(options);
+        this.ambientBlobs.push(...blobs);
+        this.ambientNestGroup.add(batchStaticDecorations(buildAmbientBlobNests(this.ambientBlobs), "karu-nest-batch"));
+        this.ambientBlobs.forEach((blob) => {
+          this.ambientBlobGroup.add(blob.group);
+        });
+      },
+    );
+  }
+
+  private processDeferredWorldSlice() {
+    if (this.deferredWorldSlices.length === 0) {
+      return;
+    }
+
+    this.deferredWorldFrame += 1;
+    if (this.deferredWorldFrame < 3 || this.deferredWorldFrame % 2 !== 0) {
+      return;
+    }
+
+    this.deferredWorldSlices.shift()?.();
   }
 
   update(
@@ -1547,6 +1607,7 @@ export class WorldRenderer {
     this.valleyMist.visible = !mapLookdown;
     this.shadowVolumes.visible = !mapLookdown;
     this.terrainFormStrokes.visible = !mapLookdown;
+    this.processDeferredWorldSlice();
   }
 
   private updateForageables(frame: FrameState, elapsed: number, mapLookdown: boolean) {

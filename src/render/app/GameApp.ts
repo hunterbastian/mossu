@@ -7,12 +7,12 @@ import {
   WebGLRenderer,
 } from "three";
 import type { WebGPURenderer as ThreeWebGpuRenderer } from "three/webgpu";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import type { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import type { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { GameState } from "../../simulation/gameState";
 import { InputController, InputSnapshot } from "../../simulation/input";
 import { sampleRiverEdgeState, sampleTerrainHeight, sampleWaterAmbience, sampleWindStrength } from "../../simulation/world";
+import type { AbilityId } from "../../simulation/world";
 import { ViewMode } from "../../simulation/viewMode";
 import { AmbientWaterAudio } from "./AmbientWaterAudio";
 import { CharacterPreview } from "./CharacterPreview";
@@ -41,6 +41,20 @@ const OPENING_SEQUENCE_SKIP_AFTER_SECONDS = 1.05;
 type RequestedRendererBackend = "webgl" | "webgpu" | "auto";
 type ActiveRendererBackend = "webgl" | "webgpu" | "webgpu-webgl2";
 type GameRenderer = WebGLRenderer | ThreeWebGpuRenderer;
+
+type DebugSaveStatePayload = {
+  player?: {
+    x?: number;
+    y?: number;
+    z?: number;
+    heading?: number;
+  };
+  save?: {
+    unlockedAbilities?: string[];
+    catalogedLandmarkIds?: string[];
+    gatheredForageableIds?: string[];
+  };
+};
 
 type RendererBundle = {
   renderer: GameRenderer;
@@ -94,7 +108,7 @@ function createWebGlRendererBundle(
   fallbackReason: string | null = null,
 ): RendererBundle {
   return {
-    renderer: new WebGLRenderer({ antialias: true }),
+    renderer: new WebGLRenderer({ antialias: true, powerPreference: "high-performance" }),
     requestedBackend,
     activeBackend: "webgl",
     webGpuAvailable,
@@ -141,8 +155,8 @@ function isWebGlRenderer(renderer: GameRenderer): renderer is WebGLRenderer {
 
 export class GameApp {
   private readonly renderer: GameRenderer;
-  private readonly composer: EffectComposer | null;
-  private readonly bloomPass: UnrealBloomPass | null;
+  private composer: EffectComposer | null = null;
+  private bloomPass: UnrealBloomPass | null = null;
   private readonly requestedRendererBackend: RequestedRendererBackend;
   private readonly activeRendererBackend: ActiveRendererBackend;
   private readonly webGpuAvailable: boolean;
@@ -190,6 +204,8 @@ export class GameApp {
   private mapDragPointerId: number | null = null;
   private mapDragX = 0;
   private mapDragY = 0;
+  private postProcessingInitStarted = false;
+  private disposed = false;
 
   private raf = 0;
 
@@ -212,7 +228,7 @@ export class GameApp {
     this.qualityLow = isLowQuality(params);
     const pixelCap = this.qualityLow ? 0.85 : 1.1;
     this.maxPixelRatio = Math.min(window.devicePixelRatio, pixelCap);
-    this.minPixelRatio = Math.min(this.maxPixelRatio, this.qualityLow ? 0.5 : 0.6);
+    this.minPixelRatio = Math.min(this.maxPixelRatio, this.qualityLow ? 0.5 : 0.85);
     this.activePixelRatio = Math.min(this.maxPixelRatio, 1);
     this.renderer = rendererBundle.renderer;
     this.requestedRendererBackend = rendererBundle.requestedBackend;
@@ -233,22 +249,6 @@ export class GameApp {
       webGpuCompatibleMaterials: this.activeRendererBackend !== "webgl",
     });
     this.followCamera.setCollisionMeshes(this.world.getCameraCollisionMeshes());
-    if (isWebGlRenderer(this.renderer) && !this.qualityLow) {
-      this.composer = new EffectComposer(this.renderer);
-      this.composer.setPixelRatio(this.activePixelRatio);
-      this.composer.setSize(window.innerWidth, window.innerHeight);
-      this.composer.addPass(new RenderPass(this.scene, this.followCamera.camera));
-      this.bloomPass = new UnrealBloomPass(
-        new Vector2(window.innerWidth, window.innerHeight),
-        BLOOM_STRENGTH,
-        BLOOM_RADIUS,
-        BLOOM_THRESHOLD,
-      );
-      this.composer.addPass(this.bloomPass);
-    } else {
-      this.composer = null;
-      this.bloomPass = null;
-    }
     this.hud = new HudShell(this.characterPreview.element);
     this.container.appendChild(this.hud.element);
     this.hud.element.classList.add("hud--title-hidden");
@@ -289,6 +289,7 @@ export class GameApp {
 
   start() {
     this.clock.start();
+    this.schedulePostProcessingInit();
     const loop = () => {
       const rawDt = Math.min(0.1, this.clock.getDelta());
       const dt = Math.min(0.033, rawDt);
@@ -302,6 +303,7 @@ export class GameApp {
   }
 
   dispose() {
+    this.disposed = true;
     window.cancelAnimationFrame(this.raf);
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.handleTitleKeyDown);
@@ -329,6 +331,55 @@ export class GameApp {
     this.renderer.dispose();
   }
 
+  private schedulePostProcessingInit() {
+    if (
+      this.postProcessingInitStarted ||
+      this.qualityLow ||
+      !isWebGlRenderer(this.renderer)
+    ) {
+      return;
+    }
+
+    this.postProcessingInitStarted = true;
+    const start = () => {
+      void this.initializePostProcessing();
+    };
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(start, { timeout: 1500 });
+    } else {
+      globalThis.setTimeout(start, 700);
+    }
+  }
+
+  private async initializePostProcessing() {
+    if (this.disposed || this.composer || !isWebGlRenderer(this.renderer)) {
+      return;
+    }
+
+    const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }] = await Promise.all([
+      import("three/examples/jsm/postprocessing/EffectComposer.js"),
+      import("three/examples/jsm/postprocessing/RenderPass.js"),
+      import("three/examples/jsm/postprocessing/UnrealBloomPass.js"),
+    ]);
+    if (this.disposed || this.composer || !isWebGlRenderer(this.renderer)) {
+      return;
+    }
+
+    const composer = new EffectComposer(this.renderer);
+    composer.setPixelRatio(this.activePixelRatio);
+    composer.setSize(window.innerWidth, window.innerHeight);
+    composer.addPass(new RenderPass(this.scene, this.followCamera.camera));
+    const bloomPass = new UnrealBloomPass(
+      new Vector2(window.innerWidth, window.innerHeight),
+      BLOOM_STRENGTH,
+      BLOOM_RADIUS,
+      BLOOM_THRESHOLD,
+    );
+    composer.addPass(bloomPass);
+    this.composer = composer;
+    this.bloomPass = bloomPass;
+  }
+
   advanceTime(ms: number) {
     const dt = 1 / 60;
     const steps = Math.max(1, Math.round(ms / (dt * 1000)));
@@ -353,6 +404,44 @@ export class GameApp {
     player.grounded = true;
     player.swimming = false;
     player.fallingToVoid = false;
+    this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
+    this.syncHud();
+  }
+
+  debugApplySaveState(payload: DebugSaveStatePayload) {
+    const player = this.state.frame.player;
+    const x = payload.player?.x;
+    const z = payload.player?.z;
+    if (typeof x === "number" && Number.isFinite(x) && typeof z === "number" && Number.isFinite(z)) {
+      const y =
+        typeof payload.player?.y === "number" && Number.isFinite(payload.player.y)
+          ? payload.player.y
+          : sampleTerrainHeight(x, z) + 2.2;
+      player.position.set(x, y, z);
+    }
+    if (typeof payload.player?.heading === "number" && Number.isFinite(payload.player.heading)) {
+      player.heading = payload.player.heading;
+      this.followCamera.debugSnapToPlayerHeading(player, payload.player.heading);
+    }
+    player.velocity.set(0, 0, 0);
+    player.grounded = true;
+    player.swimming = false;
+    player.fallingToVoid = false;
+    player.floating = false;
+    player.justLanded = false;
+    player.justRespawned = false;
+
+    const save = payload.save;
+    if (save?.unlockedAbilities) {
+      this.state.frame.save.unlockedAbilities = new Set(save.unlockedAbilities as AbilityId[]);
+    }
+    if (save?.catalogedLandmarkIds) {
+      this.state.frame.save.catalogedLandmarkIds = new Set(save.catalogedLandmarkIds);
+    }
+    if (save?.gatheredForageableIds) {
+      this.state.frame.save.gatheredForageableIds = new Set(save.gatheredForageableIds);
+    }
+
     this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
     this.syncHud();
   }
