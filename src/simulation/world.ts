@@ -759,7 +759,8 @@ const ROUTE_TERRACE_SEGMENTS = [
   [20, 108, 42, 134, 36, 0.72],
   [42, 134, 10, 154, 38, 0.68],
   [10, 154, -26, 168, 40, 0.56],
-  [-26, 168, 16, 186, 42, 0.5],
+  [-26, 168, 6, 178, 40, 1.02],
+  [6, 178, 16, 186, 34, 0.58],
   [16, 186, 2, 214, 44, 0.42],
 ] as const;
 
@@ -772,6 +773,7 @@ const PAINTED_GROUND_CLEARINGS = [
   [42, 134, 38, 0.36],
   [10, 154, 40, 0.34],
   [-26, 168, 42, 0.32],
+  [6, 178, 44, 0.34],
   [16, 186, 44, 0.32],
   [2, 214, 44, 0.34],
 ] as const;
@@ -783,6 +785,7 @@ const ROUTE_TRANSITION_CLEARINGS = [
   [20, 108, 54, 0.62],
   [42, 134, 52, 0.56],
   [10, 154, 52, 0.54],
+  [6, 178, 54, 0.56],
   [-26, 168, 54, 0.54],
   [16, 186, 54, 0.56],
   [2, 214, 56, 0.58],
@@ -1622,6 +1625,18 @@ export const worldLandmarks: WorldLandmark[] = [
     inventoryEntry: {
       title: "Cloudback Feather",
       summary: "A long pale feather caught against the overlook rocks. It turns the ridge from a destination into a place worth lingering in.",
+    },
+  },
+  {
+    id: "skyward-ledge",
+    type: "overlook",
+    position: new Vector3(6, sampleTerrainHeight(6, 178), 178),
+    title: "Skyward Ledge",
+    flavorPing: "The wind opens wide here, and the world drops toward the valley below.",
+    interactionRadius: 16,
+    inventoryEntry: {
+      title: "Skyward Moss Strand",
+      summary: "A silver-tipped strand of cliff moss found along the ledge lip. It marks the moment the route turns into real overhead air.",
     },
   },
   {

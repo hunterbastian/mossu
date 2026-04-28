@@ -1748,10 +1748,14 @@ export class HudShell {
     this.mapCurrentTitle.textContent = "Mossu Isles";
     this.mapCurrentBody.textContent = frame.currentLandmark;
     const completedRouteCount = routeLandmarks.filter((landmark) => frame.save.catalogedLandmarkIds.has(landmark.id)).length;
+    const isSkywardStop = currentRouteLandmark?.id === "skyward-ledge" || nextRouteLandmark?.id === "skyward-ledge";
+    const routeCopy = isSkywardStop
+      ? "pause on the ledge for one long overlook before the final traverse."
+      : "follow the river north and stay on the marked route.";
     this.mapNextStop.textContent = currentRouteLandmark && !frame.save.catalogedLandmarkIds.has(currentRouteLandmark.id)
-      ? `Current stop: ${currentRouteLandmark.title}. Route progress ${completedRouteCount}/${routeLandmarks.length}. Drift through it to stamp the climb, then keep following the river north.`
+      ? `Current stop: ${currentRouteLandmark.title}. Route progress ${completedRouteCount}/${routeLandmarks.length}. Drift through it to stamp the climb, then ${routeCopy}`
       : nextRouteLandmark
-        ? `Next stop: ${nextRouteLandmark.title}. Route progress ${completedRouteCount}/${routeLandmarks.length}. Follow the river north and stay on the marked route.`
+        ? `Next stop: ${nextRouteLandmark.title}. Route progress ${completedRouteCount}/${routeLandmarks.length}. ${routeCopy.charAt(0).toUpperCase() + routeCopy.slice(1)}`
         : `Route complete. Mossu has already mapped the whole climb to the shrine with ${characterData.gatheredTotals.gathered} goods tucked away.`;
     this.mapCollectionsSummary.textContent = `${characterData.totals.discovered}/${characterData.totals.total} field notes logged and ${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total} goods gathered so far.`;
     this.mapStamp.textContent = `${characterData.totals.discovered} notes · ${characterData.gatheredTotals.gathered} goods`;

@@ -18,6 +18,7 @@ const ROUTE_IDS = [
   "mistfall-basin",
   "windstep-shelf",
   "ridge-overlook",
+  "skyward-ledge",
   "peak-shrine",
 ] as const;
 

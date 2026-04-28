@@ -24,6 +24,7 @@ export const MAP_ROUTE_IDS = [
   "mistfall-basin",
   "windstep-shelf",
   "ridge-overlook",
+  "skyward-ledge",
   "peak-shrine",
 ] as const;
 
@@ -74,6 +75,7 @@ const MAP_LABEL_LAYOUT: Record<string, { dx: number; dy: number; anchor: MapText
   "mistfall-basin": { dx: 16, dy: 22, anchor: "start" },
   "windstep-shelf": { dx: -18, dy: -18, anchor: "end" },
   "ridge-overlook": { dx: -20, dy: -20, anchor: "end" },
+  "skyward-ledge": { dx: 0, dy: -22, anchor: "middle" },
   "ridge-saddle-landmark": { dx: 18, dy: 24, anchor: "start" },
   "peak-shrine": { dx: 0, dy: -24, anchor: "middle" },
 };

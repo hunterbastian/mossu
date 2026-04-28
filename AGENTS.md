@@ -4,11 +4,16 @@
 - When a model is selectable for Mossu or other multi-step work, prefer **ChatGPT 5.5 High** (GPT-5.5 High).
 - Uses **Cursor** for implementation and **OpenAI Codex** in parallel (e.g. review or second opinion).
 - For transitions between world zones, prefers **wider clearings** and **longer mixed transition bands** between biomes (so changes feel like travel, not a sharp line on the heightfield); when feature priority is unclear, optimize for **visual quality** (“as long as it looks good”).
+- When **background subagent** work hits **usage/API limits**, prefer **narrow parallel passes** (e.g. water-only vs. island-only) over one large combined task.
 
 ## Learned Workspace Facts
 
 - Mossu’s repo on disk is **`/Users/hunterbastian/Desktop/mossu`** (Vite + Three.js + TypeScript); agent chats tied to other workspace roots still refer to this tree for game work.
 - `npm run qa` runs contract tests and the production Vite build—use it as the bar before treating changes as shippable.
+- In **`waterSystem.ts`**, the **underfill** mesh must apply the **same vertex wave displacement** as the main water surface (shared time/ripple/flow uniforms + matching `onBeforeCompile` logic); a **static Y offset** on shared geometry alone leaves **gaps** where terrain shows through the water.
+- The instant title shell’s loading copy expects a **`[data-loading-status]`** node in **`index.html`**—keep it aligned with **`setLoadingStatus`** in **`main.ts`**.
+- **`?qaDebug=1`** exposes **`window.mossuDebug.applySaveState`** for QA save/position replays; **`npm run perf:guard`** runs the FPS guard via **`scripts/perfGuard.mjs`**.
+- Heavy **grass / tree / decor** setup in **`WorldRenderer`** can be **staged** through a **`startupContentQueue`** (per-frame and/or idle) to reduce synchronous constructor cost; keep ordering coherent with deferred world slices (e.g. clouds) so nothing double-runs.
 - **`?e2e=1`** on the game URL uses a small `render_game_to_text` payload and keeps **Playwright / headless** reliable; **`window.__MOSSU_E2E__`** exposes `{ ready, mode }` after the first frame post-`start()`. Prefer `npm run test:e2e:smoke` for the browser smoke tests.
 - Visual, shader, and interaction validation should be checked in a **real desktop browser**, not only headless or embedded automation.
 - Focused playtesting can follow `docs/PLAYTEST_CHECKLIST.md` (e.g. a walk from Burrow to Moss Crown).
