@@ -27,7 +27,8 @@ Add query parameters to the dev or built URL (e.g. `http://localhost:5173/?perfD
 
 | Flag | Purpose |
 |------|---------|
-| **`perfDebug=1`** | On-screen overlay: frame time, pixel ratio, bloom on/off, renderer draw counts, grass LOD / instancing stats, water surfaces, etc. Use on **real desktop hardware**; headless runs are not a substitute for how grass/water/overdraw feel. |
+| **`perfHud=1`** | Compact in-game perf HUD for real-browser visual passes: FPS/frame time/p95, pixel ratio, bloom, renderer calls/triangles, grass LOD, and water/shader counts. `Shift+P` hides it, and `Shift+C` writes a snapshot to `window.__MOSSU_PERF_CAPTURE__`, the console, and the clipboard when allowed. |
+| **`perfDebug=1`** | Detailed on-screen overlay: frame time, pixel ratio, bloom on/off, renderer draw counts, grass LOD / instancing stats, water surfaces, etc. Use on **real desktop hardware**; headless runs are not a substitute for how grass/water/overdraw feel. |
 | **`cameraDebug=1`** | Camera profile, distance, polar angle, player position, river edge samples. |
 | **`qaDebug=1`** | Exposes `window.mossuDebug` (opening skip, teleport helpers) for automated QA. |
 | **`spiritCloseup=1`** | Debug framing for the spirit / closeup rig (passed into `WorldRenderer`). |
@@ -40,7 +41,7 @@ Add query parameters to the dev or built URL (e.g. `http://localhost:5173/?perfD
 
 - **WebGPU** (`three/webgpu`) is optional. Initialization can fail on drivers or policies; the app falls back to **WebGL2** and records a reason in perf/debug output when that happens.
 - **Bloom** is intentionally mild (single `UnrealBloomPass`). On WebGPU builds, postprocessing is not wired through the same composer path today.
-- **Desktop-first performance**: validate grass instancing, water, and draw calls with `perfDebug` and GPU tools; dynamic resolution adjusts pixel ratio from frame time when not in `quality=low` mode.
+- **Desktop-first performance**: validate grass instancing, water, and draw calls with `perfHud`/`perfDebug` and GPU tools; dynamic resolution adjusts pixel ratio from frame time when not in `quality=low` mode. `npm run perf:guard` remains the repeatable FPS gate; the HUD/capture path is for manual renderer checks beside that script.
 
 ## Related docs
 

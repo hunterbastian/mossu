@@ -80,6 +80,9 @@ Use this after major game changes. Start with `npm run build`, then run the game
 ## Full Route
 
 - Start at Burrow Hollow and reach Moss Crown Shrine in Chrome without teleporting.
+- Automated guard: run `npm run perf:guard` after visual/world-density changes. It builds the production bundle, opens headed Chrome, replays the Burrow-to-Moss-Crown route through many small QA positions, captures per-checkpoint screenshots under `output/perf-guard/route/`, and writes the pass/fail JSON to `output/perf-guard/latest.json`.
+- Route guard must pass the full budget: all route checkpoints reached, all route landmark stamps logged, average FPS >= 24, p95 frame time <= 85ms, every checkpoint average FPS >= 20, every checkpoint p95 <= 110ms, and nonblank/contrast/chroma screenshot checks must stay above the fixture thresholds.
+- If comparing a known-good visual baseline, run `node scripts/perfGuard.mjs --headed --browser=chrome --baseline=output/perf-guard/latest.json --output=output/perf-guard/candidate.json` after a fresh build, then inspect the checkpoint deltas and screenshots before replacing the baseline.
 - Record every stuck spot, confusing side bank, unreadable creek crossing, camera collision, and Karu-following failure.
 - At each landmark, check that the next intended route still reads from the terrain shape, water edge, tree framing, and HUD/map language.
 - Capture at least one screenshot from the opening meadow, opening lake shore, river bend/creek shore, forest edge, highland creek/waterfall, and shrine approach.
@@ -124,7 +127,7 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Opening map/inventory/pause does not hitch heavily.
 - Dynamic pixel ratio does not visibly blur the game too much.
 - No runaway memory or repeated console warnings after a few minutes.
-- With `?perfDebug=1`, track renderer calls, triangles, active grass instances, water surfaces, and small-prop meshes/instances after any world-density pass.
+- With `?perfHud=1`, track FPS/p95 frame time, pixel ratio, bloom, renderer calls, triangles, active grass instances, and water surfaces after any world-density pass. Use `?perfDebug=1` when you need the full world-count dump.
 
 ## Regression Notes
 
@@ -139,5 +142,5 @@ Record any bug with:
 Useful debug URL:
 
 ```text
-http://127.0.0.1:4193/?cameraDebug=1&perfDebug=1
+http://127.0.0.1:4193/?cameraDebug=1&perfHud=1
 ```

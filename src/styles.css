@@ -110,6 +110,23 @@ canvas.is-pointer-locked {
   min-width: 19rem;
 }
 
+.perf-debug--compact {
+  top: 1rem;
+  min-width: 15.5rem;
+  max-width: min(18rem, calc(100vw - 2rem));
+  padding: 0.62rem 0.72rem;
+  border-radius: 0.65rem;
+  background:
+    linear-gradient(180deg, rgba(248, 254, 255, 0.82), rgba(224, 249, 255, 0.66)),
+    rgba(237, 252, 255, 0.7);
+  font-size: 0.64rem;
+  line-height: 1.38;
+}
+
+.perf-debug--hidden {
+  display: none;
+}
+
 .hud-flavor-ping {
   position: fixed;
   left: 50%;

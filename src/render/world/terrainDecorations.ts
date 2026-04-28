@@ -102,24 +102,43 @@ function sampleForestComposition(x: number, z: number, y: number): ForestComposi
     Math.exp(-(((x + 72) / 62) ** 2) - (((z - 126) / 70) ** 2)),
     Math.exp(-(((x - 76) / 58) ** 2) - (((z - 146) / 72) ** 2)),
   );
-  const routeClearing = Math.exp(-((x / 34) ** 2)) * MathUtils.smoothstep(z, -28, 186) * (1 - MathUtils.smoothstep(z, 204, 230));
+  const routeClearing = Math.exp(-((x / 40) ** 2)) * MathUtils.smoothstep(z, -36, 198) * (1 - MathUtils.smoothstep(z, 212, 238));
   const routeReadability = sampleRouteReadabilityClearing(x, z);
   // Tight band on the main approach so ridge / shrine silhouettes stay visible from the path (not a wide deforest).
   const alpineRouteVista =
-    Math.exp(-((x / 26) ** 2)) * MathUtils.smoothstep(z, 96, 188) * (1 - MathUtils.smoothstep(z, 198, 218));
+    Math.exp(-((x / 38) ** 2)) * MathUtils.smoothstep(z, 88, 198) * (1 - MathUtils.smoothstep(z, 208, 224));
+  const overlookOpen = Math.max(
+    Math.exp(-(((x + 24) / 42) ** 2) - (((z - 168) / 32) ** 2)),
+    Math.exp(-(((x - 6) / 46) ** 2) - (((z - 180) / 36) ** 2)),
+  );
   const startClearing = Math.exp(-(((x + 44) / 52) ** 2) - (((z + 132) / 44) ** 2));
   const waterClearing = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
   const altitudeEdge = MathUtils.smoothstep(y, 44, 132);
   const edge = MathUtils.clamp(
-    Math.abs(broadPatch - 0.52) * 2.2 + routeClearing * 0.42 + altitudeEdge * 0.18,
+    Math.abs(broadPatch - 0.52) * 2.2 + routeClearing * 0.4 + altitudeEdge * 0.18 + overlookOpen * 0.24,
     0,
     1,
   );
 
   return {
-    patch: MathUtils.clamp((broadPatch - 0.34) * 1.75 + localBreakup * 0.38 + grovePulse * 0.62 + habitat.forest * 0.46 - routeReadability * 0.46, 0, 1),
+    patch: MathUtils.clamp(
+      (broadPatch - 0.34) * 1.75 +
+      localBreakup * 0.38 +
+      grovePulse * 0.62 +
+      habitat.forest * 0.46 -
+      routeReadability * 0.46 -
+      overlookOpen * 0.22,
+      0,
+      1,
+    ),
     clearing: MathUtils.clamp(
-      routeClearing * 0.88 + routeReadability * 0.78 + startClearing * 0.95 + waterClearing * 0.74 + habitat.clearing * 0.52 + alpineRouteVista * 0.62,
+      routeClearing * 0.88 +
+      routeReadability * 0.78 +
+      startClearing * 0.95 +
+      waterClearing * 0.74 +
+      habitat.clearing * 0.52 +
+      alpineRouteVista * 0.62 +
+      overlookOpen * 0.52,
       0,
       1,
     ),
@@ -276,21 +295,21 @@ function sampleInstancedTreeDensity(kind: InstancedForestKind, x: number, z: num
 
   if (kind === "round") {
     // alpine gets a low crossfade density that tapers with altitude so round trees thin out gracefully
-    const alpineFade = zone === "alpine" ? MathUtils.clamp(1 - MathUtils.smoothstep(y, 82, 112), 0, 1) * 0.1 : 0;
+    const alpineFade = zone === "alpine" ? MathUtils.clamp(1 - MathUtils.smoothstep(y, 84, 118), 0, 1) * 0.16 : 0;
     const biomeDensity =
       zone === "plains" ? 0.13 :
-      zone === "hills" ? 0.34 :
-      zone === "foothills" ? 0.32 :
+      zone === "hills" ? 0.3 :
+      zone === "foothills" ? 0.28 :
       alpineFade;
     return (biomeDensity + edgeBoost) * waterFade * forestEnvelope * clumpGate * clearingFade * (1 - habitat.meadow * 0.5) * (1 - routeReadability * 0.72);
   }
 
   // pines get a sparse plains/hills fringe density so the lowland edge crossfades rather than hard-cuts
-  const lowlandPineFade = (zone === "plains" || zone === "hills") ? MathUtils.clamp(firApproach * 0.12, 0, 0.08) : 0;
+  const lowlandPineFade = (zone === "plains" || zone === "hills") ? MathUtils.clamp(firApproach * 0.16, 0, 0.1) : 0;
   const biomeDensity =
-    zone === "hills" ? 0.1 :
-    zone === "foothills" ? 0.56 :
-    zone === "alpine" ? 0.72 :
+    zone === "hills" ? 0.14 :
+    zone === "foothills" ? 0.5 :
+    zone === "alpine" ? 0.68 :
     zone === "ridge" ? 0.5 :
     lowlandPineFade;
   return (biomeDensity + edgeBoost) * waterFade * MathUtils.clamp(forestEnvelope + firApproach * 0.34, 0, 1) * clumpGate * clearingFade * (1 - habitat.meadow * 0.42) * (1 - routeReadability * 0.68);
@@ -1714,14 +1733,19 @@ export function buildGroundLayer() {
 
   scenicPockets.forEach((pocket) => {
     const isStartPocket = pocket.id === "start-meadow";
-    const isUpperRoutePocket = pocket.id === "mistfall-basin" || pocket.id === "windstep-shelf" || pocket.id === "ridge-crossing";
+    const isUpperRoutePocket =
+      pocket.id === "mistfall-basin" ||
+      pocket.id === "windstep-shelf" ||
+      pocket.id === "cloudback-overlook" ||
+      pocket.id === "skyward-ledge-rim" ||
+      pocket.id === "ridge-crossing";
     const clusterCount =
       isStartPocket ? 10 :
       pocket.zone === "plains" ? 5 :
       pocket.zone === "hills" ? 4 :
       pocket.zone === "foothills" ? (pocket.id === "fir-gate-entry" ? 3 : 2) :
-      pocket.zone === "alpine" ? (pocket.kind === "stream_bend" || isUpperRoutePocket ? 1 : 0) :
-      pocket.zone === "ridge" ? (isUpperRoutePocket ? 1 : 0) :
+      pocket.zone === "alpine" ? (pocket.kind === "stream_bend" || isUpperRoutePocket ? 2 : 0) :
+      pocket.zone === "ridge" ? (isUpperRoutePocket ? 2 : 0) :
       0;
     const cloverCount =
       isStartPocket ? 7 :
@@ -1764,7 +1788,7 @@ export function buildGroundLayer() {
       isStartPocket ? 6 :
       pocket.zone === "foothills" ? 3 :
       pocket.zone === "alpine" ? 2 :
-      pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? 2 :
+      pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? (isUpperRoutePocket ? 3 : 2) :
       3;
     for (let i = 0; i < grassPatchCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, 50 + i, 0.82);
@@ -1782,8 +1806,8 @@ export function buildGroundLayer() {
     const rockCount =
       isStartPocket ? 1 :
       pocket.zone === "foothills" ? 5 :
-      pocket.zone === "alpine" ? 7 :
-      pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? 7 :
+      pocket.zone === "alpine" ? (isUpperRoutePocket ? 9 : 7) :
+      pocket.zone === "ridge" || pocket.zone === "peak_shrine" ? (isUpperRoutePocket ? 9 : 7) :
       3;
     for (let i = 0; i < rockCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, 70 + i, 0.88);
@@ -1818,13 +1842,18 @@ export function buildMidLayer() {
 
   scenicPockets.forEach((pocket) => {
     const isStartPocket = pocket.id === "start-meadow";
+    const isUpperRoutePocket =
+      pocket.id === "windstep-shelf" ||
+      pocket.id === "cloudback-overlook" ||
+      pocket.id === "skyward-ledge-rim" ||
+      pocket.id === "ridge-crossing";
     const bushCount =
       isStartPocket ? 1 :
       pocket.zone === "plains" ? 2 :
       pocket.zone === "hills" ? 3 :
       pocket.zone === "foothills" ? (pocket.id === "fir-gate-entry" ? 5 : 4) :
       pocket.zone === "alpine" ? 2 :
-      pocket.zone === "ridge" ? 1 :
+      pocket.zone === "ridge" ? (isUpperRoutePocket ? 2 : 1) :
       1;
     for (let i = 0; i < bushCount; i += 1) {
       const { x, z } = scatterAroundPocket(pocket, 100 + i, 0.82);
@@ -1859,7 +1888,7 @@ export function buildMidLayer() {
         isStartPocket ? 0 :
         pocket.id === "fir-gate-entry" ? 2 :
         pocket.zone === "foothills" ? 1 :
-        pocket.zone === "alpine" || pocket.zone === "ridge" ? 1 :
+        pocket.zone === "alpine" || pocket.zone === "ridge" ? (isUpperRoutePocket ? 2 : 1) :
         0;
       for (let i = 0; i < saplingCount; i += 1) {
         const { x, z } = scatterAroundPocket(pocket, 140 + i, 0.9);
@@ -2849,7 +2878,12 @@ export function buildHighlandAccents() {
   scenicPockets
     .filter((pocket) => pocket.zone === "foothills" || pocket.zone === "alpine" || pocket.zone === "ridge" || pocket.zone === "peak_shrine")
     .forEach((pocket, pocketIndex) => {
+      const isHeroOverlook =
+        pocket.id === "windstep-shelf" ||
+        pocket.id === "cloudback-overlook" ||
+        pocket.id === "skyward-ledge-rim";
       const formationCount =
+        isHeroOverlook ? 5 :
         pocket.zone === "foothills" ? 2 :
         pocket.zone === "alpine" ? 3 :
         pocket.zone === "ridge" ? 3 :
@@ -2866,7 +2900,7 @@ export function buildHighlandAccents() {
         group.add(rock);
       }
 
-      const mossCount = pocket.zone === "foothills" ? 2 : 3;
+      const mossCount = isHeroOverlook ? 4 : pocket.zone === "foothills" ? 2 : 3;
       for (let i = 0; i < mossCount; i += 1) {
         const { x, z } = scatterAroundPocket(pocket, 380 + pocketIndex * 20 + i, 0.76);
         const y = sampleTerrainHeight(x, z);
@@ -2879,7 +2913,7 @@ export function buildHighlandAccents() {
       }
 
       if (pocket.zone !== "peak_shrine") {
-        const pineCount = pocket.zone === "foothills" ? 2 : 3;
+        const pineCount = isHeroOverlook ? 4 : pocket.zone === "foothills" ? 2 : 3;
         for (let i = 0; i < pineCount; i += 1) {
           const { x, z } = scatterAroundPocket(pocket, 430 + pocketIndex * 20 + i, 0.98);
           const y = sampleTerrainHeight(x, z);
@@ -2924,6 +2958,76 @@ export function buildHighlandAccents() {
           );
           rock.rotation.y = xOffset * 0.08 + zOffset * 0.04;
           group.add(rock);
+        }
+        for (const [xOffset, zOffset, scale] of [[-12, 4, 1.28], [11, 7, 1.18]] as const) {
+          const pine = makePineTree(scale, "#526c47");
+          pine.position.set(
+            pocket.position.x + xOffset,
+            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
+            pocket.position.z + zOffset,
+          );
+          pine.rotation.y = xOffset * 0.06;
+          group.add(pine);
+        }
+      }
+
+      if (pocket.id === "cloudback-overlook") {
+        for (const [xOffset, zOffset, scale] of [[-10, -3, 1.58], [10, 1, 1.44], [0, 8, 1.28]] as const) {
+          const rock = makeRockFormation(scale, "#a7a396");
+          rock.position.set(
+            pocket.position.x + xOffset,
+            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
+            pocket.position.z + zOffset,
+          );
+          rock.rotation.y = xOffset * 0.06 + zOffset * 0.04;
+          group.add(rock);
+        }
+        for (const [xOffset, zOffset, scale] of [[-14, 6, 1.16], [13, 8, 1.1]] as const) {
+          const pine = makePineTree(scale, "#4e6643");
+          pine.position.set(
+            pocket.position.x + xOffset,
+            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
+            pocket.position.z + zOffset,
+          );
+          pine.rotation.y = xOffset * 0.05;
+          group.add(pine);
+        }
+      }
+
+      if (pocket.id === "skyward-ledge-rim") {
+        for (const [xOffset, zOffset, scale, tone] of [
+          [-12, -2, 1.66, "#a9a59a"],
+          [12, 0, 1.58, "#a7a396"],
+          [0, 10, 1.36, "#b1aca0"],
+        ] as const) {
+          const rock = makeRockFormation(scale, tone);
+          rock.position.set(
+            pocket.position.x + xOffset,
+            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
+            pocket.position.z + zOffset,
+          );
+          rock.rotation.y = xOffset * 0.05 + zOffset * 0.03;
+          group.add(rock);
+        }
+        for (const [xOffset, zOffset, scale] of [[-15, 8, 1.14], [15, 10, 1.18], [0, 14, 1.04]] as const) {
+          const pine = makePineTree(scale, "#4d6542");
+          pine.position.set(
+            pocket.position.x + xOffset,
+            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
+            pocket.position.z + zOffset,
+          );
+          pine.rotation.y = xOffset * 0.04;
+          group.add(pine);
+        }
+        for (const [xOffset, zOffset, scale, yaw] of [[-7, 3, 1.06, -0.2], [7, 4, 1.02, 0.18]] as const) {
+          const shadow = makeCanopyShadowPatch(scale, "#4a5543", 0.14);
+          shadow.position.set(
+            pocket.position.x + xOffset,
+            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset) + 0.028,
+            pocket.position.z + zOffset,
+          );
+          shadow.rotation.y = yaw;
+          group.add(shadow);
         }
       }
 

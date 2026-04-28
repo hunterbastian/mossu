@@ -16,7 +16,7 @@ import type { AbilityId } from "../../simulation/world";
 import { ViewMode } from "../../simulation/viewMode";
 import { AmbientWaterAudio } from "./AmbientWaterAudio";
 import { CharacterPreview } from "./CharacterPreview";
-import { FollowCamera } from "./FollowCamera";
+import { DebugRouteCameraOptions, FollowCamera } from "./FollowCamera";
 import { HudShell } from "./HudShell";
 import { InterfaceAudio, isButtonLikeUiTarget } from "./InterfaceAudio";
 import { MovementAudio } from "./MovementAudio";
@@ -37,6 +37,9 @@ const BLOOM_THRESHOLD = 0.82;
 const BLOOM_MIN_PIXEL_RATIO = 0.74;
 const OPENING_SEQUENCE_SECONDS = 4.8;
 const OPENING_SEQUENCE_SKIP_AFTER_SECONDS = 1.05;
+const PERF_HUD_SAMPLE_LIMIT = 240;
+const PERF_HUD_UPDATE_MS = 250;
+const PERF_CAPTURE_FLASH_MS = 2200;
 
 type RequestedRendererBackend = "webgl" | "webgpu" | "auto";
 type ActiveRendererBackend = "webgl" | "webgpu" | "webgpu-webgl2";
@@ -153,6 +156,16 @@ function isWebGlRenderer(renderer: GameRenderer): renderer is WebGLRenderer {
   return renderer instanceof WebGLRenderer;
 }
 
+function formatPerfNumber(value: number) {
+  if (value >= 1_000_000) {
+    return `${Number((value / 1_000_000).toFixed(2))}M`;
+  }
+  if (value >= 10_000) {
+    return `${Number((value / 1_000).toFixed(1))}k`;
+  }
+  return `${value}`;
+}
+
 export class GameApp {
   private readonly renderer: GameRenderer;
   private composer: EffectComposer | null = null;
@@ -197,10 +210,17 @@ export class GameApp {
   private qualitySampleFrameMs = 1000 / 60;
   private readonly cameraDebugEnabled: boolean;
   private readonly perfDebugEnabled: boolean;
+  private readonly perfHudCompact: boolean;
   /** `?e2e=1` — small render_game_to_text for Playwright (avoids heavy sync snapshot on main thread). */
   private readonly e2eMinimal: boolean;
   private cameraDebugPanel: HTMLDivElement | null = null;
   private perfDebugPanel: HTMLDivElement | null = null;
+  private perfDebugVisible = true;
+  private perfPanelLastUpdatedAt = 0;
+  private perfFrameSamples: number[] = [];
+  private perfFrameSampleIndex = 0;
+  private perfCaptureLatest: { capturedAt: string; route: string; performance: ReturnType<GameApp["getPerformanceSnapshot"]> } | null = null;
+  private perfCaptureFlashUntil = 0;
   private faunaRegroupReady = true;
   private mapFocusedRouteIndex = -1;
   private mapDragPointerId: number | null = null;
@@ -226,7 +246,8 @@ export class GameApp {
   ) {
     const debugSpiritCloseup = params.has("spiritCloseup");
     this.cameraDebugEnabled = params.has("cameraDebug");
-    this.perfDebugEnabled = params.has("perfDebug");
+    this.perfDebugEnabled = params.has("perfDebug") || params.has("perfHud");
+    this.perfHudCompact = params.has("perfHud");
     this.e2eMinimal = params.has("e2e");
     this.qualityLow = isLowQuality(params);
     const pixelCap = this.qualityLow ? 0.85 : 1.1;
@@ -270,11 +291,13 @@ export class GameApp {
     if (this.perfDebugEnabled) {
       this.perfDebugPanel = document.createElement("div");
       this.perfDebugPanel.className = "perf-debug";
+      this.perfDebugPanel.classList.toggle("perf-debug--compact", this.perfHudCompact);
       this.container.appendChild(this.perfDebugPanel);
     }
 
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("keydown", this.handleTitleKeyDown);
+    window.addEventListener("keydown", this.handlePerfHotkeys);
     window.addEventListener("wheel", this.handleMapWheel, { passive: false });
     window.addEventListener("pointermove", this.handleMapPointerMove);
     window.addEventListener("pointerup", this.handleMapPointerUp);
@@ -292,6 +315,10 @@ export class GameApp {
 
   start() {
     this.clock.start();
+    if (this.e2eMinimal) {
+      return;
+    }
+
     this.schedulePostProcessingInit();
     const loop = () => {
       const rawDt = Math.min(0.1, this.clock.getDelta());
@@ -310,6 +337,7 @@ export class GameApp {
     window.cancelAnimationFrame(this.raf);
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.handleTitleKeyDown);
+    window.removeEventListener("keydown", this.handlePerfHotkeys);
     window.removeEventListener("wheel", this.handleMapWheel);
     window.removeEventListener("pointermove", this.handleMapPointerMove);
     window.removeEventListener("pointerup", this.handleMapPointerUp);
@@ -387,8 +415,10 @@ export class GameApp {
     const dt = 1 / 60;
     const steps = Math.max(1, Math.round(ms / (dt * 1000)));
     for (let i = 0; i < steps; i += 1) {
+      this.trackFrameTiming(dt);
       this.elapsed += dt;
-      this.tick(dt, this.elapsed);
+      this.tick(dt, this.elapsed, !this.e2eMinimal);
+      this.updateRenderQuality(dt);
     }
   }
 
@@ -409,6 +439,15 @@ export class GameApp {
     player.fallingToVoid = false;
     this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
     this.syncHud();
+  }
+
+  debugFaceRouteHeading(heading: number, cameraOptions?: DebugRouteCameraOptions) {
+    if (!Number.isFinite(heading)) {
+      return;
+    }
+    const player = this.state.frame.player;
+    player.heading = heading;
+    this.followCamera.debugSnapToPlayerHeading(player, heading, cameraOptions);
   }
 
   debugApplySaveState(payload: DebugSaveStatePayload) {
@@ -466,6 +505,7 @@ export class GameApp {
           x: Number(frame.player.position.x.toFixed(1)),
           y: Number(frame.player.position.y.toFixed(1)),
           z: Number(frame.player.position.z.toFixed(1)),
+          heading: Number(frame.player.heading.toFixed(3)),
           swimming: frame.player.swimming,
         },
         zone: frame.currentZone,
@@ -510,9 +550,20 @@ export class GameApp {
         grounded: frame.player.grounded,
         swimming: frame.player.swimming,
         waterDepth: Number(frame.player.waterDepth.toFixed(1)),
+        heading: Number(frame.player.heading.toFixed(3)),
+        velocity: {
+          x: Number(frame.player.velocity.x.toFixed(2)),
+          y: Number(frame.player.velocity.y.toFixed(2)),
+          z: Number(frame.player.velocity.z.toFixed(2)),
+        },
       },
       zone: frame.currentZone,
       landmark: frame.currentLandmark,
+      save: {
+        unlockedAbilities: [...frame.save.unlockedAbilities],
+        catalogedLandmarkIds: [...frame.save.catalogedLandmarkIds],
+        gatheredForageableIds: [...frame.save.gatheredForageableIds],
+      },
       characterScreen: {
         stats: characterData.stats.map((stat) => ({ label: stat.label, value: stat.value })),
         upgrades: {
@@ -562,7 +613,7 @@ export class GameApp {
     });
   }
 
-  private tick(dt: number, elapsed: number) {
+  private tick(dt: number, elapsed: number, renderFrame = true) {
     const input = this.input.sample();
     let faunaRecruitPressed = false;
     let faunaRegroupPressed = false;
@@ -670,8 +721,10 @@ export class GameApp {
     );
     this.characterPreview.update(dt, this.characterScreenOpen);
     this.syncHudForFrame(dt);
-    this.renderScene();
-    this.updateDebugPanels();
+    if (renderFrame) {
+      this.renderScene();
+      this.updateDebugPanels();
+    }
   }
 
   private updateMovementAudio(dt: number) {
@@ -811,6 +864,7 @@ export class GameApp {
   private trackFrameTiming(rawDt: number) {
     this.latestFrameMs = Math.max(0.1, rawDt * 1000);
     this.smoothedFrameMs += (this.latestFrameMs - this.smoothedFrameMs) * 0.1;
+    this.recordPerfFrameSample(this.latestFrameMs);
   }
 
   private updateDebugPanels() {
@@ -843,6 +897,8 @@ export class GameApp {
       fps: Number((1000 / Math.max(0.1, this.smoothedFrameMs)).toFixed(1)),
       frameMs: Number(this.smoothedFrameMs.toFixed(2)),
       latestFrameMs: Number(this.latestFrameMs.toFixed(2)),
+      rollingP95FrameMs: Number(this.getPerfFramePercentile(0.95).toFixed(2)),
+      rollingSampleCount: this.perfFrameSamples.length,
       qualitySampleFrameMs: Number(this.qualitySampleFrameMs.toFixed(2)),
       pixelRatio: Number(this.activePixelRatio.toFixed(2)),
       maxPixelRatio: Number(this.maxPixelRatio.toFixed(2)),
@@ -873,9 +929,37 @@ export class GameApp {
       return;
     }
 
+    this.perfDebugPanel.classList.toggle("perf-debug--hidden", !this.perfDebugVisible);
+    if (!this.perfDebugVisible) {
+      return;
+    }
+
+    const now = performance.now();
+    if (now - this.perfPanelLastUpdatedAt < PERF_HUD_UPDATE_MS) {
+      return;
+    }
+    this.perfPanelLastUpdatedAt = now;
+
     const perf = this.getPerformanceSnapshot();
+    if (this.perfHudCompact) {
+      const captureState =
+        this.perfCaptureLatest && now < this.perfCaptureFlashUntil
+          ? `capture ${new Date(this.perfCaptureLatest.capturedAt).toLocaleTimeString()}`
+          : "capture idle";
+      this.perfDebugPanel.textContent = [
+        "Mossu perf",
+        `${perf.fps}fps  avg ${perf.frameMs}ms  p95 ${perf.rollingP95FrameMs}ms  last ${perf.latestFrameMs}ms`,
+        `pixel ${perf.pixelRatio}  bloom ${perf.bloomEnabled ? "on" : "off"}  ${perf.activeBackend}`,
+        `draw ${formatPerfNumber(perf.renderer.calls)} calls  ${formatPerfNumber(perf.renderer.triangles)} tris`,
+        `grass ${formatPerfNumber(perf.world.grassInstances)} inst  lod ${perf.world.grassLodVisitedCells}/${perf.world.grassLodCells} cells`,
+        `water ${perf.world.waterSurfaces} surfaces  shaders ${perf.world.animatedShaderMeshes}`,
+        captureState,
+      ].join("\n");
+      return;
+    }
+
     this.perfDebugPanel.textContent = [
-      `perf ${perf.fps}fps  avg ${perf.frameMs}ms  raw ${perf.latestFrameMs}ms`,
+      `perf ${perf.fps}fps  avg ${perf.frameMs}ms  p95 ${perf.rollingP95FrameMs}ms  raw ${perf.latestFrameMs}ms`,
       `quality avg ${perf.qualitySampleFrameMs}ms  pixelRatio ${perf.pixelRatio} (${perf.minPixelRatio}-${perf.maxPixelRatio})  bloom ${perf.bloomEnabled ? "on" : "off"}  lowQuality ${this.qualityLow ? "yes" : "no"}  mapZoom ${perf.mapZoom.toFixed(2)}`,
       `backend ${perf.activeBackend}  requested ${perf.requestedBackend}  webgpu ${perf.webGpuAvailable ? "available" : "unavailable"}${perf.rendererFallbackReason ? `  fallback ${perf.rendererFallbackReason}` : ""}`,
       `renderer calls ${perf.renderer.calls}  tris ${perf.renderer.triangles}  lines ${perf.renderer.lines}  points ${perf.renderer.points}`,
@@ -891,10 +975,64 @@ export class GameApp {
     ].join("\n");
   }
 
+  private recordPerfFrameSample(frameMs: number) {
+    if (this.perfFrameSamples.length < PERF_HUD_SAMPLE_LIMIT) {
+      this.perfFrameSamples.push(frameMs);
+      return;
+    }
+    this.perfFrameSamples[this.perfFrameSampleIndex] = frameMs;
+    this.perfFrameSampleIndex = (this.perfFrameSampleIndex + 1) % PERF_HUD_SAMPLE_LIMIT;
+  }
+
+  private getPerfFramePercentile(percentile: number) {
+    if (this.perfFrameSamples.length === 0) {
+      return this.latestFrameMs;
+    }
+    const sorted = [...this.perfFrameSamples].sort((a, b) => a - b);
+    const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentile) - 1));
+    return sorted[index];
+  }
+
+  private capturePerfSnapshot() {
+    if (!this.perfDebugPanel) {
+      return;
+    }
+
+    const capture = {
+      capturedAt: new Date().toISOString(),
+      route: `${window.location.pathname}${window.location.search}`,
+      performance: this.getPerformanceSnapshot(),
+    };
+    this.perfCaptureLatest = capture;
+    this.perfCaptureFlashUntil = performance.now() + PERF_CAPTURE_FLASH_MS;
+    this.perfPanelLastUpdatedAt = 0;
+    (window as Window & { __MOSSU_PERF_CAPTURE__?: typeof capture }).__MOSSU_PERF_CAPTURE__ = capture;
+    console.info("Mossu perf capture", capture);
+    navigator.clipboard?.writeText(JSON.stringify(capture, null, 2)).catch(() => undefined);
+  }
+
   private handleResize = () => {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.composer?.setSize(window.innerWidth, window.innerHeight);
     this.followCamera.resize(window.innerWidth, window.innerHeight);
+  };
+
+  private handlePerfHotkeys = (event: KeyboardEvent) => {
+    if (!this.perfDebugPanel || event.repeat || !event.shiftKey) {
+      return;
+    }
+
+    if (event.code === "KeyP") {
+      event.preventDefault();
+      this.perfDebugVisible = !this.perfDebugVisible;
+      this.perfPanelLastUpdatedAt = 0;
+      return;
+    }
+
+    if (event.code === "KeyC") {
+      event.preventDefault();
+      this.capturePerfSnapshot();
+    }
   };
 
   private handleMapWheel = (event: WheelEvent) => {

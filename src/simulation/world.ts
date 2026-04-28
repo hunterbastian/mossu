@@ -755,40 +755,42 @@ const ROUTE_TERRACE_SEGMENTS = [
   [-44, -134, -4, -38, 25, 0.44],
   [-4, -38, riverCenter(24), 24, 29, 0.5],
   [riverCenter(24), 24, 24, 88, 32, 0.64],
-  [24, 88, 20, 108, 34, 0.76],
-  [20, 108, 42, 134, 36, 0.72],
-  [42, 134, 10, 154, 38, 0.68],
-  [10, 154, -26, 168, 40, 0.56],
-  [-26, 168, 6, 178, 40, 1.02],
-  [6, 178, 16, 186, 34, 0.58],
-  [16, 186, 2, 214, 44, 0.42],
+  [24, 88, 20, 108, 38, 0.76],
+  [20, 108, 42, 134, 42, 0.72],
+  [42, 134, 10, 154, 44, 0.68],
+  [10, 154, -26, 168, 46, 0.56],
+  [-26, 168, 6, 178, 50, 1.02],
+  [6, 178, 16, 186, 46, 0.62],
+  [16, 186, 2, 214, 54, 0.42],
 ] as const;
 
 /** Radial “pocket” glades; radii also rise with z so grass clearings read wider zone-to-zone. */
 const PAINTED_GROUND_CLEARINGS = [
   [-44, -134, 28, 0.48],
   [-4, -38, 32, 0.42],
-  [24, 88, 38, 0.42],
-  [20, 108, 39, 0.38],
-  [42, 134, 38, 0.36],
-  [10, 154, 40, 0.34],
-  [-26, 168, 42, 0.32],
-  [6, 178, 44, 0.34],
-  [16, 186, 44, 0.32],
-  [2, 214, 44, 0.34],
+  [24, 88, 42, 0.44],
+  [20, 108, 44, 0.42],
+  [42, 134, 46, 0.4],
+  [10, 154, 50, 0.38],
+  [-26, 168, 52, 0.36],
+  [6, 178, 56, 0.38],
+  [16, 186, 54, 0.36],
+  [2, 214, 52, 0.36],
 ] as const;
 
 const ROUTE_TRANSITION_CLEARINGS = [
   [-4, -38, 48, 0.5],
   [riverCenter(24), 24, 52, 0.58],
-  [24, 88, 52, 0.66],
-  [20, 108, 54, 0.62],
-  [42, 134, 52, 0.56],
-  [10, 154, 52, 0.54],
-  [6, 178, 54, 0.56],
-  [-26, 168, 54, 0.54],
-  [16, 186, 54, 0.56],
-  [2, 214, 56, 0.58],
+  [24, 88, 58, 0.7],
+  [20, 108, 62, 0.66],
+  [30, 120, 60, 0.58],
+  [42, 134, 64, 0.62],
+  [10, 154, 66, 0.62],
+  [-8, 166, 64, 0.6],
+  [6, 178, 68, 0.64],
+  [-26, 168, 66, 0.6],
+  [16, 186, 70, 0.64],
+  [2, 214, 68, 0.62],
 ] as const;
 
 function sampleRoutePathInfo(x: number, z: number) {
@@ -1391,13 +1393,16 @@ export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainH
     Math.abs(journey - 0.54),
     Math.abs(journey - 0.88),
   );
-  const biomeTransitionOpen = 1 - smootherStep(0.028, 0.15, distToBiomeTierEdge);
+  const biomeTransitionOpen = 1 - smootherStep(0.022, 0.18, distToBiomeTierEdge);
   const slope = 1 - sampleTerrainNormalInto(_habitatTerrainNormalScratch, x, z).y;
   const route = sampleRoutePathInfo(x, z);
   const routeReadability = sampleRouteReadabilityClearing(x, z);
   const edgeState = sampleRiverEdgeState(x, z);
   const bankShape = sampleWaterBankShape(x, z);
   const pocketMeadow = sampleScenicMeadowMask(x, z);
+  const foothillTravelBand = Math.exp(-(((x - 24) / 86) ** 2) - (((z - 118) / 70) ** 2));
+  const ridgeTravelBand = Math.exp(-(((x + 2) / 102) ** 2) - (((z - 176) / 84) ** 2));
+  const travelTransitionBand = Math.max(foothillTravelBand, ridgeTravelBand);
   const lowlandOpen =
     biome === "plains" ? 0.52 :
     biome === "hills" ? 0.46 :
@@ -1420,7 +1425,8 @@ export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainH
     route.paint * 0.28 +
     route.shoulder * 0.2 +
     routeReadability * 0.16 +
-    biomeTransitionOpen * 0.1 +
+    biomeTransitionOpen * 0.12 +
+    travelTransitionBand * 0.18 +
     lowlandOpen * (0.3 + meadowNoise * 0.18) -
     shore * 0.42 -
     slope * 0.5,
@@ -1441,6 +1447,7 @@ export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainH
   const forest = saturate(
     Math.max(lowlandRim * 0.74, firGate * 0.52, highlandPocket * 0.58, authoredGroves * 0.82) +
     smootherStep(0.46, 0.72, forestNoise) * 0.42 +
+    travelTransitionBand * 0.14 +
     forestBreakup * 0.12 -
     clearing * 0.72 -
     routeReadability * 0.34 -
@@ -1451,6 +1458,8 @@ export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainH
   const edge = saturate(
     (1 - Math.abs(forest - 0.48) * 2.2) * smootherStep(0.18, 0.42, forest) +
     meadow * forest * 0.42 +
+    biomeTransitionOpen * 0.18 +
+    travelTransitionBand * 0.24 +
     route.shoulder * 0.24,
   );
   const zone =
@@ -1915,7 +1924,7 @@ export const scenicPockets: ScenicPocket[] = [
     kind: "stream_bend",
     zone: "alpine",
     position: new Vector3(42, sampleTerrainHeight(42, 134), 134),
-    radius: 16,
+    radius: 20,
   },
   {
     id: "fir-glen-hollow",
@@ -1929,21 +1938,28 @@ export const scenicPockets: ScenicPocket[] = [
     kind: "overlook",
     zone: "alpine",
     position: new Vector3(10, sampleTerrainHeight(10, 154), 154),
-    radius: 18,
+    radius: 22,
   },
   {
     id: "aspen-ledge",
     kind: "overlook",
     zone: "alpine",
     position: new Vector3(-6, sampleTerrainHeight(-6, 160), 160),
-    radius: 16,
+    radius: 18,
   },
   {
     id: "cloudback-overlook",
     kind: "overlook",
     zone: "ridge",
     position: new Vector3(-28, sampleTerrainHeight(-28, 166), 166),
-    radius: 18,
+    radius: 24,
+  },
+  {
+    id: "skyward-ledge-rim",
+    kind: "overlook",
+    zone: "ridge",
+    position: new Vector3(6, sampleTerrainHeight(6, 178), 178),
+    radius: 24,
   },
   {
     id: "ridge-saddle",
@@ -1957,14 +1973,14 @@ export const scenicPockets: ScenicPocket[] = [
     kind: "overlook",
     zone: "ridge",
     position: new Vector3(10, sampleTerrainHeight(10, 194), 194),
-    radius: 16,
+    radius: 22,
   },
   {
     id: "shrine-approach",
     kind: "overlook",
     zone: "peak_shrine",
     position: new Vector3(8, sampleTerrainHeight(8, 208), 208),
-    radius: 14,
+    radius: 18,
   },
 ];
 

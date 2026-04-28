@@ -33,22 +33,7 @@ test.describe("Mossu smoke", () => {
       window.advanceTime?.(500);
     });
 
-    // Yield so rAF can interleave; then read the lightweight e2e snapshot.
-    const text = await page.evaluate(
-      () =>
-        new Promise<string>((resolve, reject) => {
-          const fail = window.setTimeout(() => reject(new Error("render_game_to_text did not return")), 30_000);
-          window.requestAnimationFrame(() => {
-            try {
-              resolve(window.render_game_to_text?.() ?? "");
-            } catch (e) {
-              reject(e);
-            } finally {
-              window.clearTimeout(fail);
-            }
-          });
-        }),
-    );
+    const text = await page.evaluate(() => window.render_game_to_text?.() ?? "");
     expect(text.length).toBeGreaterThan(20);
     const parsed = JSON.parse(text) as { e2e?: boolean; mode?: string };
     expect(parsed.e2e).toBe(true);

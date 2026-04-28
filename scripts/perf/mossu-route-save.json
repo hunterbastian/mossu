@@ -1,6 +1,6 @@
 {
-  "name": "burrow-to-river-roll",
-  "description": "Saved Burrow Hollow route used by perf:guard. Starts from a real game save shape, then walks and rolls through the opening meadow toward the river path.",
+  "name": "burrow-to-moss-crown-route",
+  "description": "Perf guard route for the Burrow Hollow to Moss Crown Shrine playtest walk. It starts from a real Burrow save shape, drives the route through each visual anchor, captures checkpoints, and fails on missed route stamps or visual/perf budget regressions.",
   "viewport": {
     "width": 1440,
     "height": 900
@@ -11,43 +11,220 @@
   },
   "save": {
     "player": {
-      "x": 0,
-      "z": -24,
+      "x": -58,
+      "z": -158,
       "heading": 0
     },
     "save": {
-      "unlockedAbilities": ["breeze_float"],
+      "unlockedAbilities": [
+        "breeze_float"
+      ],
       "catalogedLandmarkIds": [],
       "gatheredForageableIds": []
     }
   },
-  "segments": [
-    {
-      "label": "settle loaded save",
-      "durationMs": 1600,
-      "keys": []
-    },
-    {
-      "label": "walk out of burrow meadow",
-      "durationMs": 4200,
-      "keys": ["w"]
-    },
-    {
-      "label": "roll the opening trail",
-      "durationMs": 5200,
-      "keys": ["w", "Shift"]
-    },
-    {
-      "label": "sweep along the river bank",
-      "durationMs": 3600,
-      "keys": ["w", "d"]
-    }
-  ],
+  "route": {
+    "name": "Burrow Hollow to Moss Crown Shrine",
+    "driver": "replay",
+    "stepDistance": 7,
+    "stepDurationMs": 220,
+    "settleMs": 360,
+    "startLabel": "Opening meadow start",
+    "startLandmarkId": "start-burrow",
+    "screenshotTimeoutMs": 15000,
+    "waypoints": [
+      {
+        "label": "Burrow Hollow stamp",
+        "target": {
+          "x": -44,
+          "z": -134
+        },
+        "arrivalRadius": 15,
+        "landmarkId": "start-burrow",
+        "expectedLandmark": "Burrow Hollow",
+        "maxDurationMs": 10000,
+        "roll": false
+      },
+      {
+        "label": "Amber Tree meadow",
+        "target": {
+          "x": -4,
+          "z": -38
+        },
+        "arrivalRadius": 18,
+        "landmarkId": "orange-tree-overlook",
+        "expectedLandmark": "Amber Tree Knoll",
+        "maxDurationMs": 18000
+      },
+      {
+        "label": "Silver Bend river",
+        "target": {
+          "x": 9.2,
+          "z": 24
+        },
+        "arrivalRadius": 18,
+        "landmarkId": "river-bend",
+        "expectedLandmark": "Silver Bend",
+        "maxDurationMs": 16000
+      },
+      {
+        "label": "Fir Gate forest edge",
+        "target": {
+          "x": 24,
+          "z": 88
+        },
+        "arrivalRadius": 18,
+        "landmarkId": "fir-gate",
+        "expectedLandmark": "Fir Gate",
+        "maxDurationMs": 18000
+      },
+      {
+        "label": "Whisper Pass climb",
+        "target": {
+          "x": 20,
+          "z": 108
+        },
+        "arrivalRadius": 18,
+        "landmarkId": "foothill-pass",
+        "expectedLandmark": "Whisper Pass",
+        "maxDurationMs": 12000
+      },
+      {
+        "label": "Mistfall Basin water",
+        "target": {
+          "x": 42,
+          "z": 134
+        },
+        "screenshotCamera": {
+          "heading": 3.14,
+          "distance": 18,
+          "focusHeight": 8,
+          "lift": 20
+        },
+        "arrivalRadius": 18,
+        "landmarkId": "mistfall-basin",
+        "expectedLandmark": "Mistfall Basin",
+        "maxDurationMs": 14000
+      },
+      {
+        "label": "Windstep Shelf highland",
+        "target": {
+          "x": 10,
+          "z": 154
+        },
+        "screenshotCamera": {
+          "heading": 2.65,
+          "distance": 18,
+          "focusHeight": 8,
+          "lift": 20
+        },
+        "arrivalRadius": 18,
+        "landmarkId": "windstep-shelf",
+        "expectedLandmark": "Windstep Shelf",
+        "maxDurationMs": 14000
+      },
+      {
+        "label": "Cloudback Ridge overlook",
+        "target": {
+          "x": -26,
+          "z": 168
+        },
+        "screenshotCamera": {
+          "heading": 2.85,
+          "distance": 18,
+          "focusHeight": 8,
+          "lift": 20
+        },
+        "arrivalRadius": 18,
+        "landmarkId": "ridge-overlook",
+        "expectedLandmark": "Cloudback Ridge",
+        "maxDurationMs": 14000
+      },
+      {
+        "label": "Skyward Ledge shelf",
+        "target": {
+          "x": 6,
+          "z": 178
+        },
+        "screenshotCamera": {
+          "heading": 0,
+          "distance": 18,
+          "focusHeight": 8,
+          "lift": 20
+        },
+        "arrivalRadius": 18,
+        "landmarkId": "skyward-ledge",
+        "expectedLandmark": "Skyward Ledge",
+        "maxDurationMs": 12000
+      },
+      {
+        "label": "Ridge Saddle approach",
+        "target": {
+          "x": 16,
+          "z": 186
+        },
+        "screenshotCamera": {
+          "heading": 0,
+          "distance": 18,
+          "focusHeight": 8,
+          "lift": 20
+        },
+        "arrivalRadius": 18,
+        "landmarkId": "ridge-saddle-landmark",
+        "expectedLandmark": "Ridge Saddle",
+        "maxDurationMs": 10000
+      },
+      {
+        "label": "Moss Crown Shrine finish",
+        "target": {
+          "x": 2,
+          "z": 214
+        },
+        "screenshotCamera": {
+          "heading": 3.14,
+          "distance": 18,
+          "focusHeight": 8,
+          "lift": 20
+        },
+        "arrivalRadius": 18,
+        "landmarkId": "peak-shrine",
+        "expectedLandmark": "Moss Crown Shrine",
+        "maxDurationMs": 16000
+      }
+    ]
+  },
   "guardrails": {
     "minAverageFps": 24,
     "maxP95FrameMs": 85,
-    "minFrameSamples": 180,
-    "minForwardProgress": 10,
-    "maxAbsX": 90
+    "minFrameSamples": 600,
+    "minForwardProgress": 330,
+    "maxAbsX": 95,
+    "route": {
+      "minCheckpointsReached": 12,
+      "minCheckpointAverageFps": 20,
+      "maxCheckpointP95FrameMs": 110,
+      "requiredLandmarkIds": [
+        "start-burrow",
+        "orange-tree-overlook",
+        "river-bend",
+        "fir-gate",
+        "foothill-pass",
+        "mistfall-basin",
+        "windstep-shelf",
+        "ridge-overlook",
+        "skyward-ledge",
+        "ridge-saddle-landmark",
+        "peak-shrine"
+      ]
+    },
+    "visual": {
+      "requireVisualSnapshot": true,
+      "minScreenshotBytes": 30000,
+      "minContrast": 12,
+      "minAverageChroma": 7,
+      "minNonBlankRatio": 0.92,
+      "maxDarkRatio": 0.72,
+      "maxLightRatio": 0.72
+    }
   }
 }

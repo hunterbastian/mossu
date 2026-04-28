@@ -18,6 +18,7 @@ declare global {
       completeOpeningSequence?: () => void;
       teleportPlayerTo?: (x: number, z: number) => void;
       applySaveState?: (payload: MossuDebugSaveStatePayload) => void;
+      faceRouteHeading?: (heading: number, cameraOptions?: { distance?: number; focusHeight?: number; lift?: number }) => void;
     };
     render_game_to_text?: () => string;
     mossuReportError?: (details: MossuErrorDetail) => void;
@@ -29,6 +30,7 @@ interface MossuAppRuntime {
   debugCompleteOpeningSequence?: () => void;
   debugTeleportPlayerTo?: (x: number, z: number) => void;
   debugApplySaveState?: (payload: MossuDebugSaveStatePayload) => void;
+  debugFaceRouteHeading?: (heading: number, cameraOptions?: { distance?: number; focusHeight?: number; lift?: number }) => void;
   renderGameToText: () => string;
   start: () => void;
 }
@@ -133,6 +135,7 @@ function attachRuntime(app: MossuAppRuntime, mode: MossuE2eBridge["mode"]) {
       completeOpeningSequence: () => app.debugCompleteOpeningSequence?.(),
       teleportPlayerTo: (x, z) => app.debugTeleportPlayerTo?.(x, z),
       applySaveState: (payload) => app.debugApplySaveState?.(payload),
+      faceRouteHeading: (heading, cameraOptions) => app.debugFaceRouteHeading?.(heading, cameraOptions),
     };
   }
   app.start();

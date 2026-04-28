@@ -54,6 +54,12 @@ const MAP_KEYBOARD_PAN_SPEED = 118;
 
 type CameraProfileName = "walk" | "roll" | "air" | "swim" | "ridge" | "summit" | "void";
 
+export interface DebugRouteCameraOptions {
+  distance?: number;
+  focusHeight?: number;
+  lift?: number;
+}
+
 interface CameraProfile {
   name: CameraProfileName;
   distance: number;
@@ -547,20 +553,23 @@ export class FollowCamera {
     return Math.atan2(this.planarLook.x, this.planarLook.z);
   }
 
-  debugSnapToPlayerHeading(player: PlayerState, heading = player.heading) {
+  debugSnapToPlayerHeading(player: PlayerState, heading = player.heading, options: DebugRouteCameraOptions = {}) {
     const routeDirection = new Vector3(Math.sin(heading), 0, Math.cos(heading));
     if (routeDirection.lengthSq() < 0.0001) {
       routeDirection.copy(START_DIRECTION);
     } else {
       routeDirection.normalize();
     }
+    const distance = MathUtils.clamp(options.distance ?? DEFAULT_DISTANCE, 12, 72);
+    const focusHeight = MathUtils.clamp(options.focusHeight ?? CAMERA_PROFILES.walk.focusHeight, 2, 18);
+    const lift = MathUtils.clamp(options.lift ?? 7.2, 2, 30);
     const focus = player.position
       .clone()
-      .add(this.focusOffset.set(0, CAMERA_PROFILES.walk.focusHeight, 0));
+      .add(this.focusOffset.set(0, focusHeight, 0));
     const cameraPosition = focus
       .clone()
-      .addScaledVector(routeDirection, -DEFAULT_DISTANCE)
-      .add(this.focusOffset.set(0, 7.2, 0));
+      .addScaledVector(routeDirection, -distance)
+      .add(this.focusOffset.set(0, lift, 0));
     this.resetGameplayRig(focus, cameraPosition);
     this.manualLookCooldown = 0;
   }
