@@ -243,10 +243,12 @@ function canPlaceInstancedTree(kind: InstancedForestKind, x: number, z: number) 
   }
 
   if (kind === "round") {
-    return (zone === "plains" || zone === "hills" || zone === "foothills") && y < 96;
+    // Allow sparse spill into lower alpine for crossfade band (density will taper via sampleInstancedTreeDensity)
+    return (zone === "plains" || zone === "hills" || zone === "foothills" || zone === "alpine") && y < 112;
   }
 
-  return (zone === "foothills" || zone === "alpine" || zone === "ridge" || (zone === "hills" && z > 42)) && y < 176;
+  // Allow occasional pines in plains/hills fringe so the lowland edge isn't a hard line
+  return (zone === "plains" || zone === "hills" || zone === "foothills" || zone === "alpine" || zone === "ridge" || (zone === "hills" && z > 42)) && y < 176;
 }
 
 function sampleInstancedTreeDensity(kind: InstancedForestKind, x: number, z: number, y: number) {
@@ -273,20 +275,24 @@ function sampleInstancedTreeDensity(kind: InstancedForestKind, x: number, z: num
   const edgeBoost = composition.edge * 0.16 + habitat.edge * 0.12;
 
   if (kind === "round") {
+    // alpine gets a low crossfade density that tapers with altitude so round trees thin out gracefully
+    const alpineFade = zone === "alpine" ? MathUtils.clamp(1 - MathUtils.smoothstep(y, 82, 112), 0, 1) * 0.1 : 0;
     const biomeDensity =
       zone === "plains" ? 0.13 :
       zone === "hills" ? 0.34 :
       zone === "foothills" ? 0.32 :
-      0;
+      alpineFade;
     return (biomeDensity + edgeBoost) * waterFade * forestEnvelope * clumpGate * clearingFade * (1 - habitat.meadow * 0.5) * (1 - routeReadability * 0.72);
   }
 
+  // pines get a sparse plains/hills fringe density so the lowland edge crossfades rather than hard-cuts
+  const lowlandPineFade = (zone === "plains" || zone === "hills") ? MathUtils.clamp(firApproach * 0.12, 0, 0.08) : 0;
   const biomeDensity =
     zone === "hills" ? 0.1 :
     zone === "foothills" ? 0.56 :
     zone === "alpine" ? 0.72 :
     zone === "ridge" ? 0.5 :
-    0;
+    lowlandPineFade;
   return (biomeDensity + edgeBoost) * waterFade * MathUtils.clamp(forestEnvelope + firApproach * 0.34, 0, 1) * clumpGate * clearingFade * (1 - habitat.meadow * 0.42) * (1 - routeReadability * 0.68);
 }
 
@@ -538,7 +544,7 @@ function makePineForestGeometry() {
   ]);
 }
 
-function makeWindTreeMaterial() {
+function makeWindTreeMaterial(kind: "round" | "pine" = "round") {
   const material = new MeshLambertMaterial({ vertexColors: true });
   material.onBeforeCompile = (shader: MaterialCompileShader) => {
     shader.uniforms.uTime = { value: 0 };
@@ -552,7 +558,8 @@ varying float vFoliage;`,
       )
       .replace(
         "#include <begin_vertex>",
-        `#include <begin_vertex>
+        kind === "round"
+          ? `#include <begin_vertex>
 vFoliage = windWeight;
 #ifdef USE_INSTANCING
 vec3 treeRoot = instanceMatrix[3].xyz;
@@ -562,14 +569,36 @@ vec3 treeRoot = vec3(0.0);
 float treeDistance = length(cameraPosition.xz - treeRoot.xz);
 float treeDetailLod = 1.0 - smoothstep(88.0, 210.0, treeDistance);
 float highlandDamp = mix(1.0, 0.46, smoothstep(48.0, 136.0, treeRoot.y));
-float slowSway = sin(uTime * 1.15 + treeRoot.x * 0.041 + treeRoot.z * 0.034);
-float quickFlutter = sin(uTime * 3.4 + treeRoot.x * 0.13 - treeRoot.z * 0.09) * 0.34;
-slowSway *= mix(1.0, 1.12, 1.0 - treeDetailLod);
+// Round trees: broad canopy sway — wider lateral arc, strong gust response
+float slowSway = sin(uTime * 1.05 + treeRoot.x * 0.038 + treeRoot.z * 0.031);
+float quickFlutter = sin(uTime * 3.1 + treeRoot.x * 0.12 - treeRoot.z * 0.08) * 0.38;
+slowSway *= mix(1.0, 1.18, 1.0 - treeDetailLod);
 quickFlutter *= treeDetailLod * highlandDamp;
-float gust = sin(uTime * 2.1 + treeRoot.x * 0.08 + treeRoot.z * 0.06) * 0.08;
-transformed.x += (slowSway + quickFlutter + gust) * 0.15 * windWeight;
-transformed.z += (slowSway * 0.05 + quickFlutter * 0.12) * windWeight;
-transformed.y += quickFlutter * 0.04 * windWeight;`,
+float gust = sin(uTime * 1.9 + treeRoot.x * 0.07 + treeRoot.z * 0.055) * 0.12;
+transformed.x += (slowSway + quickFlutter + gust) * 0.19 * windWeight;
+transformed.z += (slowSway * 0.07 + quickFlutter * 0.14) * windWeight;
+transformed.y += quickFlutter * 0.035 * windWeight;`
+          : `#include <begin_vertex>
+vFoliage = windWeight;
+#ifdef USE_INSTANCING
+vec3 treeRoot = instanceMatrix[3].xyz;
+#else
+vec3 treeRoot = vec3(0.0);
+#endif
+float treeDistance = length(cameraPosition.xz - treeRoot.xz);
+float treeDetailLod = 1.0 - smoothstep(88.0, 210.0, treeDistance);
+float highlandDamp = mix(1.0, 0.46, smoothstep(48.0, 136.0, treeRoot.y));
+// Pine trees: tight columnar form — less lateral sway, vertical needle shimmer
+float slowSway = sin(uTime * 1.28 + treeRoot.x * 0.045 + treeRoot.z * 0.038) * 0.62;
+float quickFlutter = sin(uTime * 4.2 + treeRoot.x * 0.16 - treeRoot.z * 0.11) * 0.22;
+slowSway *= mix(1.0, 1.06, 1.0 - treeDetailLod);
+quickFlutter *= treeDetailLod * highlandDamp;
+float gust = sin(uTime * 2.4 + treeRoot.x * 0.09 + treeRoot.z * 0.07) * 0.06;
+// Vertical shimmer: tips bounce subtly up/down as needles catch wind
+float needleShimmer = sin(uTime * 5.8 + treeRoot.x * 0.21 + treeRoot.z * 0.17) * 0.18 * treeDetailLod;
+transformed.x += (slowSway + quickFlutter + gust) * 0.09 * windWeight;
+transformed.z += (slowSway * 0.04 + quickFlutter * 0.07) * windWeight;
+transformed.y += (quickFlutter * 0.06 + needleShimmer * 0.05) * windWeight;`,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -630,8 +659,8 @@ function buildInstancedForest() {
   const roundPlacements = buildInstancedTreePlacements("round");
   const pinePlacements = buildInstancedTreePlacements("pine");
 
-  const roundTrees = new InstancedMesh(makeRoundForestGeometry(), makeWindTreeMaterial(), roundPlacements.length);
-  const pineTrees = new InstancedMesh(makePineForestGeometry(), makeWindTreeMaterial(), pinePlacements.length);
+  const roundTrees = new InstancedMesh(makeRoundForestGeometry(), makeWindTreeMaterial("round"), roundPlacements.length);
+  const pineTrees = new InstancedMesh(makePineForestGeometry(), makeWindTreeMaterial("pine"), pinePlacements.length);
   applyTreeInstances(roundTrees, roundPlacements, 2.35);
   applyTreeInstances(pineTrees, pinePlacements, 2.52);
   markInstancedTreeWind(roundTrees);

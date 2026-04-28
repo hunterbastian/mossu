@@ -230,7 +230,7 @@ function colorForTerrain(x: number, y: number, z: number) {
   const alpineTint = MathUtils.clamp(MathUtils.smoothstep(y, 84, 148), 0, 1);
   const slopeRock = MathUtils.smoothstep(slope, 0.12, 0.6);
   const cliffSilhouette = MathUtils.clamp(northSilhouette * MathUtils.smoothstep(slope, 0.22, 0.55), 0, 0.18);
-  const altitudeRock = MathUtils.smoothstep(y, 68, 142) * 0.3;
+  const altitudeRock = MathUtils.smoothstep(y, 58, 132) * 0.3;
   const zoneRockBoost =
     zone === "foothills" ? 0.14 :
     zone === "alpine" ? 0.36 :
@@ -241,7 +241,8 @@ function colorForTerrain(x: number, y: number, z: number) {
   const snowBase =
     MathUtils.smoothstep(y, 124, 168) * 0.86 +
     MathUtils.smoothstep(z, 176, 232) * 0.24 +
-    (zone === "peak_shrine" ? 0.38 : 0);
+    (zone === "peak_shrine" ? 0.38 : 0) +
+    (zone === "ridge" ? 0.18 : 0);
   const rockSnowDampen = 1 - MathUtils.clamp(rockMask * 0.55, 0, 0.45);
   const snowMask = MathUtils.clamp(snowBase * rockSnowDampen, 0, 0.9);
   const grass = new Color("#66894a")
@@ -1649,14 +1650,72 @@ export class WorldRenderer {
         });
       },
       () => {
-        const stoneMaterial = new MeshStandardMaterial({ color: "#bcc8ba", roughness: 1 });
+        // Build a cone-stack mountain silhouette with vertex-color snow caps.
+        // Each mountain is 3 stacked ConeGeometry lobes merged into one mesh:
+        //   base lobe  — wide, short (rock/grass transition)
+        //   mid lobe   — medium (rock face)
+        //   peak lobe  — narrow, tall (snow-capped summit)
+        // Vertex colors drive the tint without a custom shader.
+        const buildMountainGeometry = (): BufferGeometry => {
+          const SEG = 10;
+          const lobes: BufferGeometry[] = [];
+
+          // [radiusBottom, radiusTop, height, yOffset, snowFraction]
+          const lobeSpec: [number, number, number, number, number][] = [
+            [1.0, 0.68, 0.38, 0.0,  0.0],   // base — grassy skirt
+            [0.68, 0.38, 0.44, 0.36, 0.05],  // mid  — rock face
+            [0.38, 0.04, 0.55, 0.76, 0.62],  // peak — snow cap
+          ];
+
+          const colorBase = new Color("#9aab97");   // muted green-gray
+          const colorRock = new Color("#8a9088");   // slate rock
+          const colorSnow = new Color("#dce8e4");   // icy white
+
+          lobes.push(
+            ...lobeSpec.map(([rb, rt, h, yOff, snowFrac]) => {
+              const geo = new ConeGeometry(rb, h, SEG, 3, false);
+              geo.translate(0, yOff + h * 0.5, 0);
+
+              // Build per-vertex colors
+              const posArr = geo.attributes.position.array as Float32Array;
+              const vertCount = posArr.length / 3;
+              const colors = new Float32Array(vertCount * 3);
+              for (let v = 0; v < vertCount; v++) {
+                const vy = posArr[v * 3 + 1];
+                // normalised height within this lobe (0 = bottom, 1 = top)
+                const t = Math.max(0, Math.min(1, (vy - yOff) / h));
+                // blend: base→rock over lower half, rock→snow over upper half weighted by snowFrac
+                const col = new Color();
+                if (t < 0.5) {
+                  col.lerpColors(colorBase, colorRock, t * 2);
+                } else {
+                  col.lerpColors(colorRock, colorSnow, (t - 0.5) * 2 * snowFrac);
+                }
+                colors[v * 3]     = col.r;
+                colors[v * 3 + 1] = col.g;
+                colors[v * 3 + 2] = col.b;
+              }
+              geo.setAttribute("color", new Float32BufferAttribute(colors, 3));
+              return geo;
+            }),
+          );
+
+          const merged = mergeGeometries(lobes, false);
+          lobes.forEach((g) => g.dispose());
+          return merged;
+        };
+
+        const mountainMaterial = new MeshLambertMaterial({ vertexColors: true });
+        const sharedGeo = buildMountainGeometry();
+
+        // [worldX, worldZ, scaleX, scaleY, scaleZ]
         for (const [x, z, sx, sy, sz] of [
           [-152, 184, 86, 118, 114],
           [118, 198, 102, 136, 120],
           [8, 232, 126, 162, 122],
           [76, 240, 66, 94, 70],
         ]) {
-          const mountain = new Mesh(new SphereGeometry(1.2, 16, 14), stoneMaterial);
+          const mountain = new Mesh(sharedGeo, mountainMaterial);
           mountain.scale.set(sx as number, sy as number, sz as number);
           mountain.position.set(x as number, 12, z as number);
           this.mountainSilhouettes.add(mountain);
