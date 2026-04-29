@@ -14,6 +14,7 @@ import {
   Vector3,
   Vector4,
 } from "three";
+import { OOT_PS2_GRASSLANDS_PALETTE } from "../visualPalette";
 import { GrassShader } from "./grassSystem";
 import {
   ALPINE_RUNOFF_SURFACE_OFFSET,
@@ -35,6 +36,7 @@ import {
 
 type WaterProfileKey = "mainRiver" | "stillPool" | "foothillCreek" | "alpineRunoff" | "waterfallOutflow";
 type WaterSurfaceBackend = "webgl";
+const futureLakeArt = OOT_PS2_GRASSLANDS_PALETTE.futureLakes;
 
 interface WaterProfile {
   key: WaterProfileKey;
@@ -1194,8 +1196,8 @@ function makeWaterfallPanel(width: number, height: number, opacity: number, seed
   const group = new Group();
   group.userData.seed = seed;
 
-  const veil = makeWaterfallLayer(width * 1.16, height, "#bde6f3", opacity * 0.68, -0.04);
-  const blueCore = makeWaterfallLayer(width * 0.72, height * 0.96, "#77c9e6", opacity * 0.56, 0.02);
+  const veil = makeWaterfallLayer(width * 1.16, height, futureLakeArt.waterfallVeil, opacity * 0.68, -0.04);
+  const blueCore = makeWaterfallLayer(width * 0.72, height * 0.96, futureLakeArt.waterfallCore, opacity * 0.56, 0.02);
   const whiteCore = makeWaterfallLayer(width * 0.42, height * 0.92, "#f8fff8", opacity * 0.66, 0.08);
   blueCore.position.x = Math.sin(seed * 1.7) * width * 0.08;
   whiteCore.position.x = Math.cos(seed * 1.2) * width * 0.08;
@@ -1217,9 +1219,9 @@ function makeWaterfallPanel(width: number, height: number, opacity: number, seed
     group.add(ribbon);
   }
 
-  const foamA = makeWaterfallFoamDisc(width * 0.58, "#f8fff7", opacity * 1.14, -width * 0.16, 0.36);
-  const foamB = makeWaterfallFoamDisc(width * 0.42, "#d8f3fb", opacity * 0.76, width * 0.24, 0.52);
-  const foamC = makeWaterfallFoamDisc(width * 0.3, "#fff7dc", opacity * 0.38, width * 0.02, 0.68);
+  const foamA = makeWaterfallFoamDisc(width * 0.58, futureLakeArt.foam, opacity * 1.14, -width * 0.16, 0.36);
+  const foamB = makeWaterfallFoamDisc(width * 0.42, futureLakeArt.foamCool, opacity * 0.76, width * 0.24, 0.52);
+  const foamC = makeWaterfallFoamDisc(width * 0.3, futureLakeArt.waterfallSunFoam, opacity * 0.38, width * 0.02, 0.68);
   group.add(foamA, foamB, foamC);
 
   const spray: Mesh[] = [];

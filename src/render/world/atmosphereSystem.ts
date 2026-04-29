@@ -34,7 +34,7 @@ function createCloudPuffMaterial() {
       uCloudShadow: { value: new Color("#c8d8e8") },
       uHorizonTint: { value: new Color("#f0e0d2") },
       uHorizonHaze: { value: new Color("#ddeef6") },
-      uOpacity: { value: 0.94 },
+      uOpacity: { value: 0.48 },
       uTime: { value: 0 },
       uElevationMood: { value: 0 },
     },
@@ -107,12 +107,12 @@ function createCloudPuffMaterial() {
         base = mix(base, uHorizonHaze, smoothstep(0.12, 0.62, horizonView) * (0.12 + 0.14 * (1.0 - nUp)) * 0.85);
 
         // Fake inter-puff depth: darker in the cluster "core" + lower hemisphere = shelf shadow.
-        float coreDark = 0.18 * vInterior * (0.5 + 0.5 * underbelly);
-        float shelfAo = 1.0 - 0.48 * underbelly;
-        base *= (0.7 + 0.3 * nUp) * (1.0 - coreDark) * mix(0.86, 1.0, shelfAo);
+        float coreDark = 0.06 * vInterior * (0.5 + 0.5 * underbelly);
+        float shelfAo = 1.0 - 0.16 * underbelly;
+        base *= (0.9 + 0.1 * nUp) * (1.0 - coreDark) * mix(0.92, 1.0, shelfAo);
         // Soft cavity between lobes: lateral fold.
         float fold = abs(vNormalWorld.x) + abs(vNormalWorld.z);
-        base *= 1.0 - 0.05 * smoothstep(0.2, 1.0, fold) * underbelly;
+        base *= 1.0 - 0.02 * smoothstep(0.2, 1.0, fold) * underbelly;
 
         float rim = pow(1.0 - max(dot(N, V), 0.0), 2.55);
         base += vec3(1.0, 0.99, 0.97) * rim * (0.18 + 0.04 * (1.0 - uElevationMood));
@@ -154,9 +154,9 @@ function makeCloudCluster(position: Vector3, scale: number, puffMaterial: Shader
   const shelf = new Mesh(
     shelfGeo,
     new MeshBasicMaterial({
-      color: 0x9a8a7c,
+      color: 0xc8d5da,
       transparent: true,
-      opacity: 0.11,
+      opacity: 0.035,
       depthWrite: false,
     }),
   );
@@ -217,9 +217,9 @@ export function buildClouds() {
   clouds.userData.cloudMaterial = puffMaterial;
   const sets = [
     new Vector3(-132, 108, -102),
-    new Vector3(22, 126, 24),
+    new Vector3(164, 132, 18),
     new Vector3(148, 146, 154),
-    new Vector3(-102, 152, 164),
+    new Vector3(-142, 152, 186),
   ];
 
   sets.forEach((position, index) => {

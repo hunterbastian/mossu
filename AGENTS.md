@@ -18,3 +18,12 @@
 - Visual, shader, and interaction validation should be checked in a **real desktop browser**, not only headless or embedded automation.
 - Focused playtesting can follow `docs/PLAYTEST_CHECKLIST.md` (e.g. a walk from Burrow to Moss Crown).
 - Project-level Three.js skill files from `cloudai-x/threejs-skills` are installed under `.claude/skills/`. For Three.js rendering, lighting, materials, shaders, postprocessing, loaders, animation, geometry, textures, or interaction work, consult the matching skill before changing code. Mossu's current TypeScript setup resolves Three.js add-ons through `three/examples/jsm/...`; do not switch those imports to `three/addons/...` unless the module resolution/types are updated and `tsc --noEmit` passes.
+
+## Waza Workflow For Mossu
+
+- Treat **tw93/Waza** as an agent-workflow layer, not a Mossu runtime dependency. Do not add Waza packages to `package.json` unless the user explicitly asks to install or update local agent skills.
+- Waza-style skills are available locally under `/Users/hunterbastian/.agents/skills/` (`think`, `design`, `check`, `hunt`, `learn`, `read`, `write`, `health`). Use the matching skill playbook when the task clearly fits.
+- For new Mossu feature or architecture direction, use `think` before implementation unless the user has already given concrete approval and scope.
+- For visual/UI/art-direction work, use `design` plus the relevant `.claude/skills/threejs-*` file before editing render, material, geometry, lighting, shader, postprocessing, texture, animation, or interaction code.
+- For bugs, regressions, or unexpected runtime behavior, use `hunt` and confirm the root cause before patching.
+- Before considering a substantial Mossu pass done, use `check`-style review discipline: inspect the diff for scope drift, verify dependencies did not change unintentionally, run `npm run qa`, and do a real-browser visual check when the change touches rendering or interaction.

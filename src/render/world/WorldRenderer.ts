@@ -1,6 +1,5 @@
 import {
   AmbientLight,
-  BufferAttribute,
   BufferGeometry,
   Camera,
   CircleGeometry,
@@ -34,18 +33,9 @@ import { FrameState } from "../../simulation/gameState";
 import {
   ForageableKind,
   sampleBaseTerrainHeight,
-  sampleBiomeZone,
-  sampleHabitatLayer,
-  sampleIslandEdgeFactor,
   sampleIslandBoundaryPoint,
-  samplePaintedGroundMask,
-  sampleRouteDirtPathMask,
-  sampleRiverDampBankMask,
-  sampleStartingWaterDampBankMask,
-  sampleStartingWaterWetness,
   sampleTerrainHeight,
   sampleTerrainNormal,
-  sampleWaterBankShape,
   sampleWaterState,
   shadowPockets,
   STARTING_WATER_POOLS,
@@ -56,12 +46,12 @@ import {
   worldMapMarkers,
 } from "../../simulation/world";
 import { MossuAvatar } from "../objects/MossuAvatar";
+import { OOT_PS2_GRASSLANDS_PALETTE } from "../visualPalette";
 import {
   createGrassMesh,
   createGrassPatchImpostorMesh,
   getGrassMeshLodStats,
   GrassShader,
-  sampleOpeningMeadowMask,
   updateGrassMeshLod,
 } from "./grassSystem";
 import { buildClouds, buildMountainAtmosphere, buildSkyDome, syncAtmosphereLighting } from "./atmosphereSystem";
@@ -76,6 +66,7 @@ import {
 import {
   buildAnchorSceneAccents,
   buildBiomeTransitionAccents,
+  buildForestGroveAccents,
   buildGroundLayer,
   buildHighlandAccents,
   buildLandmarkTrees,
@@ -89,6 +80,7 @@ import {
   getSunDirectionWorld,
   writePatchSceneLightingUniforms,
 } from "./sceneLighting";
+import { buildTerrainFormStrokes, makeTerrainMesh } from "./terrainMesh";
 import {
   buildStartingWaterSystem,
   buildRiverSystem,
@@ -97,9 +89,13 @@ import {
   WaterSurfaceGroup,
   WaterRippleSource,
 } from "./waterSystem";
+import {
+  buildGrasslandImmersionSystem,
+  updateGrasslandImmersionSystem,
+} from "./grasslandImmersion";
 
-const WORLD_SIZE = 560;
-const TERRAIN_SEGMENTS = 160;
+const grasslandsArt = OOT_PS2_GRASSLANDS_PALETTE;
+
 /** Instanced blade budgets — raise together when tuning meadow lushness vs GPU cost */
 const GRASS_COUNT = 11500;
 const FAR_GRASS_PATCH_COUNT = 1150;
@@ -109,7 +105,6 @@ const SNOW_TRAIL_PARTICLES = 20;
 const WATER_RIPPLE_LIMIT = 4;
 const WATER_RIPPLE_LIFETIME = 1.45;
 const WATER_RIPPLE_MIN_DEPTH = 0.16;
-const TERRAIN_FORM_STROKE_COUNT = 96;
 
 interface LandingSplashParticle {
   mesh: Mesh;
@@ -193,232 +188,6 @@ export interface WorldQaStats {
   smallPropMeshesUsingGeometryVertexColors: number;
   smallPropMeshesMissingInstanceColors: number;
   emptySmallPropMeshes: number;
-}
-
-function colorForTerrain(x: number, y: number, z: number) {
-  const zone = sampleBiomeZone(x, z, y);
-  const habitat = sampleHabitatLayer(x, z, y);
-  const islandEdge = sampleIslandEdgeFactor(x, z);
-  const normal = sampleTerrainNormal(x, z);
-  const slope = 1 - normal.y;
-  const painterlyNoise = Math.sin(x * 0.07) * 0.04 + Math.cos(z * 0.05) * 0.03 + Math.sin((x - z) * 0.03) * 0.05;
-  const microWafer = Math.sin(x * 0.037 - z * 0.029) * 0.5 + 0.5;
-  const microFine = Math.sin(x * 0.091 + z * 0.073) * Math.cos(x * 0.044 - z * 0.051) * 0.5 + 0.5;
-  const microBreakup = MathUtils.clamp(microWafer * 0.45 + microFine * 0.38 + painterlyNoise * 0.5, 0, 1);
-  const patch = Math.round((Math.sin(x * 0.12 + z * 0.08) * 0.5 + 0.5) * 5) / 5;
-  const mixValue = MathUtils.clamp(patch * 0.5 + microBreakup * 0.22 + painterlyNoise + y / 220, 0, 1);
-  const northSilhouette = MathUtils.clamp(MathUtils.smoothstep(z, 8, 168), 0, 1);
-  const journeyNorth = MathUtils.clamp(MathUtils.smoothstep(z, -40, 200), 0, 1);
-  const openingMask = sampleOpeningMeadowMask(x, z);
-  const riverDampBank = sampleRiverDampBankMask(x, z);
-  const startingWaterDampBank = sampleStartingWaterDampBankMask(x, z);
-  const startingWaterWetness = sampleStartingWaterWetness(x, z);
-  const bankShape = sampleWaterBankShape(x, z);
-  const waterShoreMask = MathUtils.clamp(riverDampBank + startingWaterDampBank + startingWaterWetness * 0.18 + bankShape.dampBand * 0.42, 0, 1);
-  const wetBankLine = MathUtils.clamp(riverDampBank * 0.72 + startingWaterDampBank * 0.8 + bankShape.dampBand * 0.72, 0, 1);
-  const dryLipLine = MathUtils.clamp((riverDampBank + startingWaterDampBank) * (1 - startingWaterWetness * 0.25) + bankShape.dryLip * 0.8 - slope * 0.28, 0, 1);
-  const sandbarLine = MathUtils.clamp(bankShape.sandbarLift * 0.86 + bankShape.pebbleBand * 0.28, 0, 1);
-  const coveShade = MathUtils.clamp(bankShape.coveCut * 0.64 + bankShape.shelfCut * 0.28, 0, 1);
-  const paintedGround = samplePaintedGroundMask(x, z) * (1 - waterShoreMask * 0.42);
-  const routeDirt = sampleRouteDirtPathMask(x, z);
-  const sunWash = Math.sin(x * 0.018 - z * 0.014 + 1.2) * 0.5 + 0.5;
-  const fieldBands = Math.sin(x * 0.022 + z * 0.006 - 1.2) * 0.5 + 0.5;
-  const pathBands = Math.sin(x * 0.052 + z * 0.018 + 0.8) * 0.5 + 0.5;
-  const meadowBloom = MathUtils.clamp((1 - slope * 2.8) * (0.04 + sunWash * 0.1 + openingMask * 0.08), 0, 0.18);
-  const heightGrass = MathUtils.clamp(MathUtils.smoothstep(y, 8, 82), 0, 1);
-  const foothillTint = MathUtils.clamp(MathUtils.smoothstep(y, 38, 98), 0, 1);
-  const alpineTint = MathUtils.clamp(MathUtils.smoothstep(y, 84, 148), 0, 1);
-  const slopeRock = MathUtils.smoothstep(slope, 0.12, 0.6);
-  const cliffSilhouette = MathUtils.clamp(northSilhouette * MathUtils.smoothstep(slope, 0.22, 0.55), 0, 0.18);
-  const altitudeRock = MathUtils.smoothstep(y, 58, 132) * 0.3;
-  const zoneRockBoost =
-    zone === "foothills" ? 0.14 :
-    zone === "alpine" ? 0.36 :
-    zone === "ridge" ? 0.52 :
-    zone === "peak_shrine" ? 0.54 :
-    0;
-  const rockMask = MathUtils.clamp(slopeRock + altitudeRock + zoneRockBoost + cliffSilhouette, 0, 0.94);
-  const snowBase =
-    MathUtils.smoothstep(y, 124, 168) * 0.86 +
-    MathUtils.smoothstep(z, 176, 232) * 0.24 +
-    (zone === "peak_shrine" ? 0.38 : 0) +
-    (zone === "ridge" ? 0.18 : 0);
-  const rockSnowDampen = 1 - MathUtils.clamp(rockMask * 0.55, 0, 0.45);
-  const snowMask = MathUtils.clamp(snowBase * rockSnowDampen, 0, 0.9);
-  const grass = new Color("#66894a")
-    .lerp(new Color("#9dc866"), 0.42 + mixValue * 0.32 + heightGrass * 0.14)
-    .lerp(new Color("#c7df73"), openingMask * (0.14 + fieldBands * 0.18) + meadowBloom * 1.1)
-    .lerp(new Color("#7fa45c"), foothillTint * 0.2)
-    .lerp(new Color("#94a184"), alpineTint * 0.22)
-    .lerp(new Color("#5f7a52"), microBreakup * 0.1)
-    .lerp(new Color("#8ebd64"), (1 - microFine) * 0.06 * (1 - northSilhouette * 0.5))
-    .lerp(new Color("#5c6a58"), journeyNorth * 0.1 + northSilhouette * 0.08);
-  const wildflowerPunch = MathUtils.clamp(habitat.meadow * (1 - rockMask) * microWafer, 0, 0.14);
-  grass.lerp(new Color("#c4d67a"), wildflowerPunch);
-  const zoneGreenRead =
-    zone === "plains" ? { lerp: new Color("#7ec24e"), w: 0.16 } :
-    zone === "hills" ? { lerp: new Color("#8dc055"), w: 0.18 } :
-    zone === "foothills" ? { lerp: new Color("#6a8f4e"), w: 0.22 } :
-    zone === "alpine" ? { lerp: new Color("#5d8870"), w: 0.28 } :
-    zone === "ridge" ? { lerp: new Color("#4d725e"), w: 0.26 } :
-    zone === "peak_shrine" ? { lerp: new Color("#3d5f52"), w: 0.22 } :
-    { lerp: grass, w: 0 };
-  if (zoneGreenRead.w > 0) {
-    grass.lerp(zoneGreenRead.lerp, zoneGreenRead.w);
-  }
-  // Second splat: different frequency/phase from micro breakup; subtle cool/warm tiles for zone read
-  const zoneSplatB = MathUtils.clamp(
-    Math.sin(x * 0.026 - z * 0.034) * Math.cos(x * 0.019 + z * 0.027) * 0.5 + 0.5,
-    0,
-    1,
-  );
-  grass.lerp(new Color("#5a7d48"), zoneSplatB * 0.11);
-  grass.lerp(new Color("#82a86a"), (1 - zoneSplatB) * microBreakup * 0.07);
-  const rock = new Color("#b5ad9c")
-    .lerp(new Color("#d6d1c4"), 0.18 + mixValue * 0.22)
-    .lerp(new Color("#8f958d"), MathUtils.clamp(slope * 1.3 + alpineTint * 0.34, 0, 0.78));
-  const snow = new Color("#f7f3e7").lerp(new Color("#dce8f0"), MathUtils.clamp(slope * 0.8 + painterlyNoise * 1.6, 0, 0.44));
-  const paintedEarth = new Color("#a99e70")
-    .lerp(new Color("#d0bd7d"), MathUtils.clamp(0.26 + pathBands * 0.26 + openingMask * 0.14, 0, 1))
-    .lerp(new Color("#8f9270"), foothillTint * 0.2 + alpineTint * 0.18)
-    .lerp(new Color("#c9c092"), dryLipLine * 0.2);
-  const sandbar = new Color("#b8ad7b")
-    .lerp(new Color("#d8c989"), MathUtils.clamp(0.24 + sunWash * 0.22 + pathBands * 0.14, 0, 1))
-    .lerp(new Color("#a1a988"), foothillTint * 0.16 + alpineTint * 0.22);
-  const wornDirt = new Color("#846c4f")
-    .lerp(new Color("#aa9067"), 0.38 + fieldBands * 0.24)
-    .lerp(new Color("#665747"), 0.08 + slope * 0.08);
-
-  const terrainColor = grass
-    .lerp(new Color("#c9e079"), habitat.meadow * (0.2 + openingMask * 0.12))
-    .lerp(new Color("#65864f"), habitat.forest * 0.2)
-    .lerp(new Color("#7f9b78"), habitat.shore * 0.14)
-    .lerp(paintedEarth, paintedGround * (0.34 + (1 - slopeRock) * 0.22))
-    .lerp(wornDirt, routeDirt * 0.66 * (1 - rockMask * 0.88))
-    .lerp(sandbar, sandbarLine * 0.34)
-    .lerp(new Color("#5d9581"), wetBankLine * 0.24)
-    .lerp(new Color("#748b69"), coveShade * 0.13)
-    .lerp(new Color("#86a978"), waterShoreMask * 0.16)
-    .lerp(new Color("#c6b987"), dryLipLine * 0.28)
-    .lerp(new Color("#f0d985"), meadowBloom * (0.36 + openingMask * 0.2))
-    .lerp(rock, rockMask * (1 - snowMask * 0.46))
-    .lerp(snow, snowMask);
-  // One cohesive landmass: slightly richer "heart" inland, sun-worn rim before the void sea lerp
-  const islandHeart = (1 - MathUtils.clamp(islandEdge, 0, 1)) ** 1.2;
-  let out = new Color(terrainColor).lerp(
-    new Color("#6d9458"),
-    islandHeart * 0.1 * (1 - snowMask * 0.45),
-  );
-  const islandRimMask = MathUtils.clamp((islandEdge - 0.36) * 1.05, 0, 1)
-    * (1 - MathUtils.smoothstep(0.88, 0.99, islandEdge));
-  out = out.lerp(new Color("#9fb89a"), islandRimMask * 0.12 * (1 - snowMask * 0.55));
-  return out.lerp(new Color("#cdeef4"), MathUtils.smoothstep(islandEdge, 0.74, 1) * 0.74);
-}
-
-function makeTerrainMesh() {
-  const geometry = new PlaneGeometry(WORLD_SIZE, WORLD_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
-  geometry.rotateX(-Math.PI / 2);
-
-  const positions = geometry.attributes.position as BufferAttribute;
-  const colors = new Float32Array(positions.count * 3);
-  const edgeFactors = new Float32Array(positions.count);
-  for (let i = 0; i < positions.count; i += 1) {
-    const x = positions.getX(i);
-    const z = positions.getZ(i);
-    const y = sampleTerrainHeight(x, z);
-    positions.setY(i, y);
-    edgeFactors[i] = sampleIslandEdgeFactor(x, z);
-    const color = colorForTerrain(x, y, z);
-    colors[i * 3] = color.r;
-    colors[i * 3 + 1] = color.g;
-    colors[i * 3 + 2] = color.b;
-  }
-
-  const index = geometry.getIndex();
-  if (index) {
-    const trimmedIndices: number[] = [];
-    for (let i = 0; i < index.count; i += 3) {
-      const a = index.getX(i);
-      const b = index.getX(i + 1);
-      const c = index.getX(i + 2);
-      if (Math.min(edgeFactors[a], edgeFactors[b], edgeFactors[c]) < 0.998) {
-        trimmedIndices.push(a, b, c);
-      }
-    }
-    geometry.setIndex(trimmedIndices);
-  }
-
-  geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
-  geometry.computeVertexNormals();
-
-  const material = new MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 1,
-    metalness: 0,
-    dithering: true,
-  });
-
-  const mesh = new Mesh(geometry, material);
-  mesh.receiveShadow = true;
-  return mesh;
-}
-
-function terrainFormHash(seed: number) {
-  return MathUtils.euclideanModulo(Math.sin(seed * 127.1 + 17.7) * 43758.5453123, 1);
-}
-
-function buildTerrainFormStrokes() {
-  const geometry = new CircleGeometry(1, 20);
-  geometry.rotateX(-Math.PI / 2);
-  const material = new MeshBasicMaterial({
-    color: "#6f835d",
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.16,
-    depthWrite: false,
-  });
-  const mesh = new InstancedMesh(geometry, material, TERRAIN_FORM_STROKE_COUNT);
-  const dummy = new Object3D();
-  const color = new Color();
-  const routeBands = [
-    { x: -42, z: -116, radiusX: 58, radiusZ: 40, yaw: -0.28, warmth: 0.72 },
-    { x: -6, z: -42, radiusX: 74, radiusZ: 50, yaw: 0.18, warmth: 0.66 },
-    { x: 18, z: 38, radiusX: 72, radiusZ: 44, yaw: 0.46, warmth: 0.52 },
-    { x: 36, z: 118, radiusX: 64, radiusZ: 48, yaw: 0.7, warmth: 0.34 },
-    { x: 2, z: 198, radiusX: 62, radiusZ: 42, yaw: 0.2, warmth: 0.26 },
-  ];
-
-  for (let i = 0; i < TERRAIN_FORM_STROKE_COUNT; i += 1) {
-    const band = routeBands[i % routeBands.length];
-    const ring = Math.floor(i / routeBands.length);
-    const a = ring * 1.618 + terrainFormHash(i + 3) * Math.PI * 2;
-    const r = Math.sqrt(terrainFormHash(i + 31));
-    const localX = Math.cos(a) * band.radiusX * r;
-    const localZ = Math.sin(a) * band.radiusZ * r;
-    const c = Math.cos(band.yaw);
-    const s = Math.sin(band.yaw);
-    const x = band.x + localX * c - localZ * s;
-    const z = band.z + localX * s + localZ * c;
-    const y = sampleTerrainHeight(x, z);
-    const slope = 1 - sampleTerrainNormal(x, z).y;
-    const size = MathUtils.lerp(3.8, 10.4, terrainFormHash(i + 71)) * MathUtils.lerp(1, 1.36, slope);
-    const flatten = MathUtils.lerp(0.16, 0.38, terrainFormHash(i + 97));
-    dummy.position.set(x, y + 0.052 + slope * 0.05, z);
-    dummy.rotation.set(0, band.yaw + MathUtils.lerp(-0.55, 0.55, terrainFormHash(i + 113)), 0);
-    dummy.scale.set(size * MathUtils.lerp(1.2, 2.2, terrainFormHash(i + 151)), 1, size * flatten);
-    dummy.updateMatrix();
-    mesh.setMatrixAt(i, dummy.matrix);
-    color
-      .set("#6d815d")
-      .lerp(new Color("#d7c77f"), band.warmth * 0.36)
-      .lerp(new Color("#6f8790"), MathUtils.smoothstep(y, 72, 146) * 0.28)
-      .lerp(new Color("#415747"), slope * 0.18);
-    mesh.setColorAt(i, color);
-  }
-
-  mesh.name = "terrain-form-strokes";
-  mesh.renderOrder = 1;
-  return mesh;
 }
 
 function buildOpeningNestVista() {
@@ -648,9 +417,9 @@ function buildShadowPockets() {
       const radius = pocket.radius * (1 - i * 0.16);
       const depth = pocket.depth * (1 - i * 0.18);
       const material = new MeshBasicMaterial({
-        color: new Color().setHSL(pocket.hue, 0.18, 0.1 + i * 0.03),
+        color: new Color().setHSL(pocket.hue, 0.12, 0.56 + i * 0.04),
         transparent: true,
-        opacity: 0.18 - i * 0.03,
+        opacity: 0.026 - i * 0.004,
         depthWrite: false,
       });
       const layer = new Mesh(new CylinderGeometry(radius, radius * 0.86, depth, 24), material);
@@ -700,8 +469,8 @@ function buildFloatingIslandShell() {
 
   const upperMaterial = new MeshStandardMaterial({ color: "#d4cdb8", roughness: 0.98, side: DoubleSide });
   const lowerMaterial = new MeshStandardMaterial({ color: "#a9a191", roughness: 0.99, side: DoubleSide });
-  const lowerShadowMaterial = new MeshStandardMaterial({ color: "#6e675c", roughness: 0.99, side: DoubleSide });
-  const underbellyMaterial = new MeshStandardMaterial({ color: "#2e3532", roughness: 0.99, side: DoubleSide, metalness: 0.02 });
+  const lowerShadowMaterial = new MeshStandardMaterial({ color: "#827c6f", roughness: 0.99, side: DoubleSide });
+  const underbellyMaterial = new MeshStandardMaterial({ color: "#5c655c", roughness: 0.99, side: DoubleSide, metalness: 0.02 });
   const mossMaterial = new MeshStandardMaterial({
     color: "#6f965d",
     roughness: 0.97,
@@ -710,7 +479,7 @@ function buildFloatingIslandShell() {
     emissiveIntensity: 0.22,
   });
   const rimLipMaterial = new MeshStandardMaterial({ color: "#8a9f72", roughness: 0.9, side: DoubleSide });
-  const hangMaterial = new MeshStandardMaterial({ color: "#4a4740", roughness: 0.97, side: DoubleSide });
+  const hangMaterial = new MeshStandardMaterial({ color: "#727467", roughness: 0.97, side: DoubleSide });
   const perimeter: Vector3[] = [];
   const center = new Vector3();
 
@@ -1190,20 +959,20 @@ export class WorldRenderer {
   private readonly waterRipples: WaterRippleSource[] = [];
   private readonly waterRippleActorStates = new Map<string, WaterRippleActorState>();
   private readonly cameraCollisionMeshes: Mesh[] = [];
-  private readonly gameplayFog = new FogExp2("#e6f1ec", 0.00118);
-  private readonly lowlandBackground = new Color("#e7fbff");
-  private readonly highlandBackground = new Color("#dceff8");
-  private readonly lowlandFogColor = new Color("#e4f0ea");
-  private readonly highlandFogColor = new Color("#d8e6eb");
-  private readonly lowlandSunColor = new Color("#fff1c8");
-  private readonly highlandSunColor = new Color("#e8f2ff");
-  private readonly lowlandSkyFillColor = new Color("#c7f5ff");
-  private readonly highlandSkyFillColor = new Color("#d8eaff");
-  private readonly lowlandGroundFillColor = new Color("#eadb9a");
-  private readonly highlandGroundFillColor = new Color("#c7d3be");
-  private readonly ambientLight = new AmbientLight("#fffdf0", 0.9);
-  private readonly skyFill = new HemisphereLight("#c7f5ff", "#eadb9a", 1.08);
-  private readonly skyBounce = new DirectionalLight("#e7fdff", 0.36);
+  private readonly gameplayFog = new FogExp2(grasslandsArt.scene.fog, 0.00096);
+  private readonly lowlandBackground = new Color(grasslandsArt.scene.lowlandBackground);
+  private readonly highlandBackground = new Color(grasslandsArt.scene.highlandBackground);
+  private readonly lowlandFogColor = new Color(grasslandsArt.scene.lowlandFog);
+  private readonly highlandFogColor = new Color(grasslandsArt.scene.highlandFog);
+  private readonly lowlandSunColor = new Color(grasslandsArt.scene.lowlandSun);
+  private readonly highlandSunColor = new Color(grasslandsArt.scene.highlandSun);
+  private readonly lowlandSkyFillColor = new Color(grasslandsArt.scene.lowlandSkyFill);
+  private readonly highlandSkyFillColor = new Color(grasslandsArt.scene.highlandSkyFill);
+  private readonly lowlandGroundFillColor = new Color(grasslandsArt.scene.lowlandGroundFill);
+  private readonly highlandGroundFillColor = new Color(grasslandsArt.scene.highlandGroundFill);
+  private readonly ambientLight = new AmbientLight(grasslandsArt.scene.ambient, 0.74);
+  private readonly skyFill = new HemisphereLight(grasslandsArt.scene.skyFill, grasslandsArt.scene.skyGround, 0.92);
+  private readonly skyBounce = new DirectionalLight(grasslandsArt.scene.skyBounce, 0.3);
   private readonly scenePatchHaze = new Color();
   private readonly scenePatchBright = new Color();
   private readonly scenePatchShadow = new Color();
@@ -1222,28 +991,30 @@ export class WorldRenderer {
   private readonly groundLayer = new Group();
   private readonly midLayer = new Group();
   private readonly treeClusters = new Group();
+  private readonly forestGroveAccents = new Group();
   private readonly biomeTransitionAccents = batchStaticDecorations(buildBiomeTransitionAccents(), "biome-transition-batch");
   private readonly waterBankAccents = batchStaticDecorations(buildWaterBankAccents(), "water-bank-batch");
   private readonly anchorSceneAccents = batchStaticDecorations(buildAnchorSceneAccents(), "anchor-scene-batch");
   private readonly highlandAccents = batchStaticDecorations(buildHighlandAccents(), "highland-accent-batch");
+  private readonly grasslandImmersion = buildGrasslandImmersionSystem();
   private readonly highlandWaterways: WaterSurfaceGroup = { group: new Group(), controllers: [] };
   private readonly mountainAtmosphere = new Group();
   private readonly valleyMist = new Group();
   private readonly shadowVolumes = new Group();
   private readonly landmarkTrees = new Group();
   private readonly mountainSilhouettes = new Group();
-  private readonly sun = new DirectionalLight("#fff0cf", 3.12);
+  private readonly sun = new DirectionalLight(grasslandsArt.scene.sun, 3.12);
   private readonly mossuContactShadow = new Mesh(
     new CircleGeometry(1, 32),
     new MeshBasicMaterial({
-      color: "#2f4a3f",
+      color: grasslandsArt.scene.contactShadow,
       transparent: true,
       opacity: 0.22,
       depthWrite: false,
     }),
   );
-  private readonly meadowGlow = new PointLight("#ffe6b3", 1.48, 220, 1.4);
-  private readonly alpineGlow = new PointLight("#cddcff", 0.74, 260, 1.1);
+  private readonly meadowGlow = new PointLight(grasslandsArt.scene.meadowGlow, 1.48, 220, 1.4);
+  private readonly alpineGlow = new PointLight(grasslandsArt.scene.alpineGlow, 0.74, 260, 1.1);
   private readonly landingSplash = new Group();
   private readonly landingParticles: LandingSplashParticle[] = [];
   private readonly snowTrail = new Group();
@@ -1275,12 +1046,12 @@ export class WorldRenderer {
   private readonly startupContentQueue: Array<() => void> = [];
   private startupIdleBuildHandle = 0;
   private readonly playerMapMarker: MapMarker = {
-    group: createMapMarker("#78f3ff", 3.2, 12, 0.42),
+    group: createMapMarker(grasslandsArt.scene.playerMapMarker, 3.2, 12, 0.42),
     baseScale: 1,
     pulseSpeed: 4.2,
   };
   private readonly shrineMapMarker: MapMarker = {
-    group: createMapMarker("#ffe08a", 4.2, 18, 0.38),
+    group: createMapMarker(grasslandsArt.scene.shrineMapMarker, 4.2, 18, 0.38),
     baseScale: 1,
     pulseSpeed: 2.4,
   };
@@ -1304,11 +1075,11 @@ export class WorldRenderer {
     this.sun.target.position.set(58, 12, 98);
     scene.add(this.sun.target);
     scene.add(this.sun);
-    this.meadowGlow.color.set("#ffe1a2");
+    this.meadowGlow.color.set(grasslandsArt.scene.meadowGlowRuntime);
     this.meadowGlow.intensity = 0.46;
     this.meadowGlow.distance = 240;
     this.meadowGlow.position.set(-186, 38, -122);
-    this.alpineGlow.color.set("#dbe8ff");
+    this.alpineGlow.color.set(grasslandsArt.scene.alpineGlowRuntime);
     this.alpineGlow.intensity = 0.56;
     this.alpineGlow.position.set(44, 128, 186);
     scene.add(this.meadowGlow, this.alpineGlow);
@@ -1327,10 +1098,12 @@ export class WorldRenderer {
     scene.add(this.groundLayer);
     scene.add(this.midLayer);
     scene.add(this.treeClusters);
+    scene.add(this.forestGroveAccents);
     scene.add(this.biomeTransitionAccents);
     scene.add(this.waterBankAccents);
     scene.add(this.anchorSceneAccents);
     scene.add(this.highlandAccents);
+    scene.add(this.grasslandImmersion.group);
     scene.add(this.highlandWaterways.group);
     scene.add(this.mountainAtmosphere);
     scene.add(this.valleyMist);
@@ -1349,8 +1122,8 @@ export class WorldRenderer {
     const meadowNearGrass = createGrassMesh(
       Math.round(GRASS_COUNT * 0.5),
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#4d8b3d"),
-      new Color("#e6f58a"),
+      new Color(grasslandsArt.grass.nearBottom),
+      new Color(grasslandsArt.grass.nearTop),
       {
         crossPlanes: 2,
         bladeWidth: 0.74,
@@ -1362,14 +1135,14 @@ export class WorldRenderer {
         fadeInEnd: 12,
         fadeOutStart: 38,
         fadeOutEnd: 76,
-        rootFillBoost: 0.06,
+        rootFillBoost: 0.05,
         selfShadowStrength: 0.72,
         distanceCompressionBoost: 0.04,
         playerPushRadius: 14,
         playerPushStrength: 1.58,
         windExaggeration: 1.38,
         windTimeScale: 1,
-        broadWindScale: 1.08,
+        broadWindScale: 1.14,
         fineWindScale: 1.25,
         lod: {
           label: "near",
@@ -1385,8 +1158,8 @@ export class WorldRenderer {
     const meadowMidGrass = createGrassMesh(
       Math.round(GRASS_COUNT * 0.34),
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#517a3e"),
-      new Color("#cbe66f"),
+      new Color(grasslandsArt.grass.midBottom),
+      new Color(grasslandsArt.grass.midTop),
       {
         crossPlanes: 1,
         bladeWidth: 0.94,
@@ -1403,7 +1176,7 @@ export class WorldRenderer {
         distanceCompressionBoost: 0.14,
         playerPushRadius: 13.5,
         playerPushStrength: 1.42,
-        windExaggeration: 1.28,
+        windExaggeration: 1.34,
         windTimeScale: 0.82,
         broadWindScale: 0.96,
         fineWindScale: 0.55,
@@ -1421,19 +1194,19 @@ export class WorldRenderer {
     const meadowFarGrassPatches = createGrassPatchImpostorMesh(
       FAR_GRASS_PATCH_COUNT,
       (zone) => zone === "plains" || zone === "hills" || zone === "foothills",
-      new Color("#5f7648"),
-      new Color("#c9df76"),
+      new Color(grasslandsArt.grass.farBottom),
+      new Color(grasslandsArt.grass.farTop),
       {
         placementMultiplier: 1.28,
         scaleMultiplier: 1.04,
-        opacity: 0.26,
+        opacity: 0.3,
       },
     );
     const alpineGrass = createGrassMesh(
       ALPINE_GRASS_COUNT,
       (zone) => zone === "alpine" || zone === "ridge",
-      new Color("#6d7567"),
-      new Color("#bec9a4"),
+      new Color(grasslandsArt.grass.alpineBottom),
+      new Color(grasslandsArt.grass.alpineTop),
       {
         crossPlanes: 1,
         bladeHeight: 2.48,
@@ -1563,6 +1336,7 @@ export class WorldRenderer {
       this.groundLayer,
       this.midLayer,
       this.treeClusters,
+      this.forestGroveAccents,
       this.biomeTransitionAccents,
       this.waterBankAccents,
       this.anchorSceneAccents,
@@ -1578,10 +1352,12 @@ export class WorldRenderer {
       this.groundLayer,
       this.midLayer,
       this.treeClusters,
+      this.forestGroveAccents,
       this.biomeTransitionAccents,
       this.waterBankAccents,
       this.anchorSceneAccents,
       this.highlandAccents,
+      this.grasslandImmersion.staticLayer,
       this.highlandWaterways.group,
       this.shadowVolumes,
       this.landmarkTrees,
@@ -1620,6 +1396,29 @@ export class WorldRenderer {
   private queueDeferredWorldSlices(options: WorldRendererOptions) {
     this.deferredWorldSlices.push(
       () => {
+        moveChildren(this.groundLayer, buildGroundLayer());
+        this.collectSmallPropMeshes(this.groundLayer);
+        freezeStaticHierarchy(this.groundLayer);
+      },
+      () => {
+        moveChildren(this.midLayer, buildMidLayer());
+        this.collectSmallPropMeshes(this.midLayer);
+        freezeStaticHierarchy(this.midLayer);
+      },
+      () => {
+        moveChildren(this.treeClusters, buildTreeClusters());
+        this.collectCameraColliders(this.treeClusters);
+        this.collectTreeWindMeshes(this.treeClusters);
+        this.collectSmallPropMeshes(this.treeClusters);
+        freezeStaticHierarchy(this.treeClusters);
+      },
+      () => {
+        moveChildren(this.forestGroveAccents, buildForestGroveAccents());
+        this.collectCameraColliders(this.forestGroveAccents);
+        this.collectSmallPropMeshes(this.forestGroveAccents);
+        freezeStaticHierarchy(this.forestGroveAccents);
+      },
+      () => {
         const clouds = buildClouds();
         this.clouds.userData.cloudMaterial = clouds.userData.cloudMaterial;
         moveChildren(this.clouds, clouds);
@@ -1651,25 +1450,23 @@ export class WorldRenderer {
       },
       () => {
         // Build a cone-stack mountain silhouette with vertex-color snow caps.
-        // Each mountain is 3 stacked ConeGeometry lobes merged into one mesh:
-        //   base lobe  — wide, short (rock/grass transition)
-        //   mid lobe   — medium (rock face)
-        //   peak lobe  — narrow, tall (snow-capped summit)
-        // Vertex colors drive the tint without a custom shader.
+        // Vertex colors drive the codex-like grass -> rock -> snow read without adding a custom shader.
         const buildMountainGeometry = (): BufferGeometry => {
-          const SEG = 10;
+          const SEG = 20;
           const lobes: BufferGeometry[] = [];
 
           // [radiusBottom, radiusTop, height, yOffset, snowFraction]
           const lobeSpec: [number, number, number, number, number][] = [
-            [1.0, 0.68, 0.38, 0.0,  0.0],   // base — grassy skirt
-            [0.68, 0.38, 0.44, 0.36, 0.05],  // mid  — rock face
-            [0.38, 0.04, 0.55, 0.76, 0.62],  // peak — snow cap
+            [1.12, 0.74, 0.34, 0.0, 0.0],
+            [0.82, 0.44, 0.44, 0.3, 0.08],
+            [0.48, 0.12, 0.5, 0.68, 0.54],
+            [0.24, 0.02, 0.34, 1.08, 0.86],
           ];
 
-          const colorBase = new Color("#9aab97");   // muted green-gray
-          const colorRock = new Color("#8a9088");   // slate rock
-          const colorSnow = new Color("#dce8e4");   // icy white
+          const colorBase = new Color("#a5b991");
+          const colorRock = new Color("#9aa39d");
+          const colorShade = new Color("#7f8c84");
+          const colorSnow = new Color("#f1eee1");
 
           lobes.push(
             ...lobeSpec.map(([rb, rt, h, yOff, snowFrac]) => {
@@ -1681,16 +1478,16 @@ export class WorldRenderer {
               const vertCount = posArr.length / 3;
               const colors = new Float32Array(vertCount * 3);
               for (let v = 0; v < vertCount; v++) {
+                const vx = posArr[v * 3];
                 const vy = posArr[v * 3 + 1];
-                // normalised height within this lobe (0 = bottom, 1 = top)
                 const t = Math.max(0, Math.min(1, (vy - yOff) / h));
-                // blend: base→rock over lower half, rock→snow over upper half weighted by snowFrac
                 const col = new Color();
                 if (t < 0.5) {
                   col.lerpColors(colorBase, colorRock, t * 2);
                 } else {
                   col.lerpColors(colorRock, colorSnow, (t - 0.5) * 2 * snowFrac);
                 }
+                col.lerp(colorShade, Math.max(0, -vx) * 0.08 + Math.max(0, 0.42 - t) * 0.08);
                 colors[v * 3]     = col.r;
                 colors[v * 3 + 1] = col.g;
                 colors[v * 3 + 2] = col.b;
@@ -1708,16 +1505,20 @@ export class WorldRenderer {
         const mountainMaterial = new MeshLambertMaterial({ vertexColors: true });
         const sharedGeo = buildMountainGeometry();
 
-        // [worldX, worldZ, scaleX, scaleY, scaleZ]
-        for (const [x, z, sx, sy, sz] of [
-          [-152, 184, 86, 118, 114],
-          [118, 198, 102, 136, 120],
-          [8, 232, 126, 162, 122],
-          [76, 240, 66, 94, 70],
+        // [worldX, worldZ, scaleX, scaleY, scaleZ, yaw, lift]
+        for (const [x, z, sx, sy, sz, yaw, lift] of [
+          [-174, 178, 82, 108, 96, -0.2, 8],
+          [-112, 210, 104, 132, 118, 0.14, 10],
+          [8, 238, 146, 184, 132, -0.04, 12],
+          [106, 208, 116, 148, 120, 0.22, 10],
+          [166, 176, 72, 96, 82, 0.4, 7],
+          [-48, 172, 58, 78, 66, -0.52, 6],
+          [62, 162, 64, 84, 70, 0.34, 6],
         ]) {
           const mountain = new Mesh(sharedGeo, mountainMaterial);
           mountain.scale.set(sx as number, sy as number, sz as number);
-          mountain.position.set(x as number, 12, z as number);
+          mountain.rotation.y = yaw as number;
+          mountain.position.set(x as number, lift as number, z as number);
           this.mountainSilhouettes.add(mountain);
         }
         freezeStaticHierarchy(this.mountainSilhouettes);
@@ -1778,6 +1579,7 @@ export class WorldRenderer {
       this.updateClouds(elapsed);
       this.updateValleyMist(elapsed);
     }
+    updateGrasslandImmersionSystem(this.grasslandImmersion, elapsed, mapLookdown);
     this.updateWaterInteractions(frame, elapsed, mapLookdown);
     this.updateWater(elapsed, mapLookdown);
     this.updateLandingSplash(frame, dt);
@@ -1973,15 +1775,15 @@ export class WorldRenderer {
     }
 
     this.gameplayFog.color.copy(this.lowlandFogColor).lerp(this.highlandFogColor, this.elevationMood);
-    this.gameplayFog.density = MathUtils.lerp(0.00108, 0.00136, this.elevationMood);
+    this.gameplayFog.density = MathUtils.lerp(0.00088, 0.00108, this.elevationMood);
     this.sun.color.copy(this.lowlandSunColor).lerp(this.highlandSunColor, this.elevationMood);
-    this.sun.intensity = MathUtils.lerp(3.55, 3.1, this.elevationMood);
-    this.ambientLight.intensity = MathUtils.lerp(0.9, 0.8, this.elevationMood);
+    this.sun.intensity = MathUtils.lerp(3.7, 3.1, this.elevationMood);
+    this.ambientLight.intensity = MathUtils.lerp(0.78, 0.66, this.elevationMood);
     this.skyFill.color.copy(this.lowlandSkyFillColor).lerp(this.highlandSkyFillColor, this.elevationMood);
     this.skyFill.groundColor.copy(this.lowlandGroundFillColor).lerp(this.highlandGroundFillColor, this.elevationMood);
-    this.skyFill.intensity = MathUtils.lerp(1.12, 1.0, this.elevationMood);
-    this.skyBounce.intensity = MathUtils.lerp(0.42, 0.5, this.elevationMood);
-    this.meadowGlow.intensity = MathUtils.lerp(0.66, 0.28, this.elevationMood);
+    this.skyFill.intensity = MathUtils.lerp(0.98, 0.84, this.elevationMood);
+    this.skyBounce.intensity = MathUtils.lerp(0.38, 0.34, this.elevationMood);
+    this.meadowGlow.intensity = MathUtils.lerp(0.76, 0.28, this.elevationMood);
     this.alpineGlow.intensity = MathUtils.lerp(0.38, 0.72, this.elevationMood);
     syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera, elapsed);
 

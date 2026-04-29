@@ -825,7 +825,7 @@ canvas.is-pointer-locked {
 
 .hud-top {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 0.75rem;
   align-items: flex-start;
 }
@@ -3527,6 +3527,7 @@ canvas.is-pointer-locked {
 .world-map {
   position: fixed;
   inset: 0;
+  z-index: 36;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -4727,6 +4728,11 @@ canvas.is-pointer-locked {
     linear-gradient(180deg, rgba(183, 234, 247, 0.18), rgba(153, 217, 232, 0.12));
 }
 
+.world-map.world-map--open {
+  opacity: 1;
+  visibility: visible;
+}
+
 .world-map__shell {
   width: min(96rem, calc(100vw - 1.6rem));
   max-height: min(54rem, calc(100vh - 1.6rem));
@@ -4754,8 +4760,9 @@ canvas.is-pointer-locked {
   border: 0;
   border-radius: 1.2rem;
   background:
-    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.52), transparent 18%),
-    radial-gradient(circle at 78% 80%, rgba(255, 255, 255, 0.38), transparent 19%);
+    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.42), transparent 18%),
+    radial-gradient(circle at 78% 80%, rgba(242, 222, 160, 0.3), transparent 19%),
+    linear-gradient(180deg, rgba(134, 102, 57, 0.06), rgba(70, 112, 95, 0.04));
   box-shadow: none;
   overflow: visible;
 }
@@ -4792,18 +4799,19 @@ canvas.is-pointer-locked {
   max-width: 100%;
   height: auto;
   overflow: visible;
-  filter: drop-shadow(0 1.2rem 0 rgba(68, 138, 137, 0.18)) drop-shadow(0 2.4rem 2rem rgba(42, 95, 113, 0.16));
+  filter: drop-shadow(0 0.42rem 0 rgba(109, 77, 45, 0.12)) drop-shadow(0 1.8rem 1.8rem rgba(72, 68, 53, 0.16));
 }
 
 .world-map__island-shadow {
-  fill: rgba(44, 112, 126, 0.2);
+  fill: rgba(82, 70, 51, 0.18);
 }
 
 .world-map__island-shape {
   fill: url("#world-map-island-gradient");
-  stroke: rgba(107, 174, 128, 0.56);
-  stroke-width: 8;
+  stroke: rgba(86, 72, 45, 0.54);
+  stroke-width: 9;
   stroke-linejoin: round;
+  paint-order: stroke fill;
 }
 
 .world-map__upland-backdrop {
@@ -4812,7 +4820,7 @@ canvas.is-pointer-locked {
 }
 
 .world-map__upland-backdrop ellipse {
-  opacity: 0.55;
+  opacity: 0.68;
   filter: blur(0.3px);
 }
 
@@ -4825,6 +4833,30 @@ canvas.is-pointer-locked {
   opacity: 0.7;
   pointer-events: none;
   filter: drop-shadow(0 -0.08rem 0.12rem rgba(40, 72, 68, 0.22));
+}
+
+.world-map__ridge-contours {
+  pointer-events: none;
+}
+
+.world-map__ridge-contour {
+  fill: none;
+  stroke: rgba(74, 80, 66, 0.48);
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.52;
+  filter: drop-shadow(0 0.08rem 0 rgba(255, 246, 211, 0.32));
+}
+
+.world-map__ridge-contour--2 {
+  stroke-width: 5;
+  opacity: 0.42;
+}
+
+.world-map__ridge-contour--3 {
+  stroke-width: 4;
+  opacity: 0.36;
 }
 
 .world-map__lake-layer {
@@ -4847,15 +4879,48 @@ canvas.is-pointer-locked {
 }
 
 .world-map__region-patch--forest {
-  fill: rgba(62, 124, 108, 0.5);
+  fill: rgba(38, 95, 66, 0.58);
 }
 
 .world-map__region-patch--meadow {
-  fill: rgba(186, 212, 152, 0.38);
+  fill: rgba(213, 211, 112, 0.38);
 }
 
 .world-map__region-patch--ridge {
-  fill: rgba(148, 184, 182, 0.45);
+  fill: rgba(178, 181, 166, 0.54);
+}
+
+.world-map__forest-glyph-layer {
+  pointer-events: none;
+}
+
+.world-map__forest-glyph path {
+  fill: rgba(52, 102, 65, 0.74);
+  stroke: rgba(32, 73, 47, 0.8);
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+  filter: drop-shadow(0 0.08rem 0 rgba(255, 247, 199, 0.24));
+}
+
+.world-map__forest-glyph--deep path {
+  fill: rgba(32, 72, 48, 0.82);
+}
+
+.world-map__forest-glyph--grove path {
+  fill: rgba(115, 151, 75, 0.78);
+  stroke: rgba(63, 101, 48, 0.78);
+}
+
+.world-map__forest-glyph--ancient path {
+  fill: rgba(139, 132, 106, 0.72);
+  stroke: rgba(73, 86, 57, 0.82);
+}
+
+.world-map__forest-glyph--fruit path {
+  fill: rgba(126, 155, 75, 0.78);
+  stroke: rgba(104, 75, 39, 0.82);
 }
 
 .world-map__route-pocket {
@@ -4871,11 +4936,11 @@ canvas.is-pointer-locked {
 .world-map__river {
   fill: none;
   stroke: url("#world-map-river-gradient");
-  stroke-width: 26;
+  stroke-width: 28;
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.95;
-  filter: drop-shadow(0 0 0.25rem rgba(255, 255, 255, 0.72));
+  filter: drop-shadow(0 0 0.18rem rgba(255, 251, 224, 0.72));
 }
 
 .world-map__river--branch {
@@ -4885,12 +4950,14 @@ canvas.is-pointer-locked {
 
 .world-map__route {
   fill: none;
-  stroke: rgba(244, 222, 148, 0.95);
-  stroke-width: 10;
+  stroke: rgba(118, 84, 45, 0.92);
+  stroke-width: 13;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-dasharray: 2 18;
-  filter: drop-shadow(0 0.1rem 0 rgba(124, 92, 50, 0.18));
+  stroke-dasharray: 2 20;
+  filter:
+    drop-shadow(0 0.1rem 0 rgba(255, 249, 217, 0.48))
+    drop-shadow(0 0.16rem 0 rgba(124, 92, 50, 0.18));
 }
 
 .world-map__atlas-marker circle,
@@ -4913,21 +4980,21 @@ canvas.is-pointer-locked {
 
 .world-map__atlas-marker path {
   fill: none;
-  stroke: #4e7e87;
+  stroke: #5d6f6a;
   stroke-width: 3.4;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .world-map__atlas-marker--poi path {
-  fill: #75bd64;
-  stroke: #4f8c47;
+  fill: #7cad5a;
+  stroke: #4f7843;
   stroke-width: 2.2;
 }
 
 .world-map__atlas-marker--special path {
-  fill: #ffc85b;
-  stroke: #d98b35;
+  fill: #e9b451;
+  stroke: #9e6a30;
   stroke-width: 2.2;
 }
 

@@ -2,12 +2,15 @@ import { InstancedMesh, Material, Object3D } from "three";
 import {
   buildAnchorSceneAccents,
   buildBiomeTransitionAccents,
+  buildForestGroveAccents,
   buildGroundLayer,
   buildHighlandAccents,
   buildMidLayer,
   buildTreeClusters,
   buildWaterBankAccents,
 } from "../../src/render/world/terrainDecorations";
+import { MossuAvatar } from "../../src/render/objects/MossuAvatar";
+import { ART_DIRECTION_IDS, OOT_PS2_GRASSLANDS_PALETTE } from "../../src/render/visualPalette";
 import { assert } from "./testHarness";
 
 function collectSmallPropMeshes(root: Object3D) {
@@ -22,14 +25,26 @@ function collectSmallPropMeshes(root: Object3D) {
 }
 
 export function runVisualContracts() {
+  const anchorSceneAccents = buildAnchorSceneAccents();
+  assert(anchorSceneAccents.userData.artDirection === ART_DIRECTION_IDS.grasslands, "grasslands art pass has an explicit direction marker");
+  assert(Boolean(OOT_PS2_GRASSLANDS_PALETTE.futureLakes.clearSurface), "grasslands palette reserves lake and river color tokens for the next biome pass");
+  assert(Boolean(OOT_PS2_GRASSLANDS_PALETTE.props.fence.post), "grasslands palette owns fence color tokens");
+  const highlandAccents = buildHighlandAccents();
+  assert(highlandAccents.userData.artDirection === ART_DIRECTION_IDS.hillsMountains, "highland art pass has an explicit codex hills marker");
+  const forestGroveAccents = buildForestGroveAccents();
+  assert(forestGroveAccents.userData.artDirection === ART_DIRECTION_IDS.forestGroves, "forest grove art pass has an explicit codex forest marker");
+  assert(Boolean(OOT_PS2_GRASSLANDS_PALETTE.props.forestGroves.birchBark), "forest grove palette owns tree-family color tokens");
+  const mossuAvatar = new MossuAvatar();
+  assert(mossuAvatar.group.userData.artDirection === ART_DIRECTION_IDS.ootPs2Characters, "Mossu avatar uses the OOT / PS2 character art direction marker");
   const roots = [
     buildGroundLayer(),
     buildMidLayer(),
     buildTreeClusters(),
     buildBiomeTransitionAccents(),
     buildWaterBankAccents(),
-    buildAnchorSceneAccents(),
-    buildHighlandAccents(),
+    anchorSceneAccents,
+    highlandAccents,
+    forestGroveAccents,
   ];
   const smallPropMeshes = roots.flatMap(collectSmallPropMeshes);
 

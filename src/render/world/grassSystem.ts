@@ -26,6 +26,10 @@ import {
   sampleTerrainHeight,
   sampleTerrainNormal,
 } from "../../simulation/world";
+import { OOT_PS2_GRASSLANDS_PALETTE } from "../visualPalette";
+import { sampleOpeningMeadowMask } from "./worldMasks";
+
+const grassArt = OOT_PS2_GRASSLANDS_PALETTE.grass;
 
 export interface GrassShader {
   uniforms: Record<string, { value: unknown }>;
@@ -154,13 +158,6 @@ export function mergeBufferGeometries(geometries: BufferGeometry[]) {
   return merged;
 }
 
-export function sampleOpeningMeadowMask(x: number, z: number) {
-  const startCore = Math.exp(-(((x + 58) / 34) ** 2) - (((z + 148) / 22) ** 2));
-  const startLane = Math.exp(-(((x + 18) / 96) ** 2) - (((z + 82) / 82) ** 2));
-  const amberRise = Math.exp(-(((x + 6) / 42) ** 2) - (((z + 28) / 30) ** 2));
-  return MathUtils.clamp(startCore * 0.92 + startLane * 0.46 + amberRise * 0.54, 0, 1);
-}
-
 function makeGrassBladeGeometry(width: number, height: number, crossPlanes = 1) {
   const geometry = new PlaneGeometry(width, height, 2, 4);
   geometry.translate(0, height * 0.5, 0);
@@ -205,7 +202,7 @@ export function createGrassMesh(
     options.crossPlanes ?? 1,
   );
   const material = new MeshLambertMaterial({
-    color: "#98c66d",
+    color: grassArt.materialBase,
     side: DoubleSide,
     transparent: true,
     alphaTest: 0.08,
@@ -243,7 +240,7 @@ export function createGrassMesh(
         : zone === "foothills"
           ? 0.78 + openingMask * 0.1 + habitat.edge * 0.1 + riverNookMask * 0.18
           : 0.94 + habitat.edge * 0.08;
-    const habitatPlacementFade = MathUtils.clamp(1 + habitat.meadow * 0.22 - habitat.forest * 0.16 - habitat.shore * 0.38, 0.42, 1.24);
+    const habitatPlacementFade = MathUtils.clamp(1 + habitat.meadow * 0.3 - habitat.forest * 0.18 - habitat.shore * 0.38, 0.42, 1.3);
     if (Math.random() > MathUtils.clamp(density * placementBias * habitatPlacementFade * (options.placementMultiplier ?? 1), 0, 1)) {
       continue;
     }
@@ -298,11 +295,12 @@ export function createGrassMesh(
       MathUtils.clamp(0.14 + patchMix * 0.72 + Math.random() * 0.05, 0, 1),
     );
     color
-      .lerp(new Color("#b7df75"), habitat.meadow * 0.16)
-      .lerp(new Color("#6f8a5c"), habitat.forest * 0.18)
-      .lerp(new Color("#7f9d69"), habitat.shore * 0.18)
-      .lerp(new Color("#5d7a62"), dampBankMask * 0.22)
-      .lerp(new Color("#6a9080"), dampBankMask * 0.12);
+      .lerp(new Color(grassArt.meadowHighlight), habitat.meadow * (0.16 + openingMask * 0.08))
+      .lerp(new Color(grassArt.openingSun), openingMask * 0.08 * (0.4 + sunPatch * 0.6))
+      .lerp(new Color(grassArt.forestShade), habitat.forest * 0.18)
+      .lerp(new Color(grassArt.shoreSage), habitat.shore * 0.18)
+      .lerp(new Color(grassArt.dampRoot), dampBankMask * 0.22)
+      .lerp(new Color(grassArt.dampTeal), dampBankMask * 0.12);
     tints[placed * 3] = color.r;
     tints[placed * 3 + 1] = color.g;
     tints[placed * 3 + 2] = color.b;
@@ -369,9 +367,9 @@ export function createGrassMesh(
     shader.uniforms.uWindTimeScale = { value: options.windTimeScale ?? 1 };
     shader.uniforms.uBroadWindScale = { value: options.broadWindScale ?? 1 };
     shader.uniforms.uFineWindScale = { value: options.fineWindScale ?? 1 };
-    shader.uniforms.uSceneSunColor = { value: new Color("#fff8e8") };
-    shader.uniforms.uSceneAmbient = { value: new Color("#b8c8e0") };
-    shader.uniforms.uSceneHorizon = { value: new Color("#f3e3d4") };
+    shader.uniforms.uSceneSunColor = { value: new Color(grassArt.shaderSun) };
+    shader.uniforms.uSceneAmbient = { value: new Color(grassArt.shaderAmbient) };
+    shader.uniforms.uSceneHorizon = { value: new Color(grassArt.shaderHorizon) };
     shader.uniforms.uSceneElevationMood = { value: 0 };
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -548,7 +546,7 @@ export function createGrassMesh(
         float rootFill = smoothstep(0.42, 0.0, vBladeMix) * (0.1 + uRootFillBoost + vDistanceBlend * 0.28 + vHeroField * 0.08);
         vec3 rooted = vTint * vec3(0.36, 0.64, 0.32);
         vec3 midBlade = mix(rooted, vTint * vec3(0.78, 1.03, 0.54), pow(vBladeMix, 0.58));
-        vec3 sunlit = vTint * vec3(1.0, 1.18, 0.62) + vec3(0.12, 0.18, 0.03) * vPatchLight;
+        vec3 sunlit = vTint * vec3(1.05, 1.24, 0.58) + vec3(0.16, 0.21, 0.025) * vPatchLight;
         vec3 meadowColor = mix(midBlade, sunlit, sunStripe * (0.6 + nearDetail * 0.14) + warmTip * 0.18);
         float tipGlow = smoothstep(0.62, 1.0, vBladeMix) * smoothstep(1.0, 0.12, vSoftEdge) * (0.04 + vHeroField * 0.08 + vPatchLight * 0.04);
         meadowColor += vec3(0.07, 0.12, 0.025) * tipGlow;
@@ -559,17 +557,17 @@ export function createGrassMesh(
         float rootBand = 1.0 - smoothstep(0.28, 0.34, vBladeMix);
         float tipBand = smoothstep(0.68, 0.76, vBladeMix);
         vec3 bladeRootBand = vTint * vec3(0.27, 0.56, 0.265);
-        vec3 bladeMidBand = vTint * vec3(0.74, 1.02, 0.48) + vec3(0.025, 0.055, 0.0) * vPatchLight;
-        vec3 bladeTipBand = vTint * vec3(1.02, 1.17, 0.615) + vec3(0.048, 0.076, 0.014) * (vPatchLight + vHeroField * 0.5);
+        vec3 bladeMidBand = vTint * vec3(0.78, 1.07, 0.44) + vec3(0.035, 0.065, 0.0) * vPatchLight;
+        vec3 bladeTipBand = vTint * vec3(1.08, 1.22, 0.56) + vec3(0.06, 0.086, 0.01) * (vPatchLight + vHeroField * 0.6);
         vec3 painterBands = mix(bladeMidBand, bladeRootBand, rootBand);
         painterBands = mix(painterBands, bladeTipBand, tipBand);
         float bandInfluence = mix(0.58, 0.26, vDistanceBlend) * (0.86 + vHeroField * 0.14);
         meadowColor = mix(meadowColor, painterBands, bandInfluence);
-        vec3 lowlandLush = mix(meadowColor, vTint * vec3(0.72, 1.08, 0.5), (1.0 - vElevationMood) * nearDetail * 0.28);
+        vec3 lowlandLush = mix(meadowColor, vTint * vec3(0.78, 1.14, 0.46), (1.0 - vElevationMood) * nearDetail * 0.34);
         vec3 highlandSage = mix(vTint * vec3(0.62, 0.74, 0.58), vec3(0.63, 0.72, 0.66), vElevationMood * 0.48);
         meadowColor = mix(lowlandLush, highlandSage, vSceneDepthMood * (0.42 + vElevationMood * 0.34));
-        vec3 distantMass = mix(vTint * vec3(0.56, 0.8, 0.42), vec3(0.58, 0.72, 0.6), vSceneDepthMood);
-        distantMass = mix(distantMass, vTint * vec3(0.78, 1.0, 0.58), (vPatchLight * 0.42 + vHeroField * 0.1) * (1.0 - vElevationMood * 0.42));
+        vec3 distantMass = mix(vTint * vec3(0.58, 0.84, 0.38), vec3(0.62, 0.76, 0.56), vSceneDepthMood);
+        distantMass = mix(distantMass, vTint * vec3(0.86, 1.06, 0.52), (vPatchLight * 0.48 + vHeroField * 0.14) * (1.0 - vElevationMood * 0.42));
         float distanceCompression = clamp(vDistanceBlend + uDistanceCompressionBoost, 0.0, 1.0);
         meadowColor = mix(meadowColor, distantMass, distanceCompression * 0.7);
         // Far: collapse to cheap blended color (fewer highlights / less band detail)
@@ -625,7 +623,7 @@ export function createGrassPatchImpostorMesh(
   const geometry = new CircleGeometry(1, 14);
   geometry.rotateX(-Math.PI / 2);
   const material = new MeshBasicMaterial({
-    color: "#ffffff",
+    color: grassArt.impostorBase,
     vertexColors: true,
     transparent: true,
     opacity: options.opacity ?? 0.26,
@@ -684,9 +682,10 @@ export function createGrassPatchImpostorMesh(
     color
       .copy(tintBottom)
       .lerp(tintTop, MathUtils.clamp(0.3 + patchCluster * 0.42 + openingMask * 0.16 + Math.random() * 0.1, 0, 1))
-      .lerp(new Color("#d5df86"), habitat.meadow * 0.18)
-      .lerp(new Color("#6d8167"), elevationMood * 0.24)
-      .lerp(new Color("#4f6249"), habitat.forest * 0.14);
+      .lerp(new Color(grassArt.impostorMeadow), habitat.meadow * 0.22)
+      .lerp(new Color(grassArt.impostorSun), openingMask * 0.12)
+      .lerp(new Color(grassArt.impostorElevation), elevationMood * 0.24)
+      .lerp(new Color(grassArt.impostorForest), habitat.forest * 0.14);
     mesh.setColorAt(placed, color);
     placed += 1;
   }

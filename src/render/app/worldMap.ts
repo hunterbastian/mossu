@@ -53,6 +53,13 @@ export interface MapAtlasMarker {
   landmarkId?: string;
 }
 
+export interface MapForestGlyph {
+  id: string;
+  kind: "deep" | "grove" | "ancient" | "fruit";
+  title: string;
+  point: MapPoint;
+}
+
 export interface MapRegionPatch {
   id: string;
   kind: "forest" | "meadow" | "ridge";
@@ -144,6 +151,16 @@ export const mapRiverBranchPaths = RIVER_BRANCH_SEGMENTS.map((segment) => buildP
 ));
 export const mapRoutePath = buildPath(routeLandmarks.map((landmark) => projectWorldToMap(landmark.position.x, landmark.position.z)));
 
+const mountainRidgeWorldLines: readonly (readonly (readonly [number, number])[])[] = [
+  [[-142, 168], [-106, 198], [-62, 216], [-18, 232], [30, 226], [82, 206], [128, 178]],
+  [[-72, 138], [-34, 166], [12, 184], [58, 178], [100, 150]],
+  [[-118, 110], [-82, 132], [-44, 148], [-8, 144], [28, 128], [64, 112]],
+];
+
+export const mapMountainRidgePaths: readonly string[] = mountainRidgeWorldLines.map((line) => (
+  buildPath(line.map(([x, z]) => projectWorldToMap(x, z)))
+));
+
 export const mapAtlasMarkers: readonly MapAtlasMarker[] = worldMapMarkers.map((marker) => ({
   id: marker.id,
   kind: marker.kind,
@@ -157,6 +174,8 @@ const mapRegionDefinitions = [
   ["forest-low-east", "forest", 90, -42, 72, 58, 1.2],
   ["forest-fir-gate", "forest", 52, 80, 78, 50, 1.9],
   ["forest-ridge-west", "forest", -84, 170, 60, 44, 0.85],
+  ["forest-deep-west", "forest", -128, -64, 54, 62, 2.2],
+  ["forest-ancient-east", "forest", 86, 146, 54, 50, 1.1],
   ["meadow-burrow", "meadow", -50, -126, 82, 58, 2.4],
   ["meadow-silver", "meadow", -4, 4, 92, 62, 1.5],
   ["ridge-crown", "ridge", 4, 210, 94, 52, 0.45],
@@ -175,6 +194,20 @@ export const mapRegionPatches: readonly MapRegionPatch[] = mapRegionDefinitions.
     };
   },
 );
+
+export const mapForestGlyphs: readonly MapForestGlyph[] = [
+  ["deep-west", "deep", "Deep woods", -122, -66],
+  ["sunlit-grove", "grove", "Peaceful grove", -88, -112],
+  ["fruit-grove", "fruit", "Wild fruit grove", 108, -34],
+  ["fir-gate-deep", "deep", "Fir gate woods", 54, 96],
+  ["root-ruins-west", "ancient", "Ancient grounds", -90, 132],
+  ["root-ruins-east", "ancient", "Root-swallowed ruins", 84, 148],
+].map(([id, kind, title, x, z]) => ({
+  id: id as string,
+  kind: kind as MapForestGlyph["kind"],
+  title: title as string,
+  point: projectWorldToMap(x as number, z as number),
+}));
 
 export interface MapLakePatch {
   id: string;

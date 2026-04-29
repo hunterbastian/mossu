@@ -1437,15 +1437,40 @@ export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainH
   const lowlandRim = smootherStep(58, 148, Math.abs(x)) * smootherStep(-134, 44, z) * (1 - smootherStep(52, 96, z));
   const firGate = smootherStep(34, 138, z) * (1 - smootherStep(206, 236, z));
   const highlandPocket = Math.exp(-(((x + 2) / 104) ** 2) - (((z - 148) / 112) ** 2));
+  const deepWoods = Math.max(
+    Math.exp(-(((x + 122) / 52) ** 2) - (((z + 66) / 58) ** 2)),
+    Math.exp(-(((x - 94) / 56) ** 2) - (((z - 22) / 64) ** 2)),
+    Math.exp(-(((x - 54) / 50) ** 2) - (((z - 96) / 54) ** 2)),
+  );
+  const peacefulGroves = Math.max(
+    Math.exp(-(((x + 88) / 66) ** 2) - (((z + 112) / 48) ** 2)),
+    Math.exp(-(((x - 108) / 62) ** 2) - (((z + 34) / 54) ** 2)),
+    Math.exp(-(((x + 26) / 58) ** 2) - (((z - 76) / 50) ** 2)),
+  );
+  const ancientGrounds = Math.max(
+    Math.exp(-(((x + 90) / 58) ** 2) - (((z - 132) / 58) ** 2)),
+    Math.exp(-(((x - 84) / 62) ** 2) - (((z - 148) / 62) ** 2)),
+  );
   const authoredGroves = Math.max(
     Math.exp(-(((x + 126) / 58) ** 2) - (((z + 78) / 62) ** 2)),
     Math.exp(-(((x - 108) / 62) ** 2) - (((z - 40) / 70) ** 2)),
     Math.exp(-(((x + 86) / 70) ** 2) - (((z - 132) / 78) ** 2)),
     Math.exp(-(((x - 84) / 68) ** 2) - (((z - 144) / 78) ** 2)),
   );
-  const clearing = saturate(meadow * 0.72 + shore * 0.44 + route.core * 0.56 + route.paint * 0.18 + routeReadability * 0.38);
+  const clearing = saturate(
+    meadow * 0.72 +
+    shore * 0.44 +
+    route.core * 0.56 +
+    route.paint * 0.18 +
+    routeReadability * 0.38 +
+    peacefulGroves * 0.3 +
+    ancientGrounds * 0.08,
+  );
   const forest = saturate(
     Math.max(lowlandRim * 0.74, firGate * 0.52, highlandPocket * 0.58, authoredGroves * 0.82) +
+    deepWoods * 0.18 +
+    ancientGrounds * 0.22 +
+    peacefulGroves * 0.08 +
     smootherStep(0.46, 0.72, forestNoise) * 0.42 +
     travelTransitionBand * 0.14 +
     forestBreakup * 0.12 -
@@ -1460,6 +1485,8 @@ export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainH
     meadow * forest * 0.42 +
     biomeTransitionOpen * 0.18 +
     travelTransitionBand * 0.24 +
+    peacefulGroves * 0.22 +
+    ancientGrounds * 0.16 +
     route.shoulder * 0.24,
   );
   const zone =

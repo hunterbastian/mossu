@@ -9,6 +9,7 @@ import {
   Vector3,
 } from "three";
 import { PlayerState } from "../../simulation/gameState";
+import { ART_DIRECTION_IDS, OOT_PS2_GRASSLANDS_PALETTE } from "../visualPalette";
 
 export class MossuAvatar {
   readonly group = new Group();
@@ -58,27 +59,31 @@ export class MossuAvatar {
   private readonly radius = 2.2;
 
   constructor() {
+    const mossuArt = OOT_PS2_GRASSLANDS_PALETTE.mossu;
+    const materialArt = OOT_PS2_GRASSLANDS_PALETTE.material;
+    this.group.userData.artDirection = ART_DIRECTION_IDS.ootPs2Characters;
     this.group.add(this.locomotionRoot);
     this.locomotionRoot.add(this.rollingRoot);
     this.locomotionRoot.add(this.legRoot);
 
-    const bodyGeometry = new IcosahedronGeometry(this.radius, 5);
+    const bodyGeometry = new IcosahedronGeometry(this.radius, 2);
     this.bodyMaterial = new MeshStandardMaterial({
-      color: "#f4f8fb",
-      roughness: 0.96,
+      color: mossuArt.body,
+      roughness: materialArt.characterBodyRoughness,
       metalness: 0,
-      flatShading: false,
+      flatShading: true,
     });
     this.body = new Mesh(bodyGeometry, this.bodyMaterial);
     this.body.castShadow = true;
     this.body.receiveShadow = true;
-    this.body.scale.set(1, 0.94, 1);
+    this.body.scale.set(1.06, 0.9, 1.02);
     this.rollingRoot.add(this.body);
 
-    const puffGeometry = new SphereGeometry(0.5, 12, 10);
+    const puffGeometry = new IcosahedronGeometry(0.52, 1);
     const puffMaterial = new MeshStandardMaterial({
-      color: "#fbfcff",
-      roughness: 0.98,
+      color: mossuArt.fluff,
+      roughness: materialArt.characterSoftRoughness,
+      flatShading: true,
     });
 
     const puffOffsets = [
@@ -104,67 +109,72 @@ export class MossuAvatar {
     });
 
     const facePatch = new Mesh(
-      new SphereGeometry(0.92, 18, 16),
+      new SphereGeometry(0.92, 10, 8),
       new MeshStandardMaterial({
-        color: "#f9fbff",
-        roughness: 0.96,
+        color: mossuArt.face,
+        roughness: 0.94,
+        flatShading: true,
       }),
     );
-    facePatch.scale.set(1.08, 0.92, 0.42);
-    facePatch.position.set(0, 0.24, 1.78);
+    facePatch.scale.set(1.16, 0.82, 0.34);
+    facePatch.position.set(0, 0.18, 1.82);
     this.faceAnchor.add(facePatch);
 
-    const eyeGeometry = new SphereGeometry(0.3, 18, 16);
+    const eyeGeometry = new SphereGeometry(0.31, 10, 8);
     const eyeMaterial = new MeshStandardMaterial({
-      color: "#151b26",
-      roughness: 0.16,
+      color: mossuArt.eye,
+      roughness: materialArt.characterEyeRoughness,
       metalness: 0,
+      flatShading: true,
     });
     const leftEye = new Mesh(eyeGeometry, eyeMaterial);
     const rightEye = new Mesh(eyeGeometry, eyeMaterial);
-    leftEye.scale.set(0.88, 1.36, 0.66);
-    rightEye.scale.set(0.88, 1.36, 0.66);
-    leftEye.position.set(-0.56, 0.34, 2.0);
-    rightEye.position.set(0.56, 0.34, 2.0);
+    leftEye.scale.set(0.82, 1.34, 0.48);
+    rightEye.scale.set(0.82, 1.34, 0.48);
+    leftEye.position.set(-0.58, 0.32, 2.04);
+    rightEye.position.set(0.58, 0.32, 2.04);
     this.eyeMeshes.push(leftEye, rightEye);
     this.faceAnchor.add(leftEye, rightEye);
 
-    const catchlightGeometry = new SphereGeometry(0.052, 8, 8);
+    const catchlightGeometry = new SphereGeometry(0.048, 6, 5);
     const catchlightMaterial = new MeshStandardMaterial({
-      color: "#ffffff",
-      emissive: "#dff7ff",
-      emissiveIntensity: 0.28,
-      roughness: 0.22,
+      color: mossuArt.catchlight,
+      emissive: mossuArt.catchlightEmissive,
+      emissiveIntensity: 0.18,
+      roughness: materialArt.characterHighlightRoughness,
+      flatShading: true,
     });
     const leftCatchlight = new Mesh(catchlightGeometry, catchlightMaterial);
     const rightCatchlight = new Mesh(catchlightGeometry, catchlightMaterial);
     leftCatchlight.scale.set(0.82, 1.22, 0.42);
     rightCatchlight.scale.set(0.82, 1.22, 0.42);
-    leftCatchlight.position.set(-0.63, 0.48, 2.22);
-    rightCatchlight.position.set(0.49, 0.48, 2.22);
+    leftCatchlight.position.set(-0.65, 0.45, 2.21);
+    rightCatchlight.position.set(0.5, 0.45, 2.21);
     this.catchlightMeshes.push(leftCatchlight, rightCatchlight);
     this.faceAnchor.add(leftCatchlight, rightCatchlight);
 
-    const cheekGeometry = new SphereGeometry(0.13, 10, 8);
+    const cheekGeometry = new SphereGeometry(0.13, 7, 5);
     const cheekMaterial = new MeshStandardMaterial({
-      color: "#e6d8d7",
+      color: mossuArt.cheek,
       roughness: 1,
       transparent: true,
-      opacity: 0.46,
+      opacity: 0.38,
+      flatShading: true,
     });
     const leftCheek = new Mesh(cheekGeometry, cheekMaterial);
     const rightCheek = new Mesh(cheekGeometry, cheekMaterial);
     leftCheek.scale.set(1.8, 1, 0.6);
     rightCheek.scale.set(1.8, 1, 0.6);
-    leftCheek.position.set(-0.86, -0.02, 1.9);
-    rightCheek.position.set(0.86, -0.02, 1.9);
+    leftCheek.position.set(-0.9, -0.04, 1.94);
+    rightCheek.position.set(0.9, -0.04, 1.94);
     this.cheekMeshes.push(leftCheek, rightCheek);
     this.faceAnchor.add(leftCheek, rightCheek);
 
-    const tuftGeometry = new IcosahedronGeometry(0.34, 2);
+    const tuftGeometry = new IcosahedronGeometry(0.36, 1);
     const tuftMaterial = new MeshStandardMaterial({
-      color: "#ffffff",
-      roughness: 0.98,
+      color: mossuArt.tuft,
+      roughness: 0.95,
+      flatShading: true,
     });
     const tuftOffsets = [
       new Vector3(-0.72, 1.74, 0.1),
@@ -188,10 +198,11 @@ export class MossuAvatar {
       this.rollingRoot.add(tuft);
     });
 
-    const legGeometry = new SphereGeometry(0.34, 12, 10);
+    const legGeometry = new IcosahedronGeometry(0.36, 1);
     const legMaterial = new MeshStandardMaterial({
-      color: "#f7fbff",
-      roughness: 0.98,
+      color: mossuArt.leg,
+      roughness: 0.96,
+      flatShading: true,
     });
     const legOffsets = [
       new Vector3(-0.72, -1.88, 0.64),
@@ -201,7 +212,7 @@ export class MossuAvatar {
     legOffsets.forEach((offset, index) => {
       const leg = new Mesh(legGeometry, legMaterial);
       leg.position.copy(offset);
-      leg.scale.set(1.08, 1.28, 1.02);
+      leg.scale.set(1.16, 1.1, 1.02);
       leg.castShadow = true;
       leg.receiveShadow = true;
       this.legs.push(leg);
@@ -391,7 +402,8 @@ export class MossuAvatar {
       tuft.rotation.z = Math.cos(this.bob * 1.35 + index * 0.7) * 0.08 + callT * Math.sin(index * 1.4) * 0.14 + rollT * Math.sin(index * 1.2) * 0.1 + this.secondaryOffset.x * 0.36 + sideBias * floatT * 0.1;
     });
 
-    const snowTint = player.swimming ? "#e4f1f7" : floating ? "#f0fbff" : player.grounded ? "#f4f8fb" : "#eef5ff";
+    const mossuTint = OOT_PS2_GRASSLANDS_PALETTE.mossu.tint;
+    const snowTint = player.swimming ? mossuTint.swimming : floating ? mossuTint.floating : player.grounded ? mossuTint.grounded : mossuTint.airborne;
     this.bodyMaterial.color.set(snowTint);
 
     const blinkCycle = this.blinkClock % 3.7;
@@ -399,9 +411,9 @@ export class MossuAvatar {
     const eyeSquint = Math.max(blinkT, landT * 0.64 + rollT * 0.16 - floatT * 0.08);
     const eyeAlert = jumpT * 0.09 + callT * 0.08 + floatT * 0.12 + floatStartT * 0.06;
     this.eyeMeshes.forEach((eye, index) => {
-      eye.scale.y = Math.max(0.16, 1.36 - eyeSquint * 1.05 + eyeAlert);
-      eye.scale.x = 0.88 + landT * 0.12 + callT * 0.04;
-      eye.position.y = 0.34 + eyeAlert * 0.08 - landT * 0.025;
+      eye.scale.y = Math.max(0.16, 1.34 - eyeSquint * 1.05 + eyeAlert);
+      eye.scale.x = 0.82 + landT * 0.12 + callT * 0.04;
+      eye.position.y = 0.32 + eyeAlert * 0.08 - landT * 0.025;
       eye.rotation.z = (index === 0 ? -1 : 1) * (callT * 0.035 + moveT * 0.018);
     });
     this.catchlightMeshes.forEach((catchlight) => {
@@ -425,7 +437,7 @@ export class MossuAvatar {
       leg.position.y = baseY + stepLift - landT * 0.1 + moveT * 0.05 + floatT * 0.68;
       leg.position.z = baseZ + stepSwing + moveT * 0.08 - floatT * 0.28;
       leg.rotation.x = stepSwing * 1.25 + moveT * 0.2 - floatT * 0.9;
-      leg.scale.set(1.08 * (1 - floatT * 0.16), 1.28 * (1 - floatT * 0.34), 1.02 * (1 + floatT * 0.08));
+      leg.scale.set(1.16 * (1 - floatT * 0.16), 1.1 * (1 - floatT * 0.34), 1.02 * (1 + floatT * 0.08));
       leg.visible = legTuck < 0.98 && !player.swimming;
     });
 

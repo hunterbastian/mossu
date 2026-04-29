@@ -12,8 +12,10 @@ import {
   getMapLabelLayout,
   mapAtlasMarkers,
   mapBoundaryPath,
+  mapForestGlyphs,
   mapHighlandBackdrop,
   mapLakePatches,
+  mapMountainRidgePaths,
   mapRegionPatches,
   mapRiverBranchPaths,
   mapRiverPath,
@@ -768,30 +770,6 @@ export class HudShell {
     const top = document.createElement("div");
     top.className = "hud-top";
 
-    const objective = document.createElement("section");
-    objective.className = "objective-chip";
-    const eyebrow = document.createElement("p");
-    eyebrow.className = "objective-chip__eyebrow";
-    eyebrow.textContent = "Trail Note";
-    this.statusValues.objectiveTitle.className = "objective-chip__title";
-    this.statusValues.objectiveBody.className = "objective-chip__body";
-    const noteCopy = document.createElement("div");
-    noteCopy.className = "objective-chip__copy";
-    noteCopy.append(eyebrow, this.statusValues.objectiveTitle, this.statusValues.objectiveBody);
-    const noteMap = document.createElement("div");
-    noteMap.className = "objective-chip__map";
-    noteMap.setAttribute("aria-hidden", "true");
-    noteMap.innerHTML = `
-      <span class="objective-chip__peak"></span>
-      <span class="objective-chip__trail"></span>
-      <span class="objective-chip__river"></span>
-      <span class="objective-chip__tree objective-chip__tree--one"></span>
-      <span class="objective-chip__tree objective-chip__tree--two"></span>
-      <span class="objective-chip__tree objective-chip__tree--three"></span>
-      <span class="objective-chip__mossu-dot"></span>
-    `;
-    objective.append(noteCopy, noteMap);
-
     const status = document.createElement("section");
     status.className = "status-strip";
     status.append(
@@ -814,7 +792,7 @@ export class HudShell {
     utilityStack.append(this.buildPouchHud(), this.buildRollModeHud(), this.buildStaminaHud(), this.statusValues.ability);
     bottom.append(bottomStack, utilityStack);
 
-    top.append(objective, status);
+    top.append(status);
 
     this.flavorPingToast.className = "hud-flavor-ping";
     this.flavorPingToast.setAttribute("role", "status");
@@ -1357,10 +1335,11 @@ export class HudShell {
     islandGradient.setAttribute("x2", "0%");
     islandGradient.setAttribute("y2", "0%");
     [
-      ["0%", "#dcefb1"],
-      ["38%", "#c7df95"],
-      ["67%", "#9ab57c"],
-      ["100%", "#7d9280"],
+      ["0%", "#efe1a4"],
+      ["28%", "#cfe392"],
+      ["56%", "#93b66d"],
+      ["78%", "#8a9181"],
+      ["100%", "#d8dfd7"],
     ].forEach(([offset, color]) => {
       const stop = createSvgElement("stop");
       stop.setAttribute("offset", offset);
@@ -1375,8 +1354,9 @@ export class HudShell {
     riverGradient.setAttribute("x2", "0%");
     riverGradient.setAttribute("y2", "0%");
     [
-      ["0%", "#78b5b8"],
-      ["100%", "#c8dfc5"],
+      ["0%", "#5f9fb1"],
+      ["52%", "#8ec8c5"],
+      ["100%", "#e7e0b4"],
     ].forEach(([offset, color]) => {
       const stop = createSvgElement("stop");
       stop.setAttribute("offset", offset);
@@ -1391,8 +1371,9 @@ export class HudShell {
     highlandRidgeGradient.setAttribute("x2", "0%");
     highlandRidgeGradient.setAttribute("y2", "100%");
     [
-      ["0%", "rgba(118, 160, 168, 0.62)"],
-      ["100%", "rgba(96, 132, 116, 0.38)"],
+      ["0%", "rgba(213, 218, 204, 0.72)"],
+      ["48%", "rgba(126, 143, 126, 0.54)"],
+      ["100%", "rgba(82, 104, 91, 0.42)"],
     ].forEach(([offset, color]) => {
       const stop = createSvgElement("stop");
       stop.setAttribute("offset", offset);
@@ -1457,6 +1438,15 @@ export class HudShell {
       northRidge.setAttribute("d", northRidgeD);
       northRidge.setAttribute("clip-path", "url(#world-map-island-clip)");
     }
+    const ridgeContourLayer = createSvgElement("g");
+    ridgeContourLayer.classList.add("world-map__ridge-contours");
+    ridgeContourLayer.setAttribute("clip-path", "url(#world-map-island-clip)");
+    mapMountainRidgePaths.forEach((path, index) => {
+      const contour = createSvgElement("path");
+      contour.classList.add("world-map__ridge-contour", `world-map__ridge-contour--${index + 1}`);
+      contour.setAttribute("d", path);
+      ridgeContourLayer.append(contour);
+    });
 
     const lakeLayer = createSvgElement("g");
     lakeLayer.classList.add("world-map__lake-layer");
@@ -1503,6 +1493,13 @@ export class HudShell {
       regionLayer.append(patchGroup);
     });
 
+    const forestGlyphLayer = createSvgElement("g");
+    forestGlyphLayer.classList.add("world-map__forest-glyph-layer");
+    forestGlyphLayer.setAttribute("clip-path", "url(#world-map-island-clip)");
+    mapForestGlyphs.forEach((glyph) => {
+      forestGlyphLayer.append(this.createMapForestGlyph(glyph.kind, glyph.title, glyph.point.x, glyph.point.y));
+    });
+
     const river = createSvgElement("path");
     river.classList.add("world-map__river");
     river.setAttribute("d", mapRiverPath);
@@ -1537,8 +1534,10 @@ export class HudShell {
       island,
       highlandGroup,
       ...(northRidgeD ? [northRidge] : []),
+      ridgeContourLayer,
       lakeLayer,
       regionLayer,
+      forestGlyphLayer,
       river,
       riverBranches,
       route,
@@ -1666,6 +1665,26 @@ export class HudShell {
       icon.setAttribute("d", "M -2 8 L 2 8 L 2 2 Q 9 0 7 -7 Q 2 -5 0 -10 Q -2 -5 -7 -7 Q -9 0 -2 2 Z");
     }
     group.append(backing, icon);
+    return group;
+  }
+
+  private createMapForestGlyph(kind: "deep" | "grove" | "ancient" | "fruit", title: string, x: number, y: number) {
+    const group = createSvgElement("g");
+    group.classList.add("world-map__forest-glyph", `world-map__forest-glyph--${kind}`);
+    group.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+    group.setAttribute("aria-label", title);
+
+    const crown = createSvgElement("path");
+    if (kind === "ancient") {
+      crown.setAttribute("d", "M -8 8 L -8 -6 Q -3 -12 0 -4 Q 3 -12 8 -6 L 8 8 M -11 8 L 11 8 M -6 3 Q 0 -2 6 3");
+    } else if (kind === "fruit") {
+      crown.setAttribute("d", "M 0 -10 C 8 -10 13 -5 12 2 C 11 9 5 12 0 9 C -5 12 -11 9 -12 2 C -13 -5 -8 -10 0 -10 Z M -3 1 A 1.4 1.4 0 1 0 -3.1 1");
+    } else if (kind === "grove") {
+      crown.setAttribute("d", "M -11 5 C -13 -4 -6 -10 0 -8 C 6 -10 13 -4 11 5 C 8 11 -8 11 -11 5 Z M 0 9 L 0 2");
+    } else {
+      crown.setAttribute("d", "M -10 8 L -5 0 L -8 0 L -3 -7 L -5 -7 L 0 -13 L 5 -7 L 3 -7 L 8 0 L 5 0 L 10 8 Z M 0 8 L 0 0");
+    }
+    group.append(crown);
     return group;
   }
 

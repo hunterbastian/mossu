@@ -1,4 +1,5 @@
 import {
+  BoxGeometry,
   BufferGeometry,
   CircleGeometry,
   Color,
@@ -35,17 +36,22 @@ import {
   scenicPockets,
   type RiverChannelId,
 } from "../../simulation/world";
-import { sampleOpeningMeadowMask } from "./grassSystem";
 import { markCameraCollider, scatterAroundPocket } from "./sceneHelpers";
+import { ART_DIRECTION_IDS, OOT_PS2_GRASSLANDS_PALETTE } from "../visualPalette";
+import { sampleOpeningMeadowMask } from "./worldMasks";
 
 type MaterialCompileShader = Parameters<MeshLambertMaterial["onBeforeCompile"]>[0];
 type MaterialCompileRenderer = Parameters<MeshLambertMaterial["onBeforeCompile"]>[1];
 
-const TREE_SIZE_MULTIPLIER = 4;
+const TREE_SIZE_MULTIPLIER = 2.45;
+const LANDMARK_TREE_SIZE_MULTIPLIER = 4;
 const FOREST_MIN_X = -182;
 const FOREST_MAX_X = 174;
 const FOREST_MIN_Z = -158;
 const FOREST_MAX_Z = 226;
+const grasslandProps = OOT_PS2_GRASSLANDS_PALETTE.props;
+const forestGroveProps = grasslandProps.forestGroves;
+const futureLakeArt = OOT_PS2_GRASSLANDS_PALETTE.futureLakes;
 
 type InstancedForestKind = "round" | "pine";
 
@@ -144,6 +150,27 @@ function sampleForestComposition(x: number, z: number, y: number): ForestComposi
     ),
     edge: MathUtils.clamp(edge + habitat.edge * 0.34, 0, 1),
   };
+}
+
+function sampleRouteVistaProtection(x: number, z: number) {
+  const routeVista =
+    Math.exp(-((x / 68) ** 2)) *
+    MathUtils.smoothstep(z, 38, 168) *
+    (1 - MathUtils.smoothstep(z, 196, 226));
+  const creekVista =
+    Math.exp(-(((x - 34) / 42) ** 2) - (((z - 132) / 42) ** 2));
+  return Math.max(sampleRouteReadabilityClearing(x, z), routeVista, creekVista * 0.9);
+}
+
+function shouldSkipLargeRouteTree(kind: "round" | "pine" | "birch", x: number, z: number, scale: number) {
+  if (kind === "birch") {
+    return false;
+  }
+  const vistaProtection = sampleRouteVistaProtection(x, z);
+  const threshold = kind === "pine"
+    ? scale > 0.9 ? 0.3 : 0.42
+    : scale > 0.82 ? 0.34 : 0.5;
+  return vistaProtection > threshold;
 }
 
 function makeSeededRandom(seed: number) {
@@ -246,8 +273,15 @@ function canPlaceInstancedTree(kind: InstancedForestKind, x: number, z: number) 
   const y = sampleTerrainHeight(x, z);
   const habitat = sampleHabitatLayer(x, z, y);
   const routeReadability = sampleRouteReadabilityClearing(x, z);
+  const routeVistaBand = sampleRouteVistaProtection(x, z);
   const waterWetness = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
-  if (waterWetness > 0.26 || habitat.shore > 0.42 || habitat.meadow > 0.72 || routeReadability > 0.76) {
+  if (
+    waterWetness > 0.26 ||
+    habitat.shore > 0.42 ||
+    habitat.meadow > 0.72 ||
+    routeReadability > 0.58 ||
+    routeVistaBand > 0.38
+  ) {
     return false;
   }
 
@@ -301,7 +335,7 @@ function sampleInstancedTreeDensity(kind: InstancedForestKind, x: number, z: num
       zone === "hills" ? 0.3 :
       zone === "foothills" ? 0.28 :
       alpineFade;
-    return (biomeDensity + edgeBoost) * waterFade * forestEnvelope * clumpGate * clearingFade * (1 - habitat.meadow * 0.5) * (1 - routeReadability * 0.72);
+    return (biomeDensity + edgeBoost) * waterFade * forestEnvelope * clumpGate * clearingFade * (1 - habitat.meadow * 0.5) * (1 - routeReadability * 0.86);
   }
 
   // pines get a sparse plains/hills fringe density so the lowland edge crossfades rather than hard-cuts
@@ -312,7 +346,7 @@ function sampleInstancedTreeDensity(kind: InstancedForestKind, x: number, z: num
     zone === "alpine" ? 0.68 :
     zone === "ridge" ? 0.5 :
     lowlandPineFade;
-  return (biomeDensity + edgeBoost) * waterFade * MathUtils.clamp(forestEnvelope + firApproach * 0.34, 0, 1) * clumpGate * clearingFade * (1 - habitat.meadow * 0.42) * (1 - routeReadability * 0.68);
+  return (biomeDensity + edgeBoost) * waterFade * MathUtils.clamp(forestEnvelope + firApproach * 0.34, 0, 1) * clumpGate * clearingFade * (1 - habitat.meadow * 0.42) * (1 - routeReadability * 0.82);
 }
 
 function buildInstancedTreePlacements(kind: InstancedForestKind) {
@@ -425,7 +459,7 @@ function makeRoundForestGeometry() {
   const leafShade = "#2f5530";
   const leafDeep = "#1e3a24";
 
-  const trunk = new CylinderGeometry(0.3, 0.58, 3.5, 14);
+  const trunk = new CylinderGeometry(0.3, 0.58, 3.5, 18);
   trunk.translate(0, 1.75, 0);
   const trunkHighlight = transformGeometry(new SphereGeometry(0.22, 9, 7), {
     scale: [0.72, 4.8, 0.3],
@@ -439,7 +473,7 @@ function makeRoundForestGeometry() {
   const rootParts = Array.from({ length: 6 }, (_, index) => {
     const angle = (index / 6) * Math.PI * 2 + 0.08;
     const s = 0.34 + (index % 3) * 0.05;
-    return transformGeometry(new SphereGeometry(1, 7, 5), {
+    return transformGeometry(new SphereGeometry(1, 10, 7), {
       scale: [s, 0.16 + (index % 2) * 0.03, 0.8 + (index % 2) * 0.08],
       rotation: [0.1, angle, (index % 2) * 0.1],
       position: [Math.cos(angle) * 0.45, 0.16, Math.sin(angle) * 0.45],
@@ -451,14 +485,14 @@ function makeRoundForestGeometry() {
     [0.28, 2.85, -0.06, -0.08, -0.24, 0.82],
     [0.1, 3.2, 0.24, 0.1, 0.16, 0.6],
   ].map(([x, y, z, pitch, roll, len]) =>
-    transformGeometry(new CylinderGeometry(0.04, 0.1, len as number, 7), {
+    transformGeometry(new CylinderGeometry(0.04, 0.1, len as number, 10), {
       rotation: [pitch as number, 0, roll as number],
       position: [x as number, y as number, z as number],
     }),
   );
 
-  const sphereSeg = 12;
-  const sphereRow = 9;
+  const sphereSeg = 16;
+  const sphereRow = 11;
 
   // Three dominant ellipsoids + back/side fill (readable silhouette)
   const canopyParts = [
@@ -496,7 +530,7 @@ function makeRoundForestGeometry() {
       windWeight: 1,
     })),
     ...puffParts.map(([x, y, z, size, color]) => ({
-      geometry: transformGeometry(new SphereGeometry(1, 8, 6), {
+      geometry: transformGeometry(new SphereGeometry(1, 12, 8), {
         scale: [size, size * 0.88, size],
         position: [x, y, z],
       }),
@@ -504,7 +538,7 @@ function makeRoundForestGeometry() {
       windWeight: 0.95,
     })),
     ...blossomParts.map(([x, y, z, color, size]) => ({
-      geometry: transformGeometry(new SphereGeometry(1, 7, 5), {
+      geometry: transformGeometry(new SphereGeometry(1, 10, 7), {
         scale: [size, size * 0.78, size],
         position: [x, y, z],
       }),
@@ -515,8 +549,8 @@ function makeRoundForestGeometry() {
 }
 
 function makePineForestGeometry() {
-  const segs = 12;
-  const trunk = new CylinderGeometry(0.16, 0.3, 4.6, 12);
+  const segs = 24;
+  const trunk = new CylinderGeometry(0.16, 0.3, 4.6, 18);
   trunk.translate(0, 2.3, 0);
   const wood = "#5c4736";
   const t1 = "#2a4030";
@@ -541,12 +575,12 @@ function makePineForestGeometry() {
   upper.translate(0, 4.7, 0);
   const tip = new ConeGeometry(0.48, 0.9, segs);
   tip.translate(0, 5.38, 0);
-  const hip = transformGeometry(new SphereGeometry(0.34, 8, 7), {
+  const hip = transformGeometry(new SphereGeometry(0.34, 14, 9), {
     scale: [0.52, 0.4, 0.5],
     position: [0, 5.8, 0],
   });
   // Dead stub for silhouette break (tucked under mid tier)
-  const stub = transformGeometry(new CylinderGeometry(0.04, 0.08, 0.5, 6), {
+  const stub = transformGeometry(new CylinderGeometry(0.04, 0.08, 0.5, 10), {
     rotation: [0, 0, 0.5],
     position: [0.42, 3.5, 0.2],
   });
@@ -680,8 +714,8 @@ function buildInstancedForest() {
 
   const roundTrees = new InstancedMesh(makeRoundForestGeometry(), makeWindTreeMaterial("round"), roundPlacements.length);
   const pineTrees = new InstancedMesh(makePineForestGeometry(), makeWindTreeMaterial("pine"), pinePlacements.length);
-  applyTreeInstances(roundTrees, roundPlacements, 2.35);
-  applyTreeInstances(pineTrees, pinePlacements, 2.52);
+  applyTreeInstances(roundTrees, roundPlacements, 2.12);
+  applyTreeInstances(pineTrees, pinePlacements, 2.22);
   markInstancedTreeWind(roundTrees);
   markInstancedTreeWind(pineTrees);
   roundTrees.frustumCulled = true;
@@ -703,24 +737,24 @@ function makeRoundTree(scale: number, leafColor: string) {
   const leafLightMaterial = new MeshLambertMaterial({ color: makeTint(leafColor, "#cde87a", 0.45) });
   const flowerMaterial = new MeshLambertMaterial({ color: "#fff2c8" });
   const fruitMaterial = new MeshLambertMaterial({ color: "#f0c878" });
-  const sphereSeg = 12;
-  const sphereRow = 9;
+  const sphereSeg = 16;
+  const sphereRow = 11;
 
   const trunk = markCameraCollider(new Mesh(
-    new CylinderGeometry(0.3 * scaledSize, 0.58 * scaledSize, 3.5 * scaledSize, 14),
+    new CylinderGeometry(0.3 * scaledSize, 0.58 * scaledSize, 3.5 * scaledSize, 18),
     barkMaterial,
   ));
   trunk.position.y = 1.75 * scaledSize;
   group.add(trunk);
 
-  const trunkHighlight = new Mesh(new SphereGeometry(0.11 * scaledSize, 9, 7), barkLightMaterial);
+  const trunkHighlight = new Mesh(new SphereGeometry(0.11 * scaledSize, 12, 8), barkLightMaterial);
   trunkHighlight.scale.set(0.72, 4.6, 0.3);
   trunkHighlight.rotation.set(0, 0.15, -0.12);
   trunkHighlight.position.set(0.18 * scaledSize, 1.9 * scaledSize, 0.32 * scaledSize);
   group.add(trunkHighlight);
 
   const nub = new Mesh(
-    new SphereGeometry(0.05 * scaledSize, 6, 5),
+    new SphereGeometry(0.05 * scaledSize, 8, 6),
     new MeshLambertMaterial({ color: makeTint("#7a5a3a", "#4a6a3a", 0.4) }),
   );
   nub.position.set(-0.2 * scaledSize, 1.1 * scaledSize, 0.28 * scaledSize);
@@ -730,7 +764,7 @@ function makeRoundTree(scale: number, leafColor: string) {
     const angle = (i / 6) * Math.PI * 2 + 0.08;
     const s = 0.34 + (i % 3) * 0.05;
     const root = markCameraCollider(new Mesh(
-      new SphereGeometry(0.5 * s * scaledSize, 7, 5),
+      new SphereGeometry(0.5 * s * scaledSize, 10, 7),
       barkShadowMaterial,
     ));
     root.position.set(Math.cos(angle) * 0.45 * scaledSize, 0.16 * scaledSize, Math.sin(angle) * 0.45 * scaledSize);
@@ -745,7 +779,7 @@ function makeRoundTree(scale: number, leafColor: string) {
     [0.1, 3.2, 0.24, 0.1, 0.16, 0.6],
   ]) {
     const branch = new Mesh(
-      new CylinderGeometry(0.04 * scaledSize, 0.1 * scaledSize, (length as number) * scaledSize, 7),
+      new CylinderGeometry(0.04 * scaledSize, 0.1 * scaledSize, (length as number) * scaledSize, 10),
       barkShadowMaterial,
     );
     branch.position.set((x as number) * scaledSize, (y as number) * scaledSize, (z as number) * scaledSize);
@@ -775,7 +809,7 @@ function makeRoundTree(scale: number, leafColor: string) {
     [0, 2.9, 0, 0.36],
   ]) {
     const puff = new Mesh(
-      new SphereGeometry((s as number) * scaledSize, 8, 6),
+      new SphereGeometry((s as number) * scaledSize, 12, 8),
       new MeshLambertMaterial({ color: makeTint(leafColor, "#1e3a24", 0.2) }),
     );
     puff.position.set((x as number) * scaledSize, (y as number) * scaledSize, (z as number) * scaledSize);
@@ -785,7 +819,7 @@ function makeRoundTree(scale: number, leafColor: string) {
   for (const [x, y, z, s] of [
     [0.4, 4.85, 0.1, 0.26],
   ]) {
-    const puff = new Mesh(new SphereGeometry((s as number) * scaledSize, 8, 6), leafLightMaterial);
+    const puff = new Mesh(new SphereGeometry((s as number) * scaledSize, 12, 8), leafLightMaterial);
     puff.position.set((x as number) * scaledSize, (y as number) * scaledSize, (z as number) * scaledSize);
     group.add(puff);
   }
@@ -794,7 +828,7 @@ function makeRoundTree(scale: number, leafColor: string) {
     [0.65, 4.0, 0.7, 0.14, flowerMaterial],
     [-0.55, 3.6, 0.65, 0.12, fruitMaterial],
   ]) {
-    const ornament = new Mesh(new SphereGeometry((size as number) * scaledSize, 7, 5), material as MeshLambertMaterial);
+    const ornament = new Mesh(new SphereGeometry((size as number) * scaledSize, 10, 7), material as MeshLambertMaterial);
     ornament.scale.set(1, 0.78, 1);
     ornament.position.set((x as number) * scaledSize, (y as number) * scaledSize, (z as number) * scaledSize);
     group.add(ornament);
@@ -806,18 +840,18 @@ function makeRoundTree(scale: number, leafColor: string) {
 function makePineTree(scale: number, tone = "#5b7d4d") {
   const scaledSize = scale * TREE_SIZE_MULTIPLIER;
   const group = new Group();
-  const segs = 12;
+  const segs = 24;
   const wood = new MeshLambertMaterial({ color: "#5c4736" });
   const stubMat = new MeshLambertMaterial({ color: makeTint("#5c4736", "#1a1a1a", 0.25) });
   const trunk = markCameraCollider(new Mesh(
-    new CylinderGeometry(0.16 * scaledSize, 0.3 * scaledSize, 4.6 * scaledSize, 12),
+    new CylinderGeometry(0.16 * scaledSize, 0.3 * scaledSize, 4.6 * scaledSize, 18),
     wood,
   ));
   trunk.position.y = 2.3 * scaledSize;
   group.add(trunk);
 
   const stub = new Mesh(
-    new CylinderGeometry(0.04 * scaledSize, 0.08 * scaledSize, 0.5 * scaledSize, 6),
+    new CylinderGeometry(0.04 * scaledSize, 0.08 * scaledSize, 0.5 * scaledSize, 10),
     stubMat,
   );
   stub.position.set(0.42 * scaledSize, 3.5 * scaledSize, 0.2 * scaledSize);
@@ -848,11 +882,92 @@ function makePineTree(scale: number, tone = "#5b7d4d") {
     group.add(mesh);
   }
 
-  const hip = new Mesh(new SphereGeometry(0.17 * scaledSize, 8, 7), new MeshLambertMaterial({ color: tTop }));
+  const hip = new Mesh(new SphereGeometry(0.17 * scaledSize, 14, 9), new MeshLambertMaterial({ color: tTop }));
   hip.scale.set(0.52, 0.4, 0.5);
   hip.position.set(0, 5.8 * scaledSize, 0);
   group.add(hip);
 
+  return group;
+}
+
+function makeBirchGroveTree(scale: number, leafColor: string = forestGroveProps.birchCanopy) {
+  const scaledSize = scale * TREE_SIZE_MULTIPLIER;
+  const group = new Group();
+  const barkMaterial = new MeshLambertMaterial({ color: forestGroveProps.birchBark });
+  const stripeMaterial = new MeshLambertMaterial({ color: forestGroveProps.birchStripe });
+  const leafMaterial = new MeshLambertMaterial({ color: leafColor });
+  const leafShadowMaterial = new MeshLambertMaterial({ color: makeTint(leafColor, forestGroveProps.deepCanopyDark, 0.28) });
+  const leafLightMaterial = new MeshLambertMaterial({ color: makeTint(leafColor, "#ecf1a0", 0.36) });
+
+  const trunk = markCameraCollider(new Mesh(
+    new CylinderGeometry(0.22 * scaledSize, 0.32 * scaledSize, 4.25 * scaledSize, 16),
+    barkMaterial,
+  ));
+  trunk.position.y = 2.12 * scaledSize;
+  trunk.rotation.z = -0.04;
+  group.add(trunk);
+
+  for (const [y, sx, yaw] of [
+    [1.22, 0.9, 0.12],
+    [2.08, 0.72, -0.18],
+    [2.92, 0.82, 0.26],
+  ] as const) {
+    const stripe = new Mesh(new BoxGeometry(0.5 * scaledSize, 0.12 * scaledSize, 0.05 * scaledSize), stripeMaterial);
+    stripe.position.set(0.02 * scaledSize, y * scaledSize, 0.22 * scaledSize);
+    stripe.scale.x = sx;
+    stripe.rotation.y = yaw;
+    stripe.rotation.z = -0.08;
+    group.add(stripe);
+  }
+
+  for (const [x, y, z, sx, sy, sz, material] of [
+    [0, 4.52, 0, 1.2, 0.82, 1.02, leafMaterial],
+    [-0.62, 4.18, 0.18, 0.76, 0.5, 0.68, leafShadowMaterial],
+    [0.64, 4.26, -0.12, 0.74, 0.52, 0.7, leafMaterial],
+    [0.12, 4.88, 0.22, 0.56, 0.38, 0.52, leafLightMaterial],
+  ] as const) {
+    const leaf = new Mesh(new SphereGeometry(scaledSize, 14, 10), material as MeshLambertMaterial);
+    leaf.scale.set(sx as number, sy as number, sz as number);
+    leaf.position.set((x as number) * scaledSize, (y as number) * scaledSize, (z as number) * scaledSize);
+    group.add(leaf);
+  }
+
+  return group;
+}
+
+function makeFallenLog(scale: number) {
+  const group = new Group();
+  const barkMaterial = new MeshLambertMaterial({ color: forestGroveProps.root });
+  const cutMaterial = new MeshLambertMaterial({ color: "#b1885c" });
+  const log = markCameraCollider(new Mesh(new CylinderGeometry(0.34 * scale, 0.42 * scale, 3.4 * scale, 16), barkMaterial));
+  log.rotation.z = Math.PI * 0.5;
+  log.position.y = 0.34 * scale;
+  group.add(log);
+  [-1.7, 1.7].forEach((x) => {
+    const cut = new Mesh(new CircleGeometry(0.36 * scale, 16), cutMaterial);
+    cut.position.set(x * scale, 0.34 * scale, 0);
+    cut.rotation.y = Math.PI * 0.5;
+    group.add(cut);
+  });
+  const moss = makeMossPatch(0.44 * scale, forestGroveProps.mossGlow);
+  moss.position.set(-0.35 * scale, 0.72 * scale, 0.08 * scale);
+  group.add(moss);
+  return group;
+}
+
+function makeRootRun(scale: number) {
+  const group = new Group();
+  const rootMaterial = new MeshLambertMaterial({ color: forestGroveProps.rootDark });
+  for (const [x, z, length, yaw, width] of [
+    [0, 0, 2.9, -0.42, 0.16],
+    [0.62, 0.42, 2.2, 0.38, 0.12],
+    [-0.52, -0.36, 2.0, -0.9, 0.11],
+  ] as const) {
+    const root = markCameraCollider(new Mesh(new CylinderGeometry(width * scale, width * 1.45 * scale, length * scale, 12), rootMaterial));
+    root.position.set(x * scale, 0.18 * scale, z * scale);
+    root.rotation.set(Math.PI * 0.5, yaw, 0.08);
+    group.add(root);
+  }
   return group;
 }
 
@@ -924,6 +1039,78 @@ function makePineSapling(scale: number, tone = "#668a55") {
     cone.position.y = (y as number) * scale;
     group.add(cone);
   }
+
+  return group;
+}
+
+function makeGrasslandFence(scale: number, length = 6.2) {
+  const group = new Group();
+  group.name = `${ART_DIRECTION_IDS.grasslands}-fence`;
+  const postMaterial = new MeshLambertMaterial({ color: grasslandProps.fence.post });
+  const railMaterial = new MeshLambertMaterial({ color: grasslandProps.fence.rail });
+  const capMaterial = new MeshLambertMaterial({ color: grasslandProps.fence.cap });
+  const leftX = -length * 0.5;
+  const rightX = length * 0.5;
+
+  [leftX, rightX].forEach((x, index) => {
+    const post = new Mesh(new BoxGeometry(0.42 * scale, 1.8 * scale, 0.42 * scale), postMaterial);
+    post.position.set(x * scale, 0.9 * scale, 0);
+    post.rotation.y = index * 0.08;
+    group.add(post);
+
+    const cap = new Mesh(new BoxGeometry(0.62 * scale, 0.18 * scale, 0.58 * scale), capMaterial);
+    cap.position.set(x * scale, 1.86 * scale, 0);
+    cap.rotation.y = index * 0.08;
+    group.add(cap);
+  });
+
+  for (const [y, z, tilt] of [
+    [1.26, -0.08, 0.03],
+    [0.72, 0.08, -0.025],
+  ] as const) {
+    const rail = new Mesh(new BoxGeometry(length * scale, 0.22 * scale, 0.28 * scale), railMaterial);
+    rail.position.set(0, y * scale, z * scale);
+    rail.rotation.z = tilt;
+    group.add(rail);
+  }
+
+  const tuftMaterial = new MeshLambertMaterial({ color: grasslandProps.fence.tuft });
+  [-0.34, 0.28].forEach((x, index) => {
+    const tuft = new Mesh(new ConeGeometry(0.28 * scale, 0.9 * scale, 7), tuftMaterial);
+    tuft.position.set((x * length) * scale, 0.45 * scale, (index === 0 ? -0.38 : 0.38) * scale);
+    tuft.rotation.z = index === 0 ? -0.12 : 0.14;
+    group.add(tuft);
+  });
+
+  return group;
+}
+
+function makeGrasslandSignpost(scale: number) {
+  const group = new Group();
+  group.name = `${ART_DIRECTION_IDS.grasslands}-signpost`;
+  const postMaterial = new MeshLambertMaterial({ color: grasslandProps.signpost.post });
+  const signMaterial = new MeshLambertMaterial({ color: grasslandProps.signpost.face });
+  const trimMaterial = new MeshLambertMaterial({ color: grasslandProps.signpost.trim });
+
+  const post = new Mesh(new BoxGeometry(0.34 * scale, 2.4 * scale, 0.34 * scale), postMaterial);
+  post.position.y = 1.2 * scale;
+  group.add(post);
+
+  const face = new Mesh(new BoxGeometry(1.9 * scale, 0.78 * scale, 0.2 * scale), signMaterial);
+  face.position.set(0.18 * scale, 2.12 * scale, 0);
+  face.rotation.z = -0.04;
+  group.add(face);
+
+  const leaf = new Mesh(new SphereGeometry(0.16 * scale, 7, 5), trimMaterial);
+  leaf.position.set(-0.78 * scale, 2.16 * scale, 0.12 * scale);
+  leaf.scale.set(1.4, 0.42, 0.7);
+  leaf.rotation.z = 0.36;
+  group.add(leaf);
+
+  const pointer = new Mesh(new BoxGeometry(0.8 * scale, 0.18 * scale, 0.16 * scale), trimMaterial);
+  pointer.position.set(0.48 * scale, 2.13 * scale, 0.14 * scale);
+  pointer.rotation.z = -0.04;
+  group.add(pointer);
 
   return group;
 }
@@ -1589,6 +1776,108 @@ function makeRockFormation(scale: number, tone: string) {
   return group;
 }
 
+function makeCodexCaveMouth(scale: number) {
+  const group = new Group();
+  group.name = "codex-cave-mouth";
+  const shadowMaterial = new MeshBasicMaterial({
+    color: "#242821",
+    transparent: true,
+    opacity: 0.86,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const stoneMaterial = new MeshLambertMaterial({ color: "#9d998f" });
+  const mossMaterial = new MeshLambertMaterial({ color: "#70865c" });
+
+  const mouth = new Mesh(new CircleGeometry(1.12 * scale, 18), shadowMaterial);
+  mouth.scale.set(1, 1.2, 0.7);
+  mouth.position.set(0, 1.02 * scale, -0.18 * scale);
+  group.add(mouth);
+
+  for (const [x, y, z, sx, sy, sz] of [
+    [-0.78, 0.58, 0, 0.42, 1.1, 0.34],
+    [0.8, 0.54, 0, 0.42, 1.02, 0.36],
+    [0, 1.42, -0.02, 1.32, 0.42, 0.44],
+    [-0.32, 0.18, 0.1, 0.56, 0.26, 0.4],
+    [0.42, 0.16, 0.1, 0.5, 0.22, 0.36],
+  ] as const) {
+    const stone = markCameraCollider(new Mesh(new SphereGeometry(0.72 * scale, 6, 5), stoneMaterial));
+    stone.position.set(x * scale, y * scale, z * scale);
+    stone.scale.set(sx * scale, sy * scale, sz * scale);
+    group.add(stone);
+  }
+
+  const moss = makeMossPatch(0.52 * scale, "#70865c");
+  moss.position.set(-0.38 * scale, 0.14 * scale, 0.42 * scale);
+  group.add(moss);
+  const sprig = makeGrassClump(0.46 * scale, "#819a62");
+  sprig.position.set(0.55 * scale, 0.06 * scale, 0.38 * scale);
+  group.add(sprig);
+
+  const lip = new Mesh(new CylinderGeometry(0.04 * scale, 0.06 * scale, 1.18 * scale, 5), mossMaterial);
+  lip.position.set(0, 1.63 * scale, 0.2 * scale);
+  lip.rotation.z = Math.PI * 0.5;
+  group.add(lip);
+  return group;
+}
+
+function makeCodexRuinMarker(scale: number) {
+  const group = new Group();
+  group.name = "codex-ruin-marker";
+  const stoneMaterial = new MeshLambertMaterial({ color: "#bdb5a2" });
+  const capMaterial = new MeshLambertMaterial({ color: "#d1c7ad" });
+  const mossMaterial = new MeshLambertMaterial({ color: "#728a5b" });
+
+  for (const x of [-0.48, 0.48]) {
+    const pillar = markCameraCollider(new Mesh(new CylinderGeometry(0.16 * scale, 0.22 * scale, 1.65 * scale, 6), stoneMaterial));
+    pillar.position.set(x * scale, 0.82 * scale, 0);
+    pillar.rotation.z = x < 0 ? -0.05 : 0.04;
+    group.add(pillar);
+  }
+
+  const lintel = markCameraCollider(new Mesh(new BoxGeometry(1.46 * scale, 0.28 * scale, 0.34 * scale), capMaterial));
+  lintel.position.set(0, 1.68 * scale, 0);
+  lintel.rotation.z = -0.04;
+  group.add(lintel);
+
+  const baseLeft = new Mesh(new BoxGeometry(0.54 * scale, 0.24 * scale, 0.42 * scale), stoneMaterial);
+  baseLeft.position.set(-0.52 * scale, 0.12 * scale, 0.08 * scale);
+  group.add(baseLeft);
+  const baseRight = new Mesh(new BoxGeometry(0.62 * scale, 0.18 * scale, 0.38 * scale), stoneMaterial);
+  baseRight.position.set(0.55 * scale, 0.09 * scale, -0.04 * scale);
+  baseRight.rotation.y = 0.14;
+  group.add(baseRight);
+
+  const moss = makeMossPatch(0.36 * scale, "#728a5b");
+  moss.position.set(0.2 * scale, 0.18 * scale, 0.34 * scale);
+  group.add(moss);
+  return group;
+}
+
+function makeAlpineHerbCluster(scale: number, flowerTone = "#f3e7aa") {
+  const group = new Group();
+  const leafMaterial = new MeshLambertMaterial({ color: "#708a61" });
+  const flowerMaterial = new MeshLambertMaterial({ color: flowerTone });
+  for (const [x, z, h, tilt] of [
+    [-0.26, -0.08, 0.72, -0.2],
+    [-0.08, 0.14, 0.84, 0.08],
+    [0.16, -0.04, 0.68, 0.18],
+    [0.34, 0.12, 0.56, 0.3],
+  ] as const) {
+    const stem = new Mesh(new ConeGeometry(0.055 * scale, h * scale, 6), leafMaterial);
+    stem.position.set(x * scale, h * scale * 0.5, z * scale);
+    stem.rotation.z = tilt;
+    group.add(stem);
+    if (h > 0.65) {
+      const flower = new Mesh(new SphereGeometry(0.095 * scale, 7, 5), flowerMaterial);
+      flower.position.set(x * scale, h * scale, z * scale);
+      flower.scale.set(1.2, 0.56, 1.2);
+      group.add(flower);
+    }
+  }
+  return group;
+}
+
 function makeWaterfallRibbon(height: number, width: number) {
   const group = new Group();
 
@@ -1607,8 +1896,8 @@ function makeWaterfallRibbon(height: number, width: number) {
     return ribbon;
   };
 
-  const veil = makeRibbon(width * 1.14, height, "#bfefff", 0.34, 0, -0.04);
-  const blueFall = makeRibbon(width * 0.72, height * 0.96, "#8bd7eb", 0.4, -width * 0.08, 0.03);
+  const veil = makeRibbon(width * 1.14, height, futureLakeArt.shallowEdge, 0.34, 0, -0.04);
+  const blueFall = makeRibbon(width * 0.72, height * 0.96, futureLakeArt.clearSurface, 0.4, -width * 0.08, 0.03);
   const brightFall = makeRibbon(width * 0.44, height * 0.94, "#fbfffb", 0.54, width * 0.08, 0.09);
   const leftThread = makeRibbon(width * 0.12, height * 0.54, "#ffffff", 0.5, -width * 0.34, 0.14);
   const rightThread = makeRibbon(width * 0.1, height * 0.46, "#e8fbff", 0.42, width * 0.36, 0.16);
@@ -1632,9 +1921,9 @@ function makeWaterfallRibbon(height: number, width: number) {
     return foam;
   };
 
-  const foamA = makeFoam(width * 0.58, -width * 0.12, 0.42, "#f8fff7", 0.44);
+  const foamA = makeFoam(width * 0.58, -width * 0.12, 0.42, futureLakeArt.foam, 0.44);
   const foamB = makeFoam(width * 0.42, width * 0.24, 0.58, "#def6ff", 0.34);
-  const warmSpray = makeFoam(width * 0.26, width * 0.02, 0.74, "#fff2cb", 0.18);
+  const warmSpray = makeFoam(width * 0.26, width * 0.02, 0.74, futureLakeArt.sunFoam, 0.18);
 
   for (let i = 0; i < 6; i += 1) {
     const spray = new Mesh(
@@ -1954,7 +2243,11 @@ export function buildTreeClusters() {
   const addTree = (x: number, z: number, scale: number, type: "round" | "pine", tone: string, yawSeed: number) => {
     const y = sampleTerrainHeight(x, z);
     const habitat = sampleHabitatLayer(x, z, y);
-    if (habitat.shore > 0.56 || (habitat.meadow > 0.84 && habitat.forest < 0.34)) {
+    if (
+      habitat.shore > 0.56 ||
+      (habitat.meadow > 0.84 && habitat.forest < 0.34) ||
+      shouldSkipLargeRouteTree(type, x, z, scale)
+    ) {
       return;
     }
 
@@ -2090,11 +2383,11 @@ export function buildTreeClusters() {
 
   const mixedClusters = [
     [-4, 72, 1.02, "round"],
-    [24, 92, 1.18, "pine"],
-    [42, 112, 1.28, "pine"],
-    [-20, 126, 1.2, "pine"],
-    [18, 154, 1.34, "pine"],
-    [-30, 174, 1.3, "pine"],
+    [24, 92, 0.78, "pine"],
+    [42, 112, 0.86, "pine"],
+    [-20, 126, 0.84, "pine"],
+    [18, 154, 0.98, "pine"],
+    [-30, 174, 0.96, "pine"],
     [20, 190, 1.42, "pine"],
     [48, 214, 1.2, "pine"],
   ];
@@ -2115,10 +2408,10 @@ export function buildTreeClusters() {
   const transitionClusters = [
     [-78, 34, 0.74, "round"],
     [72, 48, 0.82, "round"],
-    [-92, 72, 0.9, "pine"],
-    [82, 86, 0.96, "pine"],
-    [-64, 116, 1.04, "pine"],
-    [74, 138, 1.1, "pine"],
+    [-92, 72, 0.68, "pine"],
+    [82, 86, 0.7, "pine"],
+    [-64, 116, 0.78, "pine"],
+    [74, 138, 0.82, "pine"],
   ];
   transitionClusters.forEach(([x, z, scale, type], index) => {
     const habitat = sampleHabitatLayer(x as number, z as number);
@@ -2145,6 +2438,139 @@ export function buildTreeClusters() {
   ] as const;
   forestEdgeAnchors.forEach(([x, z, scale, tone], index) => {
     addForestUnderstoryPatch(group, x, z, scale, 520 + index, tone, props);
+  });
+
+  group.add(props.buildGroup());
+  return group;
+}
+
+export function buildForestGroveAccents() {
+  const group = new Group();
+  const props = new SmallPropInstancer("forest-grove-small-props");
+  group.name = "forest-grove-codex-accents";
+  group.userData.artDirection = ART_DIRECTION_IDS.forestGroves;
+
+  const addTerrainObject = (object: Object3D, x: number, z: number, yOffset: number, yaw: number) => {
+    if (!isInsideIslandPlayableBounds(x, z)) {
+      return;
+    }
+    const y = sampleTerrainHeight(x, z);
+    const slope = 1 - sampleTerrainNormal(x, z).y;
+    const wetness = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
+    if (slope > 0.42 || wetness > 0.62) {
+      return;
+    }
+    object.position.set(x, y + yOffset, z);
+    object.rotation.y = yaw;
+    group.add(object);
+  };
+
+  const addGroveFloor = (
+    x: number,
+    z: number,
+    scale: number,
+    yaw: number,
+    tone: "deep" | "peaceful" | "ancient",
+  ) => {
+    const y = sampleTerrainHeight(x, z);
+    const shadow = makeCanopyShadowPatch(
+      scale,
+      tone === "peaceful" ? forestGroveProps.shadowWarm : forestGroveProps.shadowDeep,
+      tone === "peaceful" ? 0.12 : tone === "ancient" ? 0.2 : 0.24,
+    );
+    shadow.position.set(x, y + 0.036, z);
+    shadow.rotation.y = yaw;
+    group.add(shadow);
+
+    for (let i = 0; i < (tone === "peaceful" ? 5 : 4); i += 1) {
+      const angle = yaw + i * 1.38 + forestHash(x, z, 1800 + i) * 0.42;
+      const radius = scale * (1.2 + (i % 3) * 0.62);
+      const px = x + Math.cos(angle) * radius;
+      const pz = z + Math.sin(angle) * radius;
+      const py = sampleTerrainHeight(px, pz);
+      if (!isInsideIslandPlayableBounds(px, pz)) {
+        continue;
+      }
+      const propYaw = forestHash(px, pz, 1810 + i) * Math.PI * 2;
+      props.addMossPatch(
+        px,
+        py + 0.04,
+        pz,
+        propYaw,
+        scale * (tone === "peaceful" ? 0.48 : 0.62),
+        tone === "ancient" ? forestGroveProps.mossGlow : tone === "deep" ? forestGroveProps.fern : grasslandProps.understory.clover,
+      );
+      if (tone === "peaceful") {
+        props.addFlower(px + Math.cos(propYaw) * 0.7, py, pz + Math.sin(propYaw) * 0.7, propYaw, forestGroveProps.flower, 0.48 * scale, 0.68);
+      } else if (i % 2 === 0) {
+        props.addMushroom(px, py, pz, propYaw, 0.58 * scale, forestGroveProps.mushroomCap);
+      } else {
+        props.addGrassClump(px, py + 0.02, pz, propYaw, 0.72 * scale, forestGroveProps.fern);
+      }
+    }
+  };
+
+  const addVariantTree = (
+    x: number,
+    z: number,
+    scale: number,
+    kind: "round" | "pine" | "birch",
+    tone: string,
+    seed: number,
+  ) => {
+    const y = sampleTerrainHeight(x, z);
+    const habitat = sampleHabitatLayer(x, z, y);
+    const slope = 1 - sampleTerrainNormal(x, z).y;
+    const wetness = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
+    if (
+      wetness > 0.42 ||
+      slope > (kind === "pine" ? 0.42 : 0.34) ||
+      (habitat.meadow > 0.9 && habitat.edge < 0.16) ||
+      shouldSkipLargeRouteTree(kind, x, z, scale)
+    ) {
+      return;
+    }
+    const tree =
+      kind === "birch" ? makeBirchGroveTree(scale, tone) :
+      kind === "pine" ? makePineTree(scale, tone) :
+      makeRoundTree(scale, tone);
+    tree.position.set(x, y, z);
+    tree.rotation.y = forestHash(x, z, seed) * Math.PI * 2;
+    group.add(tree);
+  };
+
+  const anchors = [
+    { x: -122, z: -66, scale: 1.18, tone: "deep" },
+    { x: 94, z: 22, scale: 1.1, tone: "deep" },
+    { x: 54, z: 96, scale: 1.18, tone: "deep" },
+    { x: -88, z: -112, scale: 1.06, tone: "peaceful" },
+    { x: 108, z: -34, scale: 1.08, tone: "peaceful" },
+    { x: -26, z: 76, scale: 1.0, tone: "peaceful" },
+    { x: -90, z: 132, scale: 1.12, tone: "ancient" },
+    { x: 84, z: 148, scale: 1.16, tone: "ancient" },
+  ] as const;
+
+  anchors.forEach((anchor, index) => {
+    const yaw = forestHash(anchor.x, anchor.z, 1740 + index) * Math.PI * 2;
+    addGroveFloor(anchor.x, anchor.z, anchor.scale, yaw, anchor.tone);
+
+    if (anchor.tone === "deep") {
+      addVariantTree(anchor.x - 7 * anchor.scale, anchor.z + 2 * anchor.scale, 0.86 * anchor.scale, "pine", forestGroveProps.deepCanopy, 1860 + index);
+      addVariantTree(anchor.x + 8 * anchor.scale, anchor.z - 4 * anchor.scale, 0.74 * anchor.scale, "round", forestGroveProps.deepCanopy, 1870 + index);
+      addTerrainObject(makeFallenLog(1.28 * anchor.scale), anchor.x + 2.8 * anchor.scale, anchor.z + 5.6 * anchor.scale, 0.04, yaw + 0.5);
+    } else if (anchor.tone === "peaceful") {
+      addVariantTree(anchor.x - 6 * anchor.scale, anchor.z - 3 * anchor.scale, 0.72 * anchor.scale, "birch", forestGroveProps.birchCanopy, 1880 + index);
+      addVariantTree(anchor.x + 7 * anchor.scale, anchor.z + 3 * anchor.scale, 0.76 * anchor.scale, "round", forestGroveProps.groveCanopy, 1890 + index);
+      addVariantTree(anchor.x + 1 * anchor.scale, anchor.z + 8 * anchor.scale, 0.62 * anchor.scale, "round", forestGroveProps.fruitCanopy, 1900 + index);
+      const fruitX = anchor.x + Math.cos(yaw + 0.7) * 3.2 * anchor.scale;
+      const fruitZ = anchor.z + Math.sin(yaw + 0.7) * 3.2 * anchor.scale;
+      props.addBush(fruitX, sampleTerrainHeight(fruitX, fruitZ), fruitZ, yaw, 0.7 * anchor.scale, forestGroveProps.fruitCanopy);
+    } else {
+      addVariantTree(anchor.x - 8 * anchor.scale, anchor.z + 1 * anchor.scale, 0.84 * anchor.scale, "pine", forestGroveProps.deepCanopy, 1910 + index);
+      addTerrainObject(makeCodexRuinMarker(1.12 * anchor.scale), anchor.x + 2 * anchor.scale, anchor.z - 2 * anchor.scale, 0.04, yaw - 0.2);
+      addTerrainObject(makeRootRun(1.26 * anchor.scale), anchor.x - 2.8 * anchor.scale, anchor.z + 5.4 * anchor.scale, 0.04, yaw + 0.34);
+      addTerrainObject(makeFallenLog(1.04 * anchor.scale), anchor.x + 6 * anchor.scale, anchor.z + 4 * anchor.scale, 0.04, yaw - 0.64);
+    }
   });
 
   group.add(props.buildGroup());
@@ -2206,7 +2632,12 @@ export function buildBiomeTransitionAccents() {
     shadow.rotation.y = forestHash(x, z, 705 + index) * Math.PI * 2;
     group.add(shadow);
 
-    if (treeKind === "none" || habitat.meadow > 0.78 || habitat.shore > 0.54) {
+    if (
+      treeKind === "none" ||
+      habitat.meadow > 0.78 ||
+      habitat.shore > 0.54 ||
+      shouldSkipLargeRouteTree(treeKind as "round" | "pine", x, z, scale)
+    ) {
       return;
     }
 
@@ -2608,6 +3039,7 @@ export function buildAnchorSceneAccents() {
   const group = new Group();
   const props = new SmallPropInstancer("anchor-scene-small-props");
   group.name = "anchor-scene-accents";
+  group.userData.artDirection = ART_DIRECTION_IDS.grasslands;
 
   const addTerrainObject = (object: Object3D, x: number, z: number, yOffset: number, yaw: number) => {
     if (!isInsideIslandPlayableBounds(x, z)) {
@@ -2617,6 +3049,11 @@ export function buildAnchorSceneAccents() {
     object.position.set(x, sampleTerrainHeight(x, z) + yOffset, z);
     object.rotation.y = yaw;
     group.add(object);
+  };
+
+  const addGrasslandFieldMark = (x: number, z: number, scale: number, yaw: number, kind: "fence" | "sign") => {
+    const object = kind === "fence" ? makeGrasslandFence(scale) : makeGrasslandSignpost(scale);
+    addTerrainObject(object, x, z, 0.02, yaw);
   };
 
   const addShadow = (x: number, z: number, scale: number, tone: string, opacity: number, yaw: number) => {
@@ -2636,8 +3073,14 @@ export function buildAnchorSceneAccents() {
     }
 
     const y = sampleTerrainHeight(x, z);
-    const shelfTone = tone === "alpine" ? "#babbae" : tone === "cool" ? "#aab58a" : "#d0bf8a";
-    const washTone = tone === "alpine" ? "#c6c7b9" : tone === "cool" ? "#b9c098" : "#d9ca91";
+    const shelfTone =
+      tone === "alpine" ? grasslandProps.bank.alpineShelf :
+      tone === "cool" ? grasslandProps.bank.coolShelf :
+      grasslandProps.bank.warmShelf;
+    const washTone =
+      tone === "alpine" ? grasslandProps.bank.alpineWash :
+      tone === "cool" ? grasslandProps.bank.coolWash :
+      grasslandProps.bank.warmWash;
     const shelf = makeShoreShelfPatch(scale, shelfTone, tone === "warm" ? 0.2 : 0.16);
     shelf.position.set(x, y + 0.05, z);
     shelf.rotation.y = yaw;
@@ -2655,7 +3098,7 @@ export function buildAnchorSceneAccents() {
       z + pebble.z,
       yaw + 0.28,
       tone === "alpine" ? 0.58 * scale : 0.52 * scale,
-      tone === "alpine" ? "#b8b8aa" : "#cfbf91",
+      tone === "alpine" ? grasslandProps.bank.alpinePebble : grasslandProps.bank.warmPebble,
     );
   };
 
@@ -2675,7 +3118,12 @@ export function buildAnchorSceneAccents() {
     const habitat = sampleHabitatLayer(x, z, y);
     const slope = 1 - sampleTerrainNormal(x, z).y;
     const wetness = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
-    if (wetness > 0.4 || slope > (kind === "pine" ? 0.42 : 0.34) || habitat.meadow > 0.88) {
+    if (
+      wetness > 0.4 ||
+      slope > (kind === "pine" ? 0.42 : 0.34) ||
+      habitat.meadow > 0.88 ||
+      shouldSkipLargeRouteTree(kind, x, z, scale)
+    ) {
       return;
     }
 
@@ -2698,23 +3146,23 @@ export function buildAnchorSceneAccents() {
 
     const y = sampleTerrainHeight(x, z);
     const mossColor =
-      tone === "meadow" ? "#90bf72" :
-      tone === "shore" ? "#7fa268" :
-      tone === "forest" ? "#6f8c5d" :
-      tone === "shrine" ? "#7e8c77" :
-      "#6f8365";
+      tone === "meadow" ? grasslandProps.understory.meadowMoss :
+      tone === "shore" ? grasslandProps.understory.shoreMoss :
+      tone === "forest" ? grasslandProps.understory.forestMoss :
+      tone === "shrine" ? grasslandProps.understory.shrineMoss :
+      grasslandProps.understory.highlandMoss;
     const grassColor =
-      tone === "meadow" ? "#82b761" :
-      tone === "shore" ? "#759b5d" :
-      tone === "forest" ? "#6d8759" :
-      tone === "shrine" ? "#77856d" :
-      "#657b5f";
+      tone === "meadow" ? grasslandProps.understory.meadowGrass :
+      tone === "shore" ? grasslandProps.understory.shoreGrass :
+      tone === "forest" ? grasslandProps.understory.forestGrass :
+      tone === "shrine" ? grasslandProps.understory.shrineGrass :
+      grasslandProps.understory.highlandGrass;
     const bushColor =
-      tone === "meadow" ? "#8fcf70" :
-      tone === "shore" ? "#7faa68" :
-      tone === "forest" ? "#6f965c" :
-      tone === "shrine" ? "#74836d" :
-      "#617b5b";
+      tone === "meadow" ? grasslandProps.understory.meadowBush :
+      tone === "shore" ? grasslandProps.understory.shoreBush :
+      tone === "forest" ? grasslandProps.understory.forestBush :
+      tone === "shrine" ? grasslandProps.understory.shrineBush :
+      grasslandProps.understory.highlandBush;
 
     const moss = props.transformLocal(-0.52 * scale, -0.18 * scale, yaw);
     props.addMossPatch(x + moss.x, y + 0.04, z + moss.z, yaw, 0.7 * scale, mossColor);
@@ -2728,13 +3176,13 @@ export function buildAnchorSceneAccents() {
 
     if (tone === "meadow") {
       const clover = props.transformLocal(-0.08 * scale, 0.8 * scale, yaw);
-      props.addCloverPatch(x + clover.x, y + 0.02, z + clover.z, yaw, 0.34 * scale, "#87c76b");
+      props.addCloverPatch(x + clover.x, y + 0.02, z + clover.z, yaw, 0.34 * scale, grasslandProps.understory.clover);
       props.addFlower(
         x + Math.cos(yaw + 0.8) * 0.9 * scale,
         y,
         z + Math.sin(yaw + 0.8) * 0.9 * scale,
         yaw,
-        "#f7d5e8",
+        grasslandProps.understory.flowerPink,
         0.54 * scale,
         0.68,
       );
@@ -2748,7 +3196,7 @@ export function buildAnchorSceneAccents() {
         z + reed.z,
         yaw,
         tone === "highland" ? 0.68 * scale : 0.78 * scale,
-        tone === "highland" ? "#667b5d" : "#749c58",
+        tone === "highland" ? grasslandProps.understory.highlandReed : grasslandProps.understory.shoreReed,
       );
     }
 
@@ -2760,7 +3208,7 @@ export function buildAnchorSceneAccents() {
         z + rock.z,
         yaw + 0.34,
         0.5 * scale,
-        tone === "shrine" ? "#b5b3a9" : "#aaa99f",
+        tone === "shrine" ? grasslandProps.understory.shrineRock : grasslandProps.understory.highlandRock,
       );
     }
   };
@@ -2777,10 +3225,36 @@ export function buildAnchorSceneAccents() {
   ].forEach(([x, z, scale, yaw]) => {
     addUnderstory(x, z, scale, yaw, "meadow");
   });
-  addShadow(-88, -146, 1.12, "#5f754a", 0.13, 0.22);
-  addShadow(-30, -154, 0.92, "#688452", 0.1, -0.3);
-  addFramingTree(-118, -144, 0.84, "round", "#95d273", 900);
-  addFramingTree(18, -146, 0.7, "round", "#9bd978", 901);
+  addShadow(-88, -146, 1.12, grasslandProps.understory.shadowStart, 0.13, 0.22);
+  addShadow(-30, -154, 0.92, grasslandProps.understory.shadowStartAlt, 0.1, -0.3);
+  addFramingTree(-118, -144, 0.84, "round", grasslandProps.understory.openingRoundTreeA, 900);
+  addFramingTree(18, -146, 0.7, "round", grasslandProps.understory.openingRoundTreeB, 901);
+  [
+    [-110, -132, 0.78, 0.18],
+    [-100, -116, 0.7, 0.28],
+    [14, -128, 0.66, -0.24],
+    [26, -108, 0.72, -0.34],
+  ].forEach(([x, z, scale, yaw]) => {
+    addGrasslandFieldMark(x, z, scale, yaw, "fence");
+  });
+  addGrasslandFieldMark(-30, -118, 0.82, 0.34, "sign");
+  [
+    [-92, -124, 0.82, 0.7],
+    [-72, -112, 0.74, 1.4],
+    [-42, -118, 0.7, 0.2],
+    [4, -120, 0.76, 2.2],
+  ].forEach(([x, z, scale, yaw], index) => {
+    addUnderstory(x, z, scale, yaw, "meadow");
+    props.addFlower(
+      x + Math.cos(yaw + index) * 1.2 * scale,
+      sampleTerrainHeight(x, z),
+      z + Math.sin(yaw + index) * 1.2 * scale,
+      yaw + 0.4,
+      index % 2 === 0 ? grasslandProps.understory.flowerCream : grasslandProps.understory.flowerGold,
+      0.62 * scale,
+      0.7,
+    );
+  });
 
   // 2. Opening lake shore: make the lake edge legible without filling the shallows with props.
   [
@@ -2812,17 +3286,17 @@ export function buildAnchorSceneAccents() {
       );
     });
   });
-  addFramingTree(-44, 30, 0.72, "round", "#89c96c", 930);
-  addFramingTree(54, 28, 0.7, "round", "#84bd68", 931);
+  addFramingTree(-44, 30, 0.72, "round", grasslandProps.understory.silverBendRoundTreeA, 930);
+  addFramingTree(54, 28, 0.7, "round", grasslandProps.understory.silverBendRoundTreeB, 931);
 
   // 4. Forest edge near route: use mature silhouettes at the sides, then understory, not random saplings.
   [
-    [-44, 80, 0.92, "pine", "#5f804f", 960],
-    [55, 80, 0.96, "pine", "#668a55", 961],
-    [-56, 108, 1.02, "pine", "#58764b", 962],
-    [64, 112, 1.08, "pine", "#58764b", 963],
-    [-24, 70, 0.72, "round", "#86bf69", 964],
-    [36, 74, 0.74, "round", "#83bc66", 965],
+    [-44, 80, 0.58, "pine", grasslandProps.understory.forestPineA, 960],
+    [55, 80, 0.62, "pine", grasslandProps.understory.forestPineB, 961],
+    [-56, 108, 0.68, "pine", grasslandProps.understory.forestPineDeep, 962],
+    [64, 112, 0.7, "pine", grasslandProps.understory.forestPineDeep, 963],
+    [-24, 70, 0.55, "round", grasslandProps.understory.forestRoundA, 964],
+    [36, 74, 0.56, "round", grasslandProps.understory.forestRoundB, 965],
   ].forEach(([x, z, scale, kind, color, seed]) => {
     addFramingTree(x as number, z as number, scale as number, kind as "round" | "pine", color as string, seed as number);
   });
@@ -2832,7 +3306,7 @@ export function buildAnchorSceneAccents() {
     [-46, 116, 0.92, -0.8],
     [54, 118, 0.94, 1.1],
   ].forEach(([x, z, scale, yaw]) => {
-    addShadow(x, z, scale, "#485943", 0.16, yaw);
+    addShadow(x, z, scale, grasslandProps.understory.shadowForest, 0.16, yaw);
     addUnderstory(x, z, scale * 0.84, yaw + 0.36, "forest");
   });
 
@@ -2874,6 +3348,16 @@ export function buildAnchorSceneAccents() {
 
 export function buildHighlandAccents() {
   const group = new Group();
+  group.userData.artDirection = ART_DIRECTION_IDS.hillsMountains;
+
+  const addHighlandObject = (object: Object3D, x: number, z: number, yOffset: number, yaw: number) => {
+    if (!isInsideIslandPlayableBounds(x, z)) {
+      return;
+    }
+    object.position.set(x, sampleTerrainHeight(x, z) + yOffset, z);
+    object.rotation.y = yaw;
+    group.add(object);
+  };
 
   scenicPockets
     .filter((pocket) => pocket.zone === "foothills" || pocket.zone === "alpine" || pocket.zone === "ridge" || pocket.zone === "peak_shrine")
@@ -2917,8 +3401,12 @@ export function buildHighlandAccents() {
         for (let i = 0; i < pineCount; i += 1) {
           const { x, z } = scatterAroundPocket(pocket, 430 + pocketIndex * 20 + i, 0.98);
           const y = sampleTerrainHeight(x, z);
+          const pineScale = pocket.zone === "foothills" ? 0.74 + i * 0.05 : 0.82 + i * 0.06;
+          if (shouldSkipLargeRouteTree("pine", x, z, pineScale)) {
+            continue;
+          }
           const pine = makePineTree(
-            pocket.zone === "foothills" ? 1.02 + i * 0.08 : 1.18 + i * 0.12,
+            pineScale,
             pocket.zone === "foothills" ? "#6a8c56" : pocket.zone === "alpine" ? "#57744a" : "#4f6845",
           );
           pine.position.set(x, y, z);
@@ -2936,12 +3424,17 @@ export function buildHighlandAccents() {
       }
 
       if (pocket.id === "fir-gate-entry") {
-        for (const [xOffset, zOffset, scale] of [[-6, -1, 1.32], [5, 2, 1.46]] as const) {
+        for (const [xOffset, zOffset, scale] of [[-7, -1, 0.92], [6, 2, 0.98]] as const) {
+          const x = pocket.position.x + xOffset;
+          const z = pocket.position.z + zOffset;
+          if (shouldSkipLargeRouteTree("pine", x, z, scale)) {
+            continue;
+          }
           const pine = makePineTree(scale, "#5f804f");
           pine.position.set(
-            pocket.position.x + xOffset,
-            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
-            pocket.position.z + zOffset,
+            x,
+            sampleTerrainHeight(x, z),
+            z,
           );
           pine.rotation.y = xOffset * 0.12;
           group.add(pine);
@@ -2959,12 +3452,26 @@ export function buildHighlandAccents() {
           rock.rotation.y = xOffset * 0.08 + zOffset * 0.04;
           group.add(rock);
         }
-        for (const [xOffset, zOffset, scale] of [[-12, 4, 1.28], [11, 7, 1.18]] as const) {
+        for (const [xOffset, zOffset, scale, yaw] of [[-4, 6, 0.84, -0.2], [6, 8, 0.72, 0.34]] as const) {
+          addHighlandObject(
+            makeAlpineHerbCluster(scale, "#fff0b8"),
+            pocket.position.x + xOffset,
+            pocket.position.z + zOffset,
+            0.04,
+            yaw,
+          );
+        }
+        for (const [xOffset, zOffset, scale] of [[-12, 4, 0.96], [11, 7, 0.9]] as const) {
+          const x = pocket.position.x + xOffset;
+          const z = pocket.position.z + zOffset;
+          if (shouldSkipLargeRouteTree("pine", x, z, scale)) {
+            continue;
+          }
           const pine = makePineTree(scale, "#526c47");
           pine.position.set(
-            pocket.position.x + xOffset,
-            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
-            pocket.position.z + zOffset,
+            x,
+            sampleTerrainHeight(x, z),
+            z,
           );
           pine.rotation.y = xOffset * 0.06;
           group.add(pine);
@@ -2982,12 +3489,24 @@ export function buildHighlandAccents() {
           rock.rotation.y = xOffset * 0.06 + zOffset * 0.04;
           group.add(rock);
         }
-        for (const [xOffset, zOffset, scale] of [[-14, 6, 1.16], [13, 8, 1.1]] as const) {
+        addHighlandObject(
+          makeCodexRuinMarker(1.08),
+          pocket.position.x - 3.6,
+          pocket.position.z + 9.4,
+          0.02,
+          -0.28,
+        );
+        for (const [xOffset, zOffset, scale] of [[-14, 6, 0.9], [13, 8, 0.86]] as const) {
+          const x = pocket.position.x + xOffset;
+          const z = pocket.position.z + zOffset;
+          if (shouldSkipLargeRouteTree("pine", x, z, scale)) {
+            continue;
+          }
           const pine = makePineTree(scale, "#4e6643");
           pine.position.set(
-            pocket.position.x + xOffset,
-            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
-            pocket.position.z + zOffset,
+            x,
+            sampleTerrainHeight(x, z),
+            z,
           );
           pine.rotation.y = xOffset * 0.05;
           group.add(pine);
@@ -3009,12 +3528,17 @@ export function buildHighlandAccents() {
           rock.rotation.y = xOffset * 0.05 + zOffset * 0.03;
           group.add(rock);
         }
-        for (const [xOffset, zOffset, scale] of [[-15, 8, 1.14], [15, 10, 1.18], [0, 14, 1.04]] as const) {
+        for (const [xOffset, zOffset, scale] of [[-15, 8, 0.88], [15, 10, 0.92], [0, 14, 0.82]] as const) {
+          const x = pocket.position.x + xOffset;
+          const z = pocket.position.z + zOffset;
+          if (shouldSkipLargeRouteTree("pine", x, z, scale)) {
+            continue;
+          }
           const pine = makePineTree(scale, "#4d6542");
           pine.position.set(
-            pocket.position.x + xOffset,
-            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
-            pocket.position.z + zOffset,
+            x,
+            sampleTerrainHeight(x, z),
+            z,
           );
           pine.rotation.y = xOffset * 0.04;
           group.add(pine);
@@ -3029,20 +3553,57 @@ export function buildHighlandAccents() {
           shadow.rotation.y = yaw;
           group.add(shadow);
         }
+        addHighlandObject(
+          makeCodexCaveMouth(1.08),
+          pocket.position.x - 17,
+          pocket.position.z + 5,
+          0.02,
+          0.36,
+        );
+        for (const [xOffset, zOffset, scale, yaw] of [[-9, 11, 0.78, 0.2], [8, 12, 0.84, -0.3], [2, 16, 0.7, 0.1]] as const) {
+          addHighlandObject(
+            makeAlpineHerbCluster(scale, "#e7e3c0"),
+            pocket.position.x + xOffset,
+            pocket.position.z + zOffset,
+            0.04,
+            yaw,
+          );
+        }
       }
 
       if (pocket.id === "ridge-crossing") {
-        for (const [xOffset, zOffset, scale] of [[-8, -2, 1.52], [8, 2, 1.44]] as const) {
+        for (const [xOffset, zOffset, scale] of [[-8, -2, 1.02], [8, 2, 0.98]] as const) {
+          const x = pocket.position.x + xOffset;
+          const z = pocket.position.z + zOffset;
+          if (shouldSkipLargeRouteTree("pine", x, z, scale)) {
+            continue;
+          }
           const pine = makePineTree(scale, "#4d6743");
           pine.position.set(
-            pocket.position.x + xOffset,
-            sampleTerrainHeight(pocket.position.x + xOffset, pocket.position.z + zOffset),
-            pocket.position.z + zOffset,
+            x,
+            sampleTerrainHeight(x, z),
+            z,
           );
           group.add(pine);
         }
+        addHighlandObject(
+          makeCodexRuinMarker(0.86),
+          pocket.position.x + 12,
+          pocket.position.z + 6,
+          0.02,
+          0.46,
+        );
       }
     });
+
+  [
+    [-44, 92, 0.86, -0.42],
+    [54, 132, 0.76, 0.28],
+    [-34, 174, 0.72, -0.18],
+    [24, 206, 0.68, 0.32],
+  ].forEach(([x, z, scale, yaw]) => {
+    addHighlandObject(makeAlpineHerbCluster(scale, z > 168 ? "#e4e2c2" : "#fff0b3"), x, z, 0.04, yaw);
+  });
 
   return group;
 }
@@ -3104,7 +3665,7 @@ export function buildLandmarkTrees() {
       tree.add(stripe);
     }
 
-    tree.scale.setScalar(TREE_SIZE_MULTIPLIER);
+    tree.scale.setScalar(LANDMARK_TREE_SIZE_MULTIPLIER);
     tree.position.set(x, sampleTerrainHeight(x, z), z);
     group.add(tree);
   };
