@@ -19,9 +19,10 @@
       body {
         overflow: hidden;
         background:
-          radial-gradient(circle at 50% 28%, rgba(255, 245, 181, 0.72), transparent 15rem),
-          radial-gradient(circle at 50% 70%, rgba(117, 193, 129, 0.3), transparent 22rem),
-          linear-gradient(180deg, #b9edf4 0%, #e9f4bd 58%, #b9d778 100%);
+          radial-gradient(circle at 28% 30%, rgba(221, 244, 143, 0.72), transparent 17rem),
+          radial-gradient(circle at 68% 38%, rgba(101, 205, 219, 0.46), transparent 19rem),
+          radial-gradient(circle at 52% 78%, rgba(124, 207, 111, 0.58), transparent 24rem),
+          linear-gradient(135deg, #d8f8ee 0%, #b8eadf 34%, #d7e999 62%, #87c880 100%);
         color: #3d2a1a;
         font-family: Georgia, "Palatino Linotype", "Avenir Next", ui-rounded, system-ui, sans-serif;
       }
@@ -34,12 +35,30 @@
         place-items: center;
         text-align: center;
         background:
-          radial-gradient(circle at 50% 22%, rgba(255, 247, 184, 0.82), transparent 13rem),
-          radial-gradient(circle at 50% 72%, rgba(101, 176, 116, 0.34), transparent 22rem),
-          linear-gradient(180deg, rgba(206, 243, 255, 0.58), rgba(255, 244, 188, 0.18));
+          radial-gradient(circle at 50% 44%, rgba(255, 243, 160, 0.5), transparent 20rem),
+          radial-gradient(circle at 54% 52%, rgba(139, 238, 211, 0.28), transparent 24rem),
+          linear-gradient(135deg, rgba(216, 248, 238, 0.92), rgba(135, 200, 128, 0.86));
+      }
+
+      .instant-title::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          repeating-linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.055) 0,
+            rgba(255, 255, 255, 0.055) 1px,
+            rgba(21, 54, 45, 0.055) 2px,
+            transparent 4px
+          );
+        opacity: 0.34;
       }
 
       .instant-title > div {
+        position: relative;
+        z-index: 1;
         min-width: min(28rem, calc(100vw - 2rem));
         padding: clamp(1.25rem, 4vw, 2.2rem) clamp(1.25rem, 5vw, 2.8rem);
         border: 3px solid rgba(125, 86, 36, 0.86);
@@ -70,13 +89,13 @@
 
       .instant-title [data-loading-status] {
         display: block;
-        margin-top: 1rem;
-        min-height: 1.2em;
-        font-size: clamp(0.72rem, 1.5vw, 0.92rem);
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: rgba(92, 64, 30, 0.76);
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
       }
 
       .instant-title__mark {
@@ -133,7 +152,6 @@
             <span></span>
           </div>
           <strong>Mossu</strong>
-          <span>Meadowlight isles</span>
           <p data-loading-status="" aria-live="polite"></p>
         </div>
       </div>
