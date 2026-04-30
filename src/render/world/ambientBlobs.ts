@@ -16,6 +16,7 @@ import {
 import type { FrameState } from "../../simulation/gameState";
 import { PLAYER_RADIUS } from "../../simulation/playerSimulationConstants";
 import { sampleTerrainHeight, sampleWaterState, scenicPockets, startingLookTarget, startingPosition } from "../../simulation/world";
+import { easeOutBack } from "../motionCurves";
 import { createKaruModelRig, type AmbientBlobRig } from "../objects/KaruAvatar";
 import { scatterAroundPocket } from "./sceneHelpers";
 
@@ -68,6 +69,7 @@ export interface AmbientBlob {
   rollBlend: number;
   rollSpin: number;
   breezeBlend: number;
+  lookAtBlend: number;
 }
 
 export interface AmbientBlobBuildOptions {
@@ -79,6 +81,7 @@ export interface AmbientBlobUpdateStats {
   recruitedCount: number;
   nearestRecruitableDistance: number | null;
   recruitedThisFrame: number;
+  firstEncounterActive: boolean;
   rollingCount: number;
   mossuCollisionCount: number;
   dominantMood: KaruMood;
@@ -613,6 +616,7 @@ export function buildAmbientBlobs(options: AmbientBlobBuildOptions = {}) {
         rollBlend: 0,
         rollSpin: 0,
         breezeBlend: 0,
+        lookAtBlend: 0,
       };
     }),
   );
@@ -637,6 +641,7 @@ export function updateAmbientBlobs(
       recruitedCount: blobs.filter((blob) => blob.recruited).length,
       nearestRecruitableDistance: null,
       recruitedThisFrame: 0,
+      firstEncounterActive: false,
       rollingCount: blobs.filter((blob) => blob.recruited && blob.rolling).length,
       mossuCollisionCount: 0,
       dominantMood: dominantMood(blobs),
@@ -659,6 +664,7 @@ export function updateAmbientBlobs(
       ? recruitNearbyBlobs(blobs, nearestBeforeRecruit.blob, playerPosition, elapsed)
       : 0;
   let mossuCollisionCount = 0;
+  let firstEncounterActive = false;
   if (regroupPressed) {
     blobs.forEach((blob) => {
       if (blob.recruited) {
@@ -686,6 +692,16 @@ export function updateAmbientBlobs(
       playerPlanarSpeed > 5 &&
       playerApproachAlignment > 0.55;
     const stillAvoidingPlayer = elapsed < blob.avoidPlayerUntil;
+    const firstEncounterWatch =
+      !blob.recruited &&
+      frame.player.grounded &&
+      !frame.player.swimming &&
+      !frame.player.fallingToVoid &&
+      !playerApproaching &&
+      !stillAvoidingPlayer &&
+      planarToPlayer > 7.2 &&
+      planarToPlayer < 19.5;
+    firstEncounterActive = firstEncounterActive || firstEncounterWatch;
 
     ambientGroupCenter.copy(blob.group.position);
     ambientCohesion.set(0, 0, 0);
@@ -969,6 +985,17 @@ export function updateAmbientBlobs(
       if (followDistance < 1.2 && ambientSeparation.lengthSq() < 0.001) {
         recruitedMoveStrength = 0;
       }
+    } else if (firstEncounterWatch && blob.mode !== "shy") {
+      blob.rolling = false;
+      blob.mode = "curious";
+      blob.target.copy(blob.group.position);
+      blob.target.y = sampleTerrainHeight(blob.target.x, blob.target.z);
+      blob.restUntil = Math.max(blob.restUntil, elapsed + 0.78 + (index % 2) * 0.12);
+      blob.nextHopAt = Math.max(blob.nextHopAt, elapsed + 0.72);
+      blob.idlePose = planarToPlayer < 12.5 ? "sniff" : (index % 2 === 0 ? "look_left" : "look_right");
+      blob.idlePoseStartAt = elapsed;
+      blob.idlePoseUntil = elapsed + 0.86;
+      blob.investigateAgainAt = Math.max(blob.investigateAgainAt, elapsed + 1.7);
     } else if (playerTooClose || playerApproaching || stillAvoidingPlayer) {
       blob.rolling = false;
       blob.mode = "shy";
@@ -1044,6 +1071,20 @@ export function updateAmbientBlobs(
         blob.restUntil = elapsed + 1.8 + (index % 2) * 0.8;
       }
     }
+
+    const wantsLookAtPlayer =
+      !blob.recruited &&
+      !frame.player.fallingToVoid &&
+      planarToPlayer > 0.001 &&
+      planarToPlayer < 21 &&
+      (firstEncounterWatch || blob.mode === "curious");
+    blob.lookAtBlend = MathUtils.damp(
+      blob.lookAtBlend,
+      wantsLookAtPlayer ? 1 : 0,
+      wantsLookAtPlayer ? 4.6 : 7.2,
+      dt,
+    );
+    const lookAtT = easeOutBack(blob.lookAtBlend, 1.08);
 
     if (elapsed >= blob.nextBlinkAt) {
       blob.blinkUntil = elapsed + 0.12;
@@ -1242,13 +1283,15 @@ export function updateAmbientBlobs(
     blob.mode === "wander" ? 1 - (wanderHop * 0.06 + idleHopSettle * 0.04 + idleSettle * 0.03 + (blob.waterReaction === "splash" ? 0.035 : 0)) :
     1 - idleHop * 0.04;
   const squash = MathUtils.lerp(baseSquash - breezeMimicT * 0.035, 1.15 - rollBounce * 0.04, rollMimicT * 0.68);
+    const playerLookYaw = planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) : blob.facingYaw;
     const desiredYaw =
-      callListenT > 0.001 && planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) :
+      callListenT > 0.001 && planarToPlayer > 0.001 ? playerLookYaw :
       planarSpeed > 0.05 ? Math.atan2(blob.velocity.x, blob.velocity.z) :
-      blob.recruited && planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) :
-      blob.mode === "curious" && planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) :
+      blob.recruited && planarToPlayer > 0.001 ? playerLookYaw :
+      lookAtT > 0.04 ? playerLookYaw :
       blob.facingYaw + (blob.mode === "rest" ? curiousSway * 0.06 : 0);
-    const yawBlend = 1 - Math.exp(-dt * (blob.mode === "shy" ? 8 : blob.recruited ? 6 : 5));
+    const baseYawDamping = blob.mode === "shy" ? 8 : blob.recruited ? 6 : 4.6;
+    const yawBlend = 1 - Math.exp(-dt * (baseYawDamping + lookAtT * 2.4));
     blob.facingYaw = MathUtils.lerp(blob.facingYaw, desiredYaw, yawBlend);
 
     const visualWaterY =
@@ -1260,7 +1303,7 @@ export function updateAmbientBlobs(
   blob.root.position.y = poseLift - poseDrop;
   const baseRootX =
     callListenT > 0 ? -0.18 - callListenT * 0.08 :
-    blob.mode === "curious" ? -0.12 + curiousSway * 0.03 :
+    blob.mode === "curious" ? -0.12 + curiousSway * 0.03 - lookAtT * 0.035 :
     blob.mode === "shy" ? -0.08 :
     blob.mode === "wander" ? -0.03 + wanderHop * 0.02 - idleSniff * 0.07 - idleSettle * 0.05 :
     -0.02 + restPulse * 0.015 - idleHop * 0.03 - idleSniff * 0.12 - idleSettle * 0.06;
@@ -1278,7 +1321,7 @@ export function updateAmbientBlobs(
     idleSettle * 0.015 * scale;
   blob.face.rotation.y =
     callListenT > 0 ? Math.sin(elapsed * 9.5 + blob.poseSeed) * 0.06 :
-    blob.mode === "curious" ? curiousSway * 0.28 :
+    blob.mode === "curious" ? curiousSway * 0.22 + lookAtT * Math.sin(elapsed * 3.4 + blob.poseSeed) * 0.045 :
     (blob.mode === "rest" ? curiousSway * 0.08 : 0) + idleLookYaw;
   blob.face.position.y =
     0.73 * scale +
@@ -1368,6 +1411,7 @@ export function updateAmbientBlobs(
     recruitedCount: blobs.filter((blob) => blob.recruited).length,
     nearestRecruitableDistance: nearestAfterRecruit.distance,
     recruitedThisFrame,
+    firstEncounterActive,
     rollingCount: blobs.filter((blob) => blob.recruited && blob.rolling).length,
     mossuCollisionCount,
     dominantMood: dominantMood(blobs),

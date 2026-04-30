@@ -259,6 +259,7 @@ export class WaterSystem {
     planarSpeed: number,
     elapsed: number,
     baseStrength: number,
+    force = false,
   ) {
     const water = sampleWaterState(position.x, position.z);
     const inWater = !!water && water.depth > WATER_RIPPLE_MIN_DEPTH;
@@ -268,13 +269,13 @@ export class WaterSystem {
     if (inWater && water) {
       const speedFactor = MathUtils.clamp(planarSpeed / 9, 0, 1);
       const depthFactor = water.swimAllowed ? 1 : MathUtils.clamp(water.depth / 1.8, 0.35, 1);
-      const interval = MathUtils.lerp(0.42, 0.16, speedFactor) * (baseStrength < 0.7 ? 1.24 : 1);
-      if ((enteredWater || speedFactor > 0.16) && elapsed - state.lastEmitAt >= interval) {
+      const interval = MathUtils.lerp(0.36, 0.12, speedFactor) * (baseStrength < 0.7 ? 1.18 : 1);
+      if ((force || enteredWater || speedFactor > 0.12) && elapsed - state.lastEmitAt >= (force ? 0.04 : interval)) {
         this.ripples.push({
           x: position.x,
           z: position.z,
           startTime: elapsed,
-          strength: MathUtils.clamp(baseStrength * (0.48 + speedFactor * 0.52) * depthFactor, 0.22, 1.18),
+          strength: MathUtils.clamp(baseStrength * (0.52 + speedFactor * 0.58) * depthFactor, 0.24, 1.45),
         });
         state.lastEmitAt = elapsed;
         if (this.ripples.length > WATER_RIPPLE_LIMIT) {
@@ -307,7 +308,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     key: "mainRiver",
     widthScale: 1.02,
     levelOffset: MAIN_RIVER_SURFACE_OFFSET,
-    opacity: 1,
+    opacity: 0.8,
     depthColorScale: 4.2,
     flowSpeed: 0.82,
     roughness: 0.9,
@@ -316,13 +317,13 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     detailWaveAmplitude: 0.006,
     baseFrequency: 18,
     detailFrequency: 34,
-    shallowColor: "#6fcbd0",
-    deepColor: "#1d7195",
+    shallowColor: "#68c5d6",
+    deepColor: "#176fa4",
     foamColor: "#fffaf0",
     shorelineMilkColor: "#f3ecd0",
     highlightColor: "#fff0bd",
     sparkleColor: "#fff9da",
-    reflectionColor: "#a8dbe0",
+    reflectionColor: "#9bd2e4",
     sedimentColor: "#bdc887",
     bedColor: "#5d896a",
     causticColor: "#fff6d8",
@@ -332,7 +333,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     highlightStrength: 0.08,
     clarity: 0.55,
     rippleContrast: 0.64,
-    depthShadowStrength: 0.2,
+    depthShadowStrength: 0.24,
     causticStrength: 0.04,
     sparkleStrength: 0.03,
   },
@@ -340,7 +341,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     key: "stillPool",
     widthScale: 1,
     levelOffset: MAIN_RIVER_SURFACE_OFFSET,
-    opacity: 1,
+    opacity: 0.76,
     depthColorScale: 5.6,
     flowSpeed: 0.38,
     roughness: 0.92,
@@ -349,13 +350,13 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     detailWaveAmplitude: 0.004,
     baseFrequency: 14,
     detailFrequency: 28,
-    shallowColor: "#62c8c1",
-    deepColor: "#176d8c",
+    shallowColor: "#65c7d5",
+    deepColor: "#186fa2",
     foamColor: "#fff9eb",
     shorelineMilkColor: "#ede4c5",
     highlightColor: "#fff0bd",
     sparkleColor: "#fffce6",
-    reflectionColor: "#c2eee9",
+    reflectionColor: "#b5e5ef",
     sedimentColor: "#aeb78a",
     bedColor: "#637d68",
     causticColor: "#fff8dc",
@@ -365,7 +366,7 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     highlightStrength: 0.08,
     clarity: 0.58,
     rippleContrast: 0.56,
-    depthShadowStrength: 0.18,
+    depthShadowStrength: 0.23,
     causticStrength: 0.04,
     sparkleStrength: 0.025,
   },
@@ -1845,7 +1846,7 @@ export function buildRiverSystem(): WaterSurfaceGroup {
   addRiver("main", -80, 236, 168, renderPathWidthScale("main"));
   RIVER_BRANCH_SEGMENTS.forEach((segment) => {
     const sampleCount = Math.max(42, Math.round((segment.endZ - segment.startZ) * 0.68));
-    addRiver(segment.id, segment.startZ, segment.endZ, sampleCount, renderPathWidthScale(segment.id), 0.78);
+    addRiver(segment.id, segment.startZ, segment.endZ, sampleCount, renderPathWidthScale(segment.id), segment.id === "silver-braid" ? 0.68 : 0.78);
   });
 
   return { group, controllers };

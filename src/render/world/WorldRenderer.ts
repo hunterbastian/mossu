@@ -54,7 +54,14 @@ import {
   GrassShader,
   updateGrassMeshLod,
 } from "./grassSystem";
-import { buildClouds, buildMountainAtmosphere, buildSkyDome, syncAtmosphereLighting } from "./atmosphereSystem";
+import {
+  buildClouds,
+  buildMountainAtmosphere,
+  buildSkyDome,
+  buildStylizedSkySun,
+  syncAtmosphereLighting,
+  syncStylizedSkySun,
+} from "./atmosphereSystem";
 import {
   AMBIENT_BLOB_SPECIES_NAME,
   AmbientBlob,
@@ -428,7 +435,9 @@ function buildValleyMist() {
     [-8, -28, 112, 34, 7.2, 0.036, 0.04],
     [26, 72, 92, 26, 10.2, 0.03, -0.14],
     [18, 134, 84, 28, 13.4, 0.024, 0.1],
+    [2, 158, 120, 32, 16.4, 0.03, 0.04],
     [-18, 190, 134, 40, 17, 0.034, -0.02],
+    [-36, 222, 148, 34, 21, 0.024, -0.06],
   ] as const;
 
   patches.forEach(([x, z, width, depth, lift, opacity, rotation], index) => {
@@ -847,6 +856,7 @@ function materialBatchKey(material: Material) {
     material.depthTest ? "depth-test" : "no-depth-test",
     materialWithColor.roughness?.toFixed(2) ?? "no-roughness",
     materialWithColor.metalness?.toFixed(2) ?? "no-metalness",
+    material.userData.treeLeafWindEnabled ? "tree-leaf-wind" : "static",
   ].join("|");
 }
 
@@ -901,8 +911,12 @@ function batchStaticDecorations<T extends Object3D>(root: T, name: string): T {
     });
 
     mergedGeometry.computeBoundingSphere();
-    const batchedMesh = new Mesh(mergedGeometry, material.clone());
+    const batchedMaterial = material.userData.treeLeafWindEnabled ? material : material.clone();
+    const batchedMesh = new Mesh(mergedGeometry, batchedMaterial);
     batchedMesh.name = `${name}-${key}`;
+    if (material.userData.treeLeafWindEnabled) {
+      batchedMesh.userData.treeLeafWind = true;
+    }
     batchedMesh.matrixAutoUpdate = false;
     batchedMesh.updateMatrix();
     batchedMeshes.push(batchedMesh);
@@ -939,9 +953,11 @@ export class WorldRenderer {
   readonly mossu = new MossuAvatar();
   readonly terrain = makeTerrainMesh();
   readonly skyDome: Mesh;
+  readonly skySun = buildStylizedSkySun();
   readonly clouds = new Group();
   readonly windMeshes: Array<InstancedMesh> = [];
   private readonly treeWindMeshes: Array<InstancedMesh> = [];
+  private readonly treeLeafWindMeshes: Mesh[] = [];
   private readonly grassImpostorMeshes: Array<InstancedMesh> = [];
   private readonly smallPropMeshes: Array<InstancedMesh> = [];
   private readonly waterSystem: WaterSystem;
@@ -968,6 +984,8 @@ export class WorldRenderer {
   private elevationMood = 0;
   private waterDepthDebug = false;
   private grassLodFrame = 0;
+  private heroGrassPulse = 0;
+  private environmentPulse = 0;
 
   private readonly shrine = buildShrine();
   private readonly terrainFormStrokes = buildTerrainFormStrokes();
@@ -1012,6 +1030,7 @@ export class WorldRenderer {
     recruitedCount: 0,
     nearestRecruitableDistance: null,
     recruitedThisFrame: 0,
+    firstEncounterActive: false,
     rollingCount: 0,
     mossuCollisionCount: 0,
     dominantMood: "curious",
@@ -1057,9 +1076,9 @@ export class WorldRenderer {
     this.skyBounce.position.set(148, 126, 196);
     scene.add(this.ambientLight, this.skyFill, this.skyBounce);
 
-    this.sun.position.set(-244, 84, -46);
     this.sun.castShadow = false;
-    this.sun.target.position.set(58, 12, 98);
+    this.sun.target.position.set(42, 10, 78);
+    this.sun.position.set(-106, 244, 353);
     scene.add(this.sun.target);
     scene.add(this.sun);
     this.meadowGlow.color.set(grasslandsArt.scene.meadowGlowRuntime);
@@ -1072,6 +1091,7 @@ export class WorldRenderer {
     scene.add(this.meadowGlow, this.alpineGlow);
 
     scene.add(this.skyDome);
+    scene.add(this.skySun);
     scene.add(this.terrain);
     scene.add(this.terrainFormStrokes);
     scene.add(this.openingNestVista);
@@ -1123,8 +1143,8 @@ export class WorldRenderer {
         rootFillBoost: 0.05,
         selfShadowStrength: 0.72,
         distanceCompressionBoost: 0.04,
-        playerPushRadius: 14,
-        playerPushStrength: 1.58,
+        playerPushRadius: 16.5,
+        playerPushStrength: 1.86,
         windExaggeration: 1.38,
         windTimeScale: 1,
         broadWindScale: 1.14,
@@ -1159,8 +1179,8 @@ export class WorldRenderer {
         rootFillBoost: 0.18,
         selfShadowStrength: 0.58,
         distanceCompressionBoost: 0.14,
-        playerPushRadius: 13.5,
-        playerPushStrength: 1.42,
+        playerPushRadius: 15.5,
+        playerPushStrength: 1.6,
         windExaggeration: 1.34,
         windTimeScale: 0.82,
         broadWindScale: 0.96,
@@ -1199,6 +1219,8 @@ export class WorldRenderer {
         scaleMultiplier: 0.86,
         selfShadowStrength: 0.42,
         distanceCompressionBoost: 0.24,
+        playerPushRadius: 11.5,
+        playerPushStrength: 1.08,
         windExaggeration: 1.26,
         windTimeScale: 0.58,
         broadWindScale: 0.96,
@@ -1315,7 +1337,17 @@ export class WorldRenderer {
     this.collectCameraColliders(this.anchorSceneAccents);
     this.collectCameraColliders(this.highlandAccents);
     this.collectCameraColliders(this.landmarkTrees);
-    this.collectTreeWindMeshes(this.treeClusters);
+    [
+      this.groundLayer,
+      this.midLayer,
+      this.treeClusters,
+      this.forestGroveAccents,
+      this.biomeTransitionAccents,
+      this.waterBankAccents,
+      this.anchorSceneAccents,
+      this.highlandAccents,
+      this.landmarkTrees,
+    ].forEach((object) => this.collectTreeWindMeshes(object));
     [
       this.groundLayer,
       this.midLayer,
@@ -1388,11 +1420,13 @@ export class WorldRenderer {
     this.deferredWorldSlices.push(
       () => {
         moveChildren(this.groundLayer, buildGroundLayer());
+        this.collectTreeWindMeshes(this.groundLayer);
         this.collectSmallPropMeshes(this.groundLayer);
         freezeStaticHierarchy(this.groundLayer);
       },
       () => {
         moveChildren(this.midLayer, buildMidLayer());
+        this.collectTreeWindMeshes(this.midLayer);
         this.collectSmallPropMeshes(this.midLayer);
         freezeStaticHierarchy(this.midLayer);
       },
@@ -1406,6 +1440,7 @@ export class WorldRenderer {
       () => {
         moveChildren(this.forestGroveAccents, buildForestGroveAccents());
         this.collectCameraColliders(this.forestGroveAccents);
+        this.collectTreeWindMeshes(this.forestGroveAccents);
         this.collectSmallPropMeshes(this.forestGroveAccents);
         freezeStaticHierarchy(this.forestGroveAccents);
       },
@@ -1497,9 +1532,11 @@ export class WorldRenderer {
         // [worldX, worldZ, scaleX, scaleY, scaleZ, yaw, lift]
         for (const [x, z, sx, sy, sz, yaw, lift] of [
           [-174, 178, 82, 108, 96, -0.2, 8],
-          [-112, 210, 104, 132, 118, 0.14, 10],
+          [-128, 226, 112, 152, 122, 0.08, 12],
+          [-58, 252, 126, 174, 128, -0.1, 15],
           [8, 238, 146, 184, 132, -0.04, 12],
-          [106, 208, 116, 148, 120, 0.22, 10],
+          [82, 248, 122, 158, 116, 0.18, 14],
+          [124, 212, 116, 148, 120, 0.22, 10],
           [166, 176, 72, 96, 82, 0.4, 7],
           [-48, 172, 58, 78, 66, -0.52, 6],
           [62, 162, 64, 84, 70, 0.34, 6],
@@ -1564,7 +1601,7 @@ export class WorldRenderer {
     this.updateSceneMood(frame, dt, viewCamera, elapsed);
     this.scene.fog = mapLookdown ? null : this.gameplayFog;
     if (!mapLookdown) {
-      this.updateWind(frame, elapsed);
+      this.updateWind(frame, elapsed, dt);
       this.updateClouds(elapsed);
       this.updateValleyMist(elapsed);
     }
@@ -1649,6 +1686,7 @@ export class WorldRenderer {
     const grassLodStats = this.windMeshes.map((mesh) => getGrassMeshLodStats(mesh));
     const grassImpostorInstances = this.grassImpostorMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
     const forestInstances = this.treeWindMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
+    const staticTreeWindTriangles = this.treeLeafWindMeshes.reduce((sum, mesh) => sum + countGeometryTriangles(mesh.geometry), 0);
     const smallPropInstances = this.smallPropMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
 
     return {
@@ -1664,27 +1702,32 @@ export class WorldRenderer {
       grassLodSourceInstances: grassLodStats.reduce((sum, stats) => sum + (stats?.sourceInstances ?? 0), 0),
       grassLodVisitedCells: grassLodStats.reduce((sum, stats) => sum + (stats?.visitedCells ?? 0), 0),
       grassLodVisitedSources: grassLodStats.reduce((sum, stats) => sum + (stats?.visitedSources ?? 0), 0),
-      forestMeshes: this.treeWindMeshes.length,
+      forestMeshes: this.treeWindMeshes.length + this.treeLeafWindMeshes.length,
       forestInstances,
-      forestEstimatedTriangles: countInstancedTriangles(this.treeWindMeshes),
+      forestEstimatedTriangles: countInstancedTriangles(this.treeWindMeshes) + staticTreeWindTriangles,
       smallPropMeshes: this.smallPropMeshes.length,
       smallPropInstances,
       smallPropEstimatedTriangles: countInstancedTriangles(this.smallPropMeshes),
       waterSurfaces: waterControllers.length,
       waterVertices: waterGeometryStats.vertices,
       waterTriangles: waterGeometryStats.triangles,
-      animatedShaderMeshes: this.windMeshes.length + this.treeWindMeshes.length + waterControllers.length,
+      animatedShaderMeshes: this.windMeshes.length + this.treeWindMeshes.length + this.treeLeafWindMeshes.length + waterControllers.length,
       grassShaderMeshes: this.windMeshes.length,
-      treeShaderMeshes: this.treeWindMeshes.length,
+      treeShaderMeshes: this.treeWindMeshes.length + this.treeLeafWindMeshes.length,
       waterShaderSurfaces: waterControllers.length,
     };
   }
 
   private collectTreeWindMeshes(root: Object3D) {
     root.traverse((node) => {
-      const mesh = node as InstancedMesh;
-      if (mesh.isInstancedMesh && mesh.userData.canopyWind) {
-        this.treeWindMeshes.push(mesh);
+      const instancedMesh = node as InstancedMesh;
+      if (instancedMesh.isInstancedMesh && instancedMesh.userData.canopyWind && !this.treeWindMeshes.includes(instancedMesh)) {
+        this.treeWindMeshes.push(instancedMesh);
+      }
+
+      const mesh = node as Mesh;
+      if (mesh.isMesh && mesh.userData.treeLeafWind && !this.treeLeafWindMeshes.includes(mesh)) {
+        this.treeLeafWindMeshes.push(mesh);
       }
     });
   }
@@ -1727,13 +1770,25 @@ export class WorldRenderer {
     });
   }
 
-  private updateWind(frame: FrameState, elapsed: number) {
+  private updateWind(frame: FrameState, elapsed: number, dt: number) {
     const planarSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
-    const playerPush = frame.player.fallingToVoid || !frame.player.grounded
+    if (frame.player.justLanded && !frame.player.fallingToVoid) {
+      this.heroGrassPulse = Math.max(
+        this.heroGrassPulse,
+        MathUtils.clamp(0.34 + frame.player.landingImpact * 0.25, 0.34, 0.72),
+      );
+    }
+    const landingPulse = this.heroGrassPulse;
+    const rollingWake = frame.player.rolling && frame.player.grounded
+      ? MathUtils.clamp(planarSpeed / 22, 0.18, 0.5)
+      : 0;
+    const karuWatchWake = this.faunaStats.firstEncounterActive ? 0.22 : 0;
+    const basePush = frame.player.fallingToVoid || !frame.player.grounded
       ? 0
       : frame.player.rolling
         ? MathUtils.clamp(planarSpeed / 24, 0.22, 1)
         : MathUtils.clamp(planarSpeed / 14, 0, 0.48);
+    const playerPush = MathUtils.clamp(basePush + landingPulse + rollingWake + karuWatchWake, 0, 1.35);
     this.windMeshes.forEach((mesh) => {
       const shader = mesh.userData.shader;
       if (shader) {
@@ -1743,9 +1798,21 @@ export class WorldRenderer {
         shader.uniforms.uPlayerPush.value = playerPush;
       }
     });
+    this.heroGrassPulse = MathUtils.damp(this.heroGrassPulse, 0, 3.2, dt);
     this.treeWindMeshes.forEach((mesh) => {
       const shader = mesh.userData.windShader;
       if (shader) {
+        shader.uniforms.uTime.value = elapsed;
+      }
+    });
+    this.treeLeafWindMeshes.forEach((mesh) => {
+      const material = mesh.material;
+      if (Array.isArray(material)) {
+        return;
+      }
+
+      const shader = material.userData.windShader;
+      if (shader?.uniforms.uTime) {
         shader.uniforms.uTime.value = elapsed;
       }
     });
@@ -1753,11 +1820,27 @@ export class WorldRenderer {
 
   private updateSceneMood(frame: FrameState, dt: number, viewCamera: Camera, elapsed: number) {
     const playerHeight = sampleTerrainHeight(frame.player.position.x, frame.player.position.z);
+    const planarSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
+    if (frame.player.justLanded && !frame.player.fallingToVoid) {
+      this.environmentPulse = Math.max(
+        this.environmentPulse,
+        MathUtils.clamp(0.18 + frame.player.landingImpact * 0.1, 0.18, 0.36),
+      );
+    }
+    if (this.faunaStats.firstEncounterActive) {
+      this.environmentPulse = Math.max(this.environmentPulse, 0.24);
+    }
     const heightMood = MathUtils.smoothstep(playerHeight, 34, 128);
     const routeMood = MathUtils.smoothstep(frame.player.position.z, 64, 202);
     const targetMood = MathUtils.clamp(heightMood * 0.72 + routeMood * 0.4, 0, 1);
     const blend = 1 - Math.exp(-dt * 1.8);
     this.elevationMood = MathUtils.lerp(this.elevationMood, targetMood, blend);
+    const movementWake =
+      (frame.player.rolling ? 0.055 : 0.026) *
+      MathUtils.clamp(planarSpeed / 30, 0, 1) *
+      (frame.player.fallingToVoid ? 0 : 1);
+    const cinematicLift = MathUtils.clamp(this.environmentPulse + movementWake, 0, 0.42);
+    const breath = Math.sin(elapsed * 0.34 + this.elevationMood * 1.8) * 0.5 + 0.5;
 
     const background = this.scene.background;
     if (background instanceof Color) {
@@ -1765,17 +1848,19 @@ export class WorldRenderer {
     }
 
     this.gameplayFog.color.copy(this.lowlandFogColor).lerp(this.highlandFogColor, this.elevationMood);
-    this.gameplayFog.density = MathUtils.lerp(0.00048, 0.00068, this.elevationMood);
+    this.gameplayFog.density = MathUtils.lerp(0.00048, 0.00068, this.elevationMood) - cinematicLift * 0.000035;
     this.sun.color.copy(this.lowlandSunColor).lerp(this.highlandSunColor, this.elevationMood);
-    this.sun.intensity = MathUtils.lerp(3.34, 3.04, this.elevationMood);
-    this.ambientLight.intensity = MathUtils.lerp(1.08, 0.98, this.elevationMood);
+    this.sun.intensity = MathUtils.lerp(3.28, 3.02, this.elevationMood) + cinematicLift * 0.16 + breath * 0.018;
+    this.ambientLight.intensity = MathUtils.lerp(1.08, 0.98, this.elevationMood) + cinematicLift * 0.045;
     this.skyFill.color.copy(this.lowlandSkyFillColor).lerp(this.highlandSkyFillColor, this.elevationMood);
     this.skyFill.groundColor.copy(this.lowlandGroundFillColor).lerp(this.highlandGroundFillColor, this.elevationMood);
-    this.skyFill.intensity = MathUtils.lerp(1.26, 1.12, this.elevationMood);
-    this.skyBounce.intensity = MathUtils.lerp(0.56, 0.5, this.elevationMood);
-    this.meadowGlow.intensity = MathUtils.lerp(0.72, 0.34, this.elevationMood);
-    this.alpineGlow.intensity = MathUtils.lerp(0.58, 0.9, this.elevationMood);
+    this.skyFill.intensity = MathUtils.lerp(1.26, 1.12, this.elevationMood) + cinematicLift * 0.06;
+    this.skyBounce.intensity = MathUtils.lerp(0.56, 0.5, this.elevationMood) + cinematicLift * 0.05;
+    this.meadowGlow.intensity = MathUtils.lerp(0.72, 0.34, this.elevationMood) + cinematicLift * 0.22;
+    this.alpineGlow.intensity = MathUtils.lerp(0.58, 0.9, this.elevationMood) + cinematicLift * 0.16;
+    this.environmentPulse = MathUtils.damp(this.environmentPulse, 0, 2.35, dt);
     syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera, elapsed);
+    syncStylizedSkySun(this.skySun, this.sun, viewCamera, this.elevationMood);
 
     getAtmosphereHorizonTints(
       this.elevationMood,
@@ -1821,12 +1906,18 @@ export class WorldRenderer {
     }
 
     const playerSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
+    const playerWaterStrength =
+      frame.player.swimming ? 1.18 :
+      frame.player.rolling ? 1.16 :
+      frame.player.justLanded ? 1.05 :
+      0.86;
     this.waterSystem.emitRippleForActor(
       "mossu",
       frame.player.position,
       playerSpeed,
       elapsed,
-      frame.player.swimming ? 1.05 : frame.player.rolling ? 0.96 : 0.78,
+      playerWaterStrength,
+      frame.player.justLanded,
     );
 
     this.ambientBlobs.forEach((blob) => {

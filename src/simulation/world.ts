@@ -8,7 +8,7 @@ export const MOSSU_PLAYFIELD_EXTENT = 560;
  * between named tiers (plains→hills→foothills→alpine→ridge) instead of sharp heightfield steps.
  */
 const BIOME_JOURNEY_HEIGHT_MIN = 9;
-const BIOME_JOURNEY_HEIGHT_MAX = 198;
+const BIOME_JOURNEY_HEIGHT_MAX = 246;
 const BIOME_JOURNEY_NORTH_MIN = -112;
 const BIOME_JOURNEY_NORTH_MAX = 228;
 const BIOME_JOURNEY_NORTH_SCALE = 0.63;
@@ -184,6 +184,7 @@ const riverCenter = (z: number) => (
   Math.exp(-(((z + 112) / 44) ** 2)) * 28
 );
 export const RIVER_BRANCH_SEGMENTS: readonly RiverBranchSegment[] = [
+  { id: "silver-braid", startZ: -126, endZ: -52, offset: -84, width: 13.5, depthScale: 0.54, flowStrength: 0.28 },
   { id: "meadow-braid", startZ: -82, endZ: 22, offset: 70, width: 25, depthScale: 0.66, flowStrength: 0.34 },
   { id: "fir-gate-braid", startZ: 48, endZ: 136, offset: -82, width: 28, depthScale: 0.72, flowStrength: 0.46 },
   { id: "alpine-braid", startZ: 132, endZ: 216, offset: 72, width: 22, depthScale: 0.64, flowStrength: 0.54 },
@@ -204,7 +205,7 @@ export const WATER_EDGE_TERRAIN_CLEARANCE = 0.22;
 export const WATER_SWIM_MIN_DEPTH = 1.35;
 export const OPENING_LAKE_CENTER_X = -34;
 export const OPENING_LAKE_CENTER_Z = -112;
-export const OPENING_LAKE_RADIUS = 24.5;
+export const OPENING_LAKE_RADIUS = 11.5;
 export const OPENING_LAKE_SURFACE_OFFSET = 3.8;
 export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
   {
@@ -220,9 +221,26 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     shoreDepth: 1.4,
     flowStrength: 0.08,
     flowSpeed: 0.12,
-    opacity: 0.82,
+    opacity: 0.6,
     swimAllowed: true,
     edgeSoftness: 0.44,
+  },
+  {
+    id: "great-lake",
+    x: -116,
+    z: -116,
+    radiusX: 24,
+    radiusZ: 15,
+    renderRadiusX: 33,
+    renderRadiusZ: 22,
+    surfaceOffset: 3.2,
+    basinDepth: 7.4,
+    shoreDepth: 1.35,
+    flowStrength: 0.055,
+    flowSpeed: 0.1,
+    opacity: 0.76,
+    swimAllowed: true,
+    edgeSoftness: 0.5,
   },
   {
     id: "burrow-shoal",
@@ -245,16 +263,16 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     id: "sun-mirror-pond",
     x: 2,
     z: -121,
-    radiusX: 18,
-    radiusZ: 10.8,
-    renderRadiusX: 21.2,
-    renderRadiusZ: 13,
+    radiusX: 9.2,
+    radiusZ: 8.6,
+    renderRadiusX: 10.8,
+    renderRadiusZ: 10,
     surfaceOffset: 2,
     basinDepth: 3.8,
     shoreDepth: 0.95,
     flowStrength: 0.035,
     flowSpeed: 0.07,
-    opacity: 0.8,
+    opacity: 0.6,
     swimAllowed: true,
     edgeSoftness: 0.5,
   },
@@ -262,16 +280,16 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     id: "reed-cove",
     x: -79,
     z: -105,
-    radiusX: 15.5,
-    radiusZ: 12,
-    renderRadiusX: 18.4,
-    renderRadiusZ: 14.2,
+    radiusX: 7.2,
+    radiusZ: 5.8,
+    renderRadiusX: 8.8,
+    renderRadiusZ: 7.1,
     surfaceOffset: 2.35,
     basinDepth: 4.6,
     shoreDepth: 1.1,
     flowStrength: 0.045,
     flowSpeed: 0.09,
-    opacity: 0.78,
+    opacity: 0.6,
     swimAllowed: true,
     edgeSoftness: 0.48,
   },
@@ -503,7 +521,7 @@ function samplePoolBankShape(x: number, z: number) {
     const sandbarRing = Math.exp(-(((distance - 0.72 - scallop * 0.07) / 0.12) ** 2));
     const rimRing = Math.exp(-(((distance - 1.16 - edgeNoise * 0.08) / 0.16) ** 2));
     const outerFade = 1 - smootherStep(1.42, 1.72, distance);
-    const poolScale = pool.id === "opening-lake" ? 1.18 : 0.82;
+    const poolScale = pool.id === "opening-lake" || pool.id === "great-lake" ? 1.18 : 0.82;
 
     return mergeWaterBankShape(best, {
       shelfCut: shelfRing * outerFade * poolScale * (0.76 + edgeNoise * 0.24),
@@ -960,13 +978,40 @@ export function sampleBaseTerrainHeight(x: number, z: number) {
   const coveCut = bankShape.coveCut * (0.9 + highlandMask * 0.26);
   const sandbarLift = bankShape.sandbarLift * (0.46 + highlandMask * 0.18);
   const routeTerraceLift = sampleRouteTerraceLift(x, z) * (1 - sampleStartingWaterSurfaceMask(x, z) * 0.5);
+  const routeDirtRead = sampleRouteDirtPathMask(x, z);
   const routeSurfacePress = samplePaintedGroundMask(x, z) * (0.34 + highlandMask * 0.28) * (1 - sampleStartingWaterSurfaceMask(x, z) * 0.72);
   const hillBand = smootherStep(-170, 10, z) * 10 * t;
   const foothillBand = smootherStep(-10, 95, z) * 18 * t;
   const mountainMass =
-    (Math.exp(-(((x + 12) / 110) ** 2) - (((z - 174) / 92) ** 2)) * 102 +
+    (Math.exp(-(((x + 12) / 110) ** 2) - (((z - 174) / 92) ** 2)) * 100 +
       Math.exp(-(((x - 84) / 90) ** 2) - (((z - 140) / 88) ** 2)) * 48 +
-      Math.exp(-(((x + 118) / 72) ** 2) - (((z - 118) / 78) ** 2)) * 32) *
+      Math.exp(-(((x + 118) / 72) ** 2) - (((z - 118) / 78) ** 2)) * 34 +
+      Math.exp(-(((x + 72) / 74) ** 2) - (((z - 226) / 58) ** 2)) * 54 +
+      Math.exp(-(((x - 116) / 78) ** 2) - (((z - 210) / 64) ** 2)) * 46) *
+    t;
+  const roundedHighlandHills =
+    (Math.exp(-(((x - 12) / 58) ** 2) - (((z - 116) / 46) ** 2)) * 18 +
+      Math.exp(-(((x + 58) / 70) ** 2) - (((z - 148) / 58) ** 2)) * 15 +
+      Math.exp(-(((x - 92) / 64) ** 2) - (((z - 158) / 70) ** 2)) * 16) *
+    smootherStep(72, 184, z) *
+    (1 - routeSmooth * 0.34) *
+    t;
+  const highlandSlopeShoulders =
+    (Math.exp(-(((x + 104) / 68) ** 2) - (((z - 170) / 88) ** 2)) * 9 +
+      Math.exp(-(((x - 128) / 58) ** 2) - (((z - 172) / 78) ** 2)) * 12) *
+    smootherStep(96, 208, z) *
+    (1 - routeSmooth * 0.18) *
+    t;
+  const meadowRightPlateau =
+    Math.exp(-(((x - 86) / 62) ** 2) - (((z - 54) / 78) ** 2)) *
+    smootherStep(-44, 84, z) *
+    (1 - routeSmooth * 0.34) *
+    15 *
+    t;
+  const meadowLeftRoll =
+    Math.exp(-(((x + 100) / 70) ** 2) - (((z + 64) / 86) ** 2)) *
+    (1 - sampleStartingWaterWetness(x, z) * 0.62) *
+    6.2 *
     t;
   const ridgeWall = smootherStep(78, 182, z) * 40 * (1 - ridgePassCenter(x)) * t;
   const shrineShelf = Math.exp(-(((x + 2) / 28) ** 2) - (((z - 214) / 20) ** 2)) * 18 * t;
@@ -980,6 +1025,7 @@ export function sampleBaseTerrainHeight(x: number, z: number) {
   const cascadeShelf = Math.exp(-(((x - 34) / 28) ** 2) - (((z - 130) / 22) ** 2)) * 14 * t;
   const traverseShelf = Math.exp(-(((x - 10) / 34) ** 2) - (((z - 154) / 26) ** 2)) * 11 * t;
   const ridgeLead = Math.exp(-(((x - 14) / 24) ** 2) - (((z - 186) / 18) ** 2)) * 8 * t;
+  const highlandPathCarve = routeDirtRead * smootherStep(78, 208, z) * (1.2 + highlandMask * 1.35) * t;
   const edgeF = sampleIslandEdgeFactor(x, z);
   const coastHeadland =
     smootherStep(0.18, 0.48, edgeF) * (1 - smootherStep(0.78, 0.98, edgeF)) * (7.2 + fbmNoise(x * 0.02, z * 0.02, 2) * 2.1) * t;
@@ -991,6 +1037,10 @@ export function sampleBaseTerrainHeight(x: number, z: number) {
     hillBand +
     foothillBand +
     mountainMass +
+    roundedHighlandHills +
+    highlandSlopeShoulders +
+    meadowRightPlateau +
+    meadowLeftRoll +
     ridgeWall +
     shrineShelf +
     alpineShelf +
@@ -1007,6 +1057,7 @@ export function sampleBaseTerrainHeight(x: number, z: number) {
     dryBankLip +
     sandbarLift +
     routeTerraceLift -
+    highlandPathCarve -
     routeSurfacePress -
     bankShelfCut -
     coveCut -
@@ -1053,10 +1104,11 @@ export function sampleRiverCenter(z: number) {
 
 export function sampleRiverWidth(z: number) {
   const lowerMeadow = smootherStep(-170, -96, z) * (1 - smootherStep(-20, 42, z));
+  const lowerWaterscape = smootherStep(-142, -108, z) * (1 - smootherStep(-4, 58, z));
   const centralValley = smootherStep(-72, 44, z) * (1 - smootherStep(154, 224, z));
   const foothillBroad = smootherStep(36, 108, z) * (1 - smootherStep(142, 204, z));
   const alpineTaper = smootherStep(166, 236, z);
-  return 38 + (Math.sin(z * 0.019) * 0.5 + 0.5) * 10 + lowerMeadow * 3 + centralValley * 6 + foothillBroad * 5 - alpineTaper * 5;
+  return 18 + (Math.sin(z * 0.019) * 0.5 + 0.5) * 5 + lowerMeadow * 2.4 + lowerWaterscape * 5.2 + centralValley * 3.2 + foothillBroad * 3 - alpineTaper * 3;
 }
 
 interface CreekPath {
@@ -1945,7 +1997,14 @@ export const scenicPockets: ScenicPocket[] = [
     kind: "meadow_clearing",
     zone: "plains",
     position: new Vector3(-62, sampleTerrainHeight(-62, -150), -150),
-    radius: 28,
+    radius: 34,
+  },
+  {
+    id: "great-lake-shore",
+    kind: "stream_bend",
+    zone: "plains",
+    position: new Vector3(-116, sampleTerrainHeight(-116, -116), -116),
+    radius: 38,
   },
   {
     id: "burrow-bloom",
@@ -1959,7 +2018,14 @@ export const scenicPockets: ScenicPocket[] = [
     kind: "meadow_clearing",
     zone: "hills",
     position: new Vector3(-8, sampleTerrainHeight(-8, -34), -34),
-    radius: 24,
+    radius: 30,
+  },
+  {
+    id: "silver-creek-meadow",
+    kind: "stream_bend",
+    zone: "hills",
+    position: new Vector3(-42, sampleTerrainHeight(-42, 34), 34),
+    radius: 26,
   },
   {
     id: "silver-bend-bank",

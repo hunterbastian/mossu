@@ -88,10 +88,14 @@ function colorForTerrain(x: number, y: number, z: number) {
     ovalMask(x, z, -90, 132, 58, 58),
     ovalMask(x, z, 84, 148, 62, 62),
   );
+  const codexWoodlandPath = Math.max(
+    ovalMask(x, z, -34, 84, 68, 52),
+    ovalMask(x, z, 42, 124, 66, 58),
+  );
   const canopyDapple = MathUtils.clamp(
     (Math.sin(x * 0.14 + z * 0.05) * Math.cos(z * 0.12 - x * 0.04) * 0.5 + 0.5) *
-    Math.max(codexDeepWoods, codexPeacefulGroves, codexAncientGrounds) *
-    (1 - routeClearing * 0.52),
+    Math.max(codexDeepWoods, codexPeacefulGroves, codexAncientGrounds, codexWoodlandPath * 0.86) *
+    (1 - routeClearing * 0.38),
     0,
     1,
   );
@@ -127,6 +131,7 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color(terrainArt.groveSunlitFloor), codexPeacefulGroves * (0.16 + canopyDapple * 0.12))
     .lerp(new Color(terrainArt.forestDeepFloor), codexDeepWoods * (0.22 + (1 - canopyDapple) * 0.12))
     .lerp(new Color(terrainArt.ancientMossFloor), codexAncientGrounds * 0.2)
+    .lerp(new Color(terrainArt.forestDeepFloor), codexWoodlandPath * (0.1 + canopyDapple * 0.08) * (1 - routeClearing * 0.42))
     .lerp(new Color(terrainArt.forestDappleWarm), canopyDapple * 0.08 * (1 - codexDeepWoods * 0.38))
     .lerp(new Color(terrainArt.foothillGreen), foothillTint * 0.2)
     .lerp(new Color(terrainArt.alpineSage), alpineTint * 0.22)
@@ -174,7 +179,10 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color(terrainArt.forestTerrain), habitat.forest * 0.17)
     .lerp(new Color(terrainArt.shoreTerrain), habitat.shore * 0.14)
     .lerp(paintedEarth, paintedGround * (0.34 + (1 - slopeRock) * 0.22))
-    .lerp(wornDirt, routeDirt * 0.66 * (1 - rockMask * 0.88))
+    .lerp(
+      wornDirt,
+      routeDirt * (0.66 + MathUtils.clamp(journeyNorth * 0.14 + scenicTravelBand * 0.12, 0, 0.22)) * (1 - rockMask * 0.86),
+    )
     .lerp(sandbar, sandbarLine * 0.34)
     .lerp(new Color(terrainArt.wetBank), wetBankLine * 0.24)
     .lerp(new Color(terrainArt.coveShade), coveShade * 0.13)

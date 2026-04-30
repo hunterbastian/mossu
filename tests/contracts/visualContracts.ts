@@ -6,6 +6,7 @@ import {
   buildGroundLayer,
   buildHighlandAccents,
   buildMidLayer,
+  TREE_SCALE_LOCK,
   buildTreeClusters,
   buildWaterBankAccents,
 } from "../../src/render/world/terrainDecorations";
@@ -28,7 +29,8 @@ export function runVisualContracts() {
   const anchorSceneAccents = buildAnchorSceneAccents();
   assert(anchorSceneAccents.userData.artDirection === ART_DIRECTION_IDS.grasslands, "grasslands art pass has an explicit direction marker");
   assert(Boolean(OOT_PS2_GRASSLANDS_PALETTE.futureLakes.clearSurface), "grasslands palette reserves lake and river color tokens for the next biome pass");
-  assert(Boolean(OOT_PS2_GRASSLANDS_PALETTE.props.fence.post), "grasslands palette owns fence color tokens");
+  assert(Boolean(OOT_PS2_GRASSLANDS_PALETTE.props.signpost.post), "grasslands palette owns signpost color tokens");
+  assert(TREE_SCALE_LOCK === 4, "world trees keep the requested four-times scale lock");
   const highlandAccents = buildHighlandAccents();
   assert(highlandAccents.userData.artDirection === ART_DIRECTION_IDS.hillsMountains, "highland art pass has an explicit codex hills marker");
   const forestGroveAccents = buildForestGroveAccents();

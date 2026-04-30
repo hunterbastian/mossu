@@ -3,6 +3,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   Camera,
+  CircleGeometry,
   Color,
   DirectionalLight,
   Group,
@@ -22,6 +23,37 @@ const _horizonTintScratch = new Color();
 const _horizonHazeScratch = new Color();
 const _cloudBrightScratch = new Color();
 const _cloudShadowScratch = new Color();
+const _skySunPositionScratch = new Vector3();
+
+function makeSkySunCircle(color: string, opacity: number, radius: number) {
+  const material = new MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    depthWrite: false,
+    depthTest: true,
+    fog: false,
+  });
+  material.toneMapped = false;
+
+  const mesh = new Mesh(new CircleGeometry(radius, 56), material);
+  mesh.renderOrder = -80;
+  return mesh;
+}
+
+export function buildStylizedSkySun() {
+  const group = new Group();
+  group.name = "stylized-sky-sun";
+  group.renderOrder = -80;
+
+  const outerGlow = makeSkySunCircle("#ffd66a", 0.16, 58);
+  const warmHalo = makeSkySunCircle("#ffb94f", 0.16, 36);
+  const disk = makeSkySunCircle("#ffd35f", 0.9, 24);
+  const creamyCore = makeSkySunCircle("#fff2a3", 0.72, 13);
+
+  group.add(outerGlow, warmHalo, disk, creamyCore);
+  return group;
+}
 
 function createCloudPuffMaterial() {
   return new ShaderMaterial({
@@ -306,15 +338,20 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
 
         vec3 sunDir = normalize(uSunDir);
         float sunDot = max(dot(dir, sunDir), 0.0);
-        float sunBloom = pow(sunDot, 4.05);
-        float sunCorona = pow(sunDot, 1.75) * (1.0 - pow(sunDot, 5.5) * 0.85);
-        float sunCore = pow(sunDot, 28.0);
-        vec3 sunTint = uSunColor * 1.08;
-        vec3 coolBloom = vec3(0.52, 0.78, 0.92) * (0.1 + mood * 0.06);
+        float sunBloom = pow(sunDot, 3.15);
+        float sunCorona = pow(sunDot, 1.34) * (1.0 - pow(sunDot, 8.0) * 0.7);
+        float sunDisk = smoothstep(0.982, 0.993, sunDot);
+        float sunCore = smoothstep(0.993, 0.9985, sunDot);
+        vec3 sunTint = uSunColor * 1.1;
+        vec3 sunApricot = mix(vec3(1.0, 0.66, 0.25), sunTint, 0.48);
+        vec3 sunCream = mix(vec3(1.0, 0.96, 0.66), sunTint, 0.58);
+        vec3 coolBloom = vec3(0.52, 0.78, 0.92) * (0.075 + mood * 0.04);
         color += coolBloom * sunBloom;
-        color += sunTint * sunBloom * 0.42;
-        color += mix(vec3(1.0, 0.97, 0.88), sunTint, 0.65) * sunCorona * 0.14;
-        color += mix(vec3(1.0, 0.98, 0.9), sunTint, 0.72) * sunCore * 0.5;
+        color += sunApricot * sunBloom * 0.28;
+        color += mix(vec3(1.0, 0.82, 0.46), sunTint, 0.48) * sunCorona * 0.2;
+        color = mix(color, sunApricot, sunDisk * 0.52);
+        color = mix(color, sunCream, sunCore * 0.72);
+        color += sunCream * sunCore * 0.28;
 
         vec2 skyUv = dir.xz * (2.05 / max(0.26, dir.y + 0.38));
         float highWisp = fbm(skyUv * vec2(0.72, 0.3) + vec2(8.0, 3.0));
@@ -379,6 +416,39 @@ export function syncAtmosphereLighting(
     (cloudMat.uniforms.uCloudBright.value as Color).copy(_cloudBrightScratch);
     (cloudMat.uniforms.uCloudShadow.value as Color).copy(_cloudShadowScratch);
   }
+}
+
+export function syncStylizedSkySun(
+  skySun: Group,
+  sun: DirectionalLight,
+  camera: Camera,
+  elevationMood: number,
+) {
+  const mood = MathUtils.clamp(elevationMood, 0, 1);
+  // The shader glow follows the world light; this disk is composed in sky-screen space
+  // so the opening vista keeps a readable toy-like sun instead of losing it behind hills.
+  _skySunPositionScratch.set(-0.78, 0.9, 0.5).unproject(camera);
+  _sunDirScratch.subVectors(_skySunPositionScratch, camera.position).normalize();
+  _skySunPositionScratch.copy(camera.position).addScaledVector(_sunDirScratch, 520);
+  skySun.position.copy(_skySunPositionScratch);
+  skySun.lookAt(camera.position);
+  skySun.scale.setScalar(MathUtils.lerp(0.9, 0.76, mood));
+
+  const outerGlow = skySun.children[0] as Mesh | undefined;
+  const warmHalo = skySun.children[1] as Mesh | undefined;
+  const disk = skySun.children[2] as Mesh | undefined;
+  const creamyCore = skySun.children[3] as Mesh | undefined;
+  const setOpacity = (mesh: Mesh | undefined, opacity: number) => {
+    const material = mesh?.material;
+    if (material instanceof MeshBasicMaterial) {
+      material.opacity = opacity;
+    }
+  };
+
+  setOpacity(outerGlow, MathUtils.lerp(0.18, 0.11, mood));
+  setOpacity(warmHalo, MathUtils.lerp(0.16, 0.12, mood));
+  setOpacity(disk, MathUtils.lerp(0.92, 0.82, mood));
+  setOpacity(creamyCore, MathUtils.lerp(0.72, 0.58, mood));
 }
 
 export function buildMountainAtmosphere() {
