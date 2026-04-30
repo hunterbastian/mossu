@@ -33,10 +33,12 @@ import { FrameState } from "../../simulation/gameState";
 import {
   ForageableKind,
   sampleBaseTerrainHeight,
+  sampleBiomeZone,
   sampleIslandBoundaryPoint,
   sampleTerrainHeight,
   sampleTerrainNormal,
   sampleWaterState,
+  sampleWindField,
   shadowPockets,
   STARTING_WATER_POOLS,
   startingLookTarget,
@@ -62,6 +64,8 @@ import {
   syncAtmosphereLighting,
   syncStylizedSkySun,
 } from "./atmosphereSystem";
+import { AmbientMoteSystem, buildAmbientMotes } from "./ambientMotes";
+import { buildOceanSystem, type OceanSystem } from "./oceanSystem";
 import {
   AMBIENT_BLOB_SPECIES_NAME,
   AmbientBlob,
@@ -83,8 +87,22 @@ import {
 } from "./terrainDecorations";
 import { markCameraCollider } from "./sceneHelpers";
 import {
+  batchStaticDecorations,
+  freezeStaticHierarchy,
+  moveChildren,
+} from "./staticBatching";
+import {
+  countGeometryTriangles,
+  countGeometryVertices,
+  countInstancedTriangles,
+} from "./geometryStats";
+import {
+  applySceneLightingColors,
+  applySceneLightingMood,
+  applySunRig,
   getAtmosphereHorizonTints,
   getSunDirectionWorld,
+  type SceneColorPairs,
   writePatchSceneLightingUniforms,
 } from "./sceneLighting";
 import { buildTerrainFormStrokes, makeTerrainMesh } from "./terrainMesh";
@@ -833,122 +851,6 @@ function buildForageableVisuals() {
   });
 }
 
-function freezeStaticHierarchy(object: Object3D) {
-  object.traverse((child) => {
-    child.updateMatrix();
-    child.matrixAutoUpdate = false;
-  });
-}
-
-function materialBatchKey(material: Material) {
-  const materialWithColor = material as Material & {
-    color?: Color;
-    roughness?: number;
-    metalness?: number;
-  };
-  return [
-    material.type,
-    materialWithColor.color?.getHexString() ?? "no-color",
-    material.transparent ? "transparent" : "opaque",
-    material.opacity.toFixed(3),
-    material.side,
-    material.depthWrite ? "depth-write" : "no-depth-write",
-    material.depthTest ? "depth-test" : "no-depth-test",
-    materialWithColor.roughness?.toFixed(2) ?? "no-roughness",
-    materialWithColor.metalness?.toFixed(2) ?? "no-metalness",
-    material.userData.treeLeafWindEnabled ? "tree-leaf-wind" : "static",
-  ].join("|");
-}
-
-function canBatchStaticMesh(mesh: Mesh) {
-  if (mesh.userData.cameraCollider || mesh.userData.canopyWind || mesh.userData.shader || mesh.userData.windShader) {
-    return false;
-  }
-  if ((mesh as Mesh & { isInstancedMesh?: boolean }).isInstancedMesh || Array.isArray(mesh.material)) {
-    return false;
-  }
-  return Boolean(mesh.geometry?.getAttribute("position"));
-}
-
-function batchStaticDecorations<T extends Object3D>(root: T, name: string): T {
-  const buckets = new Map<string, { material: Material; meshes: Mesh[] }>();
-  const batchedMeshes: Mesh[] = [];
-
-  root.updateWorldMatrix(true, true);
-  root.traverse((node) => {
-    const mesh = node as Mesh;
-    if (!mesh.isMesh || !canBatchStaticMesh(mesh)) {
-      return;
-    }
-    const material = mesh.material as Material;
-    const key = materialBatchKey(material);
-    const bucket = buckets.get(key);
-    if (bucket) {
-      bucket.meshes.push(mesh);
-    } else {
-      buckets.set(key, { material, meshes: [mesh] });
-    }
-  });
-
-  buckets.forEach(({ material, meshes }, key) => {
-    if (meshes.length < 2) {
-      return;
-    }
-
-    const geometries = meshes.map((mesh) => {
-      const geometry = mesh.geometry.clone();
-      geometry.applyMatrix4(mesh.matrixWorld);
-      return geometry;
-    });
-    const mergedGeometry = mergeGeometries(geometries, false);
-    geometries.forEach((geometry) => geometry.dispose());
-    if (!mergedGeometry) {
-      return;
-    }
-
-    meshes.forEach((mesh) => {
-      mesh.parent?.remove(mesh);
-    });
-
-    mergedGeometry.computeBoundingSphere();
-    const batchedMaterial = material.userData.treeLeafWindEnabled ? material : material.clone();
-    const batchedMesh = new Mesh(mergedGeometry, batchedMaterial);
-    batchedMesh.name = `${name}-${key}`;
-    if (material.userData.treeLeafWindEnabled) {
-      batchedMesh.userData.treeLeafWind = true;
-    }
-    batchedMesh.matrixAutoUpdate = false;
-    batchedMesh.updateMatrix();
-    batchedMeshes.push(batchedMesh);
-  });
-
-  batchedMeshes.forEach((mesh) => root.add(mesh));
-  return root;
-}
-
-function countGeometryVertices(geometry: BufferGeometry) {
-  return geometry.getAttribute("position")?.count ?? 0;
-}
-
-function countGeometryTriangles(geometry: BufferGeometry) {
-  const index = geometry.getIndex();
-  if (index) {
-    return Math.floor(index.count / 3);
-  }
-
-  return Math.floor(countGeometryVertices(geometry) / 3);
-}
-
-function countInstancedTriangles(meshes: readonly InstancedMesh[]) {
-  return meshes.reduce((total, mesh) => total + countGeometryTriangles(mesh.geometry) * mesh.count, 0);
-}
-
-function moveChildren(target: Group, source: Group) {
-  while (source.children.length > 0) {
-    target.add(source.children[0]);
-  }
-}
-
 export class WorldRenderer {
   readonly mossu = new MossuAvatar();
   readonly terrain = makeTerrainMesh();
@@ -973,6 +875,13 @@ export class WorldRenderer {
   private readonly highlandSkyFillColor = new Color(grasslandsArt.scene.highlandSkyFill);
   private readonly lowlandGroundFillColor = new Color(grasslandsArt.scene.lowlandGroundFill);
   private readonly highlandGroundFillColor = new Color(grasslandsArt.scene.highlandGroundFill);
+  private readonly sceneColorPairs: SceneColorPairs = {
+    sun: { lowland: this.lowlandSunColor, highland: this.highlandSunColor },
+    skyFill: { lowland: this.lowlandSkyFillColor, highland: this.highlandSkyFillColor },
+    skyGround: { lowland: this.lowlandGroundFillColor, highland: this.highlandGroundFillColor },
+    fog: { lowland: this.lowlandFogColor, highland: this.highlandFogColor },
+    background: { lowland: this.lowlandBackground, highland: this.highlandBackground },
+  };
   private readonly ambientLight = new AmbientLight(grasslandsArt.scene.ambient, 1.06);
   private readonly skyFill = new HemisphereLight(grasslandsArt.scene.skyFill, grasslandsArt.scene.skyGround, 1.24);
   private readonly skyBounce = new DirectionalLight(grasslandsArt.scene.skyBounce, 0.42);
@@ -1003,6 +912,9 @@ export class WorldRenderer {
   private readonly grasslandImmersion = buildGrasslandImmersionSystem();
   private readonly mountainAtmosphere = new Group();
   private readonly valleyMist = new Group();
+  private readonly ambientMotes: AmbientMoteSystem = buildAmbientMotes();
+  private readonly ocean: OceanSystem = buildOceanSystem();
+  private readonly _moteWindScratch = new Vector3();
   private readonly shadowVolumes = new Group();
   private readonly landmarkTrees = new Group();
   private readonly mountainSilhouettes = new Group();
@@ -1077,8 +989,7 @@ export class WorldRenderer {
     scene.add(this.ambientLight, this.skyFill, this.skyBounce);
 
     this.sun.castShadow = false;
-    this.sun.target.position.set(42, 10, 78);
-    this.sun.position.set(-106, 244, 353);
+    applySunRig(this.sun);
     scene.add(this.sun.target);
     scene.add(this.sun);
     this.meadowGlow.color.set(grasslandsArt.scene.meadowGlowRuntime);
@@ -1092,6 +1003,7 @@ export class WorldRenderer {
 
     scene.add(this.skyDome);
     scene.add(this.skySun);
+    scene.add(this.ocean.mesh);
     scene.add(this.terrain);
     scene.add(this.terrainFormStrokes);
     scene.add(this.openingNestVista);
@@ -1112,6 +1024,7 @@ export class WorldRenderer {
     scene.add(this.grasslandImmersion.group);
     scene.add(this.mountainAtmosphere);
     scene.add(this.valleyMist);
+    scene.add(this.ambientMotes.group);
     scene.add(this.landmarkTrees);
     scene.add(this.shadowVolumes);
     scene.add(this.shrine);
@@ -1604,6 +1517,8 @@ export class WorldRenderer {
       this.updateWind(frame, elapsed, dt);
       this.updateClouds(elapsed);
       this.updateValleyMist(elapsed);
+      this.updateAmbientMotes(frame, elapsed, dt, viewCamera);
+      this.ocean.update(elapsed, this.sun, viewCamera);
     }
     updateGrasslandImmersionSystem(this.grasslandImmersion, elapsed, mapLookdown);
     this.updateWaterInteractions(frame, elapsed, mapLookdown);
@@ -1622,6 +1537,8 @@ export class WorldRenderer {
     this.mountainSilhouettes.visible = !mapLookdown;
     this.mountainAtmosphere.visible = !mapLookdown;
     this.valleyMist.visible = !mapLookdown;
+    this.ambientMotes.setVisible(!mapLookdown);
+    this.ocean.setVisible(!mapLookdown);
     this.shadowVolumes.visible = !mapLookdown;
     this.terrainFormStrokes.visible = !mapLookdown;
     this.processDeferredWorldSlice();
@@ -1842,22 +1759,30 @@ export class WorldRenderer {
     const cinematicLift = MathUtils.clamp(this.environmentPulse + movementWake, 0, 0.42);
     const breath = Math.sin(elapsed * 0.34 + this.elevationMood * 1.8) * 0.5 + 0.5;
 
-    const background = this.scene.background;
-    if (background instanceof Color) {
-      background.copy(this.lowlandBackground).lerp(this.highlandBackground, this.elevationMood);
-    }
-
-    this.gameplayFog.color.copy(this.lowlandFogColor).lerp(this.highlandFogColor, this.elevationMood);
-    this.gameplayFog.density = MathUtils.lerp(0.00048, 0.00068, this.elevationMood) - cinematicLift * 0.000035;
-    this.sun.color.copy(this.lowlandSunColor).lerp(this.highlandSunColor, this.elevationMood);
-    this.sun.intensity = MathUtils.lerp(3.28, 3.02, this.elevationMood) + cinematicLift * 0.16 + breath * 0.018;
-    this.ambientLight.intensity = MathUtils.lerp(1.08, 0.98, this.elevationMood) + cinematicLift * 0.045;
-    this.skyFill.color.copy(this.lowlandSkyFillColor).lerp(this.highlandSkyFillColor, this.elevationMood);
-    this.skyFill.groundColor.copy(this.lowlandGroundFillColor).lerp(this.highlandGroundFillColor, this.elevationMood);
-    this.skyFill.intensity = MathUtils.lerp(1.26, 1.12, this.elevationMood) + cinematicLift * 0.06;
-    this.skyBounce.intensity = MathUtils.lerp(0.56, 0.5, this.elevationMood) + cinematicLift * 0.05;
-    this.meadowGlow.intensity = MathUtils.lerp(0.72, 0.34, this.elevationMood) + cinematicLift * 0.22;
-    this.alpineGlow.intensity = MathUtils.lerp(0.58, 0.9, this.elevationMood) + cinematicLift * 0.16;
+    applySceneLightingColors(
+      {
+        sun: this.sun,
+        hemi: this.skyFill,
+        fog: this.gameplayFog,
+        background: this.scene.background instanceof Color ? this.scene.background : null,
+      },
+      this.sceneColorPairs,
+      this.elevationMood,
+    );
+    applySceneLightingMood(
+      {
+        sun: this.sun,
+        ambient: this.ambientLight,
+        hemi: this.skyFill,
+        bounce: this.skyBounce,
+        meadowGlow: this.meadowGlow,
+        alpineGlow: this.alpineGlow,
+        fog: this.gameplayFog,
+      },
+      this.elevationMood,
+      cinematicLift,
+      breath,
+    );
     this.environmentPulse = MathUtils.damp(this.environmentPulse, 0, 2.35, dt);
     syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera, elapsed);
     syncStylizedSkySun(this.skySun, this.sun, viewCamera, this.elevationMood);
@@ -1948,6 +1873,24 @@ export class WorldRenderer {
       material.opacity = ((patch.userData.baseOpacity as number | undefined) ?? 0.12) *
         (0.82 + Math.sin(elapsed * 0.18 + index) * 0.18);
     });
+  }
+
+  private updateAmbientMotes(frame: FrameState, elapsed: number, dt: number, camera: Camera) {
+    const px = frame.player.position.x;
+    const pz = frame.player.position.z;
+    const ph = sampleTerrainHeight(px, pz);
+    const biome = sampleBiomeZone(px, pz, ph);
+    const wind = sampleWindField(px, pz, ph);
+    this._moteWindScratch.set(wind.direction.x * wind.strength, 0, wind.direction.y * wind.strength);
+    this.ambientMotes.update(
+      elapsed,
+      dt,
+      frame.player.position,
+      camera,
+      biome,
+      this._moteWindScratch,
+      frame.player.velocity,
+    );
   }
 
   private updateWater(elapsed: number, mapLookdown: boolean) {

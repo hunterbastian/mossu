@@ -46,6 +46,8 @@ const RETRO_TEXTURE_QUANTIZE_STRENGTH = 0.035;
 const OPENING_SEQUENCE_SECONDS = 5.4;
 const OPENING_SEQUENCE_SKIP_AFTER_SECONDS = 1.05;
 const IDLE_CAMERA_ORBIT_DELAY_SECONDS = 6;
+const POST_PROCESSING_RESUME_DELAY_SECONDS = 0.34;
+const SAFE_RENDER_CLEAR_COLOR = "#dff7ff";
 const PERF_HUD_SAMPLE_LIMIT = 240;
 const PERF_HUD_UPDATE_MS = 250;
 const PERF_CAPTURE_FLASH_MS = 2200;
@@ -53,6 +55,7 @@ const PERF_CAPTURE_FLASH_MS = 2200;
 type RequestedRendererBackend = "webgl" | "webgpu" | "auto";
 type ActiveRendererBackend = "webgl" | "webgpu" | "webgpu-webgl2";
 type GameRenderer = WebGLRenderer | ThreeWebGpuRenderer;
+type RenderPath = "direct" | "composer";
 
 type DebugSaveStatePayload = {
   player?: {
@@ -182,6 +185,13 @@ async function createRendererBundle(params: URLSearchParams): Promise<RendererBu
 
 function isWebGlRenderer(renderer: GameRenderer): renderer is WebGLRenderer {
   return renderer instanceof WebGLRenderer;
+}
+
+function setSafeRendererClearColor(renderer: GameRenderer) {
+  const maybeClearable = renderer as GameRenderer & {
+    setClearColor?: (color: string, alpha?: number) => void;
+  };
+  maybeClearable.setClearColor?.(SAFE_RENDER_CLEAR_COLOR, 1);
 }
 
 function formatPerfNumber(value: number) {
@@ -321,6 +331,11 @@ export class GameApp {
   private mapDragX = 0;
   private mapDragY = 0;
   private postProcessingInitStarted = false;
+  private postProcessingSuppressedUntil = 0;
+  private activeRenderPath: RenderPath = "direct";
+  private lastLoggedRenderPath: RenderPath = "direct";
+  private webGlContextLostCount = 0;
+  private webGlContextRestoredCount = 0;
   private disposed = false;
 
   private raf = 0;
@@ -356,6 +371,7 @@ export class GameApp {
     this.webGpuAvailable = rendererBundle.webGpuAvailable;
     this.rendererFallbackReason = rendererBundle.fallbackReason;
     this.renderer.setPixelRatio(this.activePixelRatio);
+    setSafeRendererClearColor(this.renderer);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
@@ -401,6 +417,8 @@ export class GameApp {
     window.addEventListener("pointerup", this.handleMapPointerUp);
     window.addEventListener("pointercancel", this.handleMapPointerUp);
     document.addEventListener("pointerlockchange", this.handlePointerLockChange);
+    this.renderer.domElement.addEventListener("webglcontextlost", this.handleWebGlContextLost);
+    this.renderer.domElement.addEventListener("webglcontextrestored", this.handleWebGlContextRestored);
     this.renderer.domElement.addEventListener("pointerdown", this.handleMapPointerDown);
     this.container.addEventListener("pointerdown", this.handleUiPointerDown, true);
     this.container.addEventListener("click", this.handleUiCommandClick);
@@ -418,6 +436,7 @@ export class GameApp {
     }
 
     this.schedulePostProcessingInit();
+    this.prewarmShaders();
     const loop = () => {
       const rawDt = Math.min(0.1, this.clock.getDelta());
       const dt = Math.min(0.033, rawDt);
@@ -441,6 +460,8 @@ export class GameApp {
     window.removeEventListener("pointerup", this.handleMapPointerUp);
     window.removeEventListener("pointercancel", this.handleMapPointerUp);
     document.removeEventListener("pointerlockchange", this.handlePointerLockChange);
+    this.renderer.domElement.removeEventListener("webglcontextlost", this.handleWebGlContextLost);
+    this.renderer.domElement.removeEventListener("webglcontextrestored", this.handleWebGlContextRestored);
     this.renderer.domElement.removeEventListener("pointerdown", this.handleMapPointerDown);
     this.container.removeEventListener("pointerdown", this.handleUiPointerDown, true);
     this.container.removeEventListener("click", this.handleUiCommandClick);
@@ -460,6 +481,17 @@ export class GameApp {
     this.titleScreen.remove();
     this.openingSequenceOverlay.remove();
     this.renderer.dispose();
+  }
+
+  private prewarmShaders() {
+    if (!isWebGlRenderer(this.renderer)) {
+      return;
+    }
+    try {
+      this.renderer.compile(this.scene, this.followCamera.camera);
+    } catch {
+      // Compile is best-effort: a missing material or context loss shouldn't block start.
+    }
   }
 
   private schedulePostProcessingInit() {
@@ -523,6 +555,8 @@ export class GameApp {
     this.composer = composer;
     this.bloomPass = bloomPass;
     this.retroTexturePass = retroTexturePass;
+    this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
+    this.logRenderPathEvent("postprocessing-ready");
   }
 
   advanceTime(ms: number) {
@@ -928,6 +962,12 @@ export class GameApp {
 
   private renderScene() {
     const postProcessingEnabled = this.shouldUsePostProcessing();
+    const renderPath: RenderPath = postProcessingEnabled && this.composer ? "composer" : "direct";
+    this.activeRenderPath = renderPath;
+    if (renderPath !== this.lastLoggedRenderPath) {
+      this.lastLoggedRenderPath = renderPath;
+      this.logRenderPathEvent(`render-path-${renderPath}`);
+    }
     if (this.bloomPass) {
       this.bloomPass.enabled = postProcessingEnabled;
     }
@@ -956,9 +996,16 @@ export class GameApp {
   }
 
   private shouldUsePostProcessing() {
+    const overlayBlocksPostProcessing =
+      this.titleScreenOpen ||
+      this.openingSequenceActive ||
+      this.pauseMenuOpen ||
+      this.characterScreenOpen ||
+      this.viewMode === "map_lookdown";
     return (
       this.composer !== null &&
-      this.viewMode !== "map_lookdown" &&
+      !overlayBlocksPostProcessing &&
+      this.elapsed >= this.postProcessingSuppressedUntil &&
       this.activePixelRatio >= BLOOM_MIN_PIXEL_RATIO
     );
   }
@@ -1094,8 +1141,13 @@ export class GameApp {
       minPixelRatio: Number(this.minPixelRatio.toFixed(2)),
       bloomEnabled: this.shouldUseBloom(),
       retroTextureEnabled: this.retroTexturePass !== null && this.shouldUsePostProcessing(),
+      renderPath: this.activeRenderPath,
+      postProcessingReady: this.composer !== null,
+      postProcessingSuppressedMs: Math.max(0, Math.round((this.postProcessingSuppressedUntil - this.elapsed) * 1000)),
       waterDepthDebug: this.waterDepthDebugEnabled,
       underwaterIntensity: Number(this.underwaterEffect.getIntensity().toFixed(3)),
+      webGlContextLostCount: this.webGlContextLostCount,
+      webGlContextRestoredCount: this.webGlContextRestoredCount,
       qualityLow: this.qualityLow,
       requestedBackend: this.requestedRendererBackend,
       activeBackend: this.activeRendererBackend,
@@ -1141,7 +1193,7 @@ export class GameApp {
       this.perfDebugPanel.textContent = [
         "Mossu perf",
         `${perf.fps}fps  avg ${perf.frameMs}ms  p95 ${perf.rollingP95FrameMs}ms  last ${perf.latestFrameMs}ms`,
-        `pixel ${perf.pixelRatio}  bloom ${perf.bloomEnabled ? "on" : "off"}  texture ${perf.retroTextureEnabled ? "on" : "off"}  water debug ${perf.waterDepthDebug ? "on" : "off"}  ${perf.activeBackend}`,
+        `pixel ${perf.pixelRatio}  ${perf.renderPath}  bloom ${perf.bloomEnabled ? "on" : "off"}  texture ${perf.retroTextureEnabled ? "on" : "off"}  water debug ${perf.waterDepthDebug ? "on" : "off"}  ${perf.activeBackend}`,
         `draw ${formatPerfNumber(perf.renderer.calls)} calls  ${formatPerfNumber(perf.renderer.triangles)} tris`,
         `grass ${formatPerfNumber(perf.world.grassInstances)} inst  lod ${perf.world.grassLodVisitedCells}/${perf.world.grassLodCells} cells`,
         `water ${perf.world.waterSurfaces} surfaces  shaders ${perf.world.animatedShaderMeshes}`,
@@ -1152,8 +1204,9 @@ export class GameApp {
 
     this.perfDebugPanel.textContent = [
       `perf ${perf.fps}fps  avg ${perf.frameMs}ms  p95 ${perf.rollingP95FrameMs}ms  raw ${perf.latestFrameMs}ms`,
-      `quality avg ${perf.qualitySampleFrameMs}ms  pixelRatio ${perf.pixelRatio} (${perf.minPixelRatio}-${perf.maxPixelRatio})  bloom ${perf.bloomEnabled ? "on" : "off"}  texture ${perf.retroTextureEnabled ? "on" : "off"}  waterDebug ${perf.waterDepthDebug ? "on" : "off"}  lowQuality ${this.qualityLow ? "yes" : "no"}  mapZoom ${perf.mapZoom.toFixed(2)}`,
+      `quality avg ${perf.qualitySampleFrameMs}ms  pixelRatio ${perf.pixelRatio} (${perf.minPixelRatio}-${perf.maxPixelRatio})  path ${perf.renderPath}  post ${perf.postProcessingReady ? "ready" : "pending"} ${perf.postProcessingSuppressedMs}ms  bloom ${perf.bloomEnabled ? "on" : "off"}  texture ${perf.retroTextureEnabled ? "on" : "off"}  waterDebug ${perf.waterDepthDebug ? "on" : "off"}  lowQuality ${this.qualityLow ? "yes" : "no"}  mapZoom ${perf.mapZoom.toFixed(2)}`,
       `backend ${perf.activeBackend}  requested ${perf.requestedBackend}  webgpu ${perf.webGpuAvailable ? "available" : "unavailable"}${perf.rendererFallbackReason ? `  fallback ${perf.rendererFallbackReason}` : ""}`,
+      `context lost ${perf.webGlContextLostCount}  restored ${perf.webGlContextRestoredCount}`,
       `renderer calls ${perf.renderer.calls}  tris ${perf.renderer.triangles}  lines ${perf.renderer.lines}  points ${perf.renderer.points}`,
       `memory geometries ${perf.memory.geometries}  textures ${perf.memory.textures}`,
       `terrain ${perf.world.terrainVertices}v / ${perf.world.terrainTriangles}t`,
@@ -1391,6 +1444,8 @@ export class GameApp {
   private closePauseMenu() {
     this.pauseMenuOpen = false;
     this.syncHud();
+    this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
+    this.focusGameplaySurface();
   }
 
   private openMap() {
@@ -1406,6 +1461,8 @@ export class GameApp {
     if (this.viewMode !== "third_person") {
       this.setViewMode("third_person");
       this.followCamera.kickCinematic({ polar: 0.012, distance: 1.1, shoulder: -0.08 });
+      this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
+      this.focusGameplaySurface();
     }
   }
 
@@ -1497,16 +1554,16 @@ export class GameApp {
     overlay.setAttribute("aria-hidden", "true");
     overlay.innerHTML = `
       <div class="opening-sequence__panel">
-        <p class="opening-sequence__kicker">Opening Route</p>
-        <strong>Mossu wakes by Burrow Hollow</strong>
-        <span>grass bends around the lake path; the first Karu are close enough to hear</span>
+        <p class="opening-sequence__kicker">Morning Trail</p>
+        <strong>Burrow Hollow opens to the water</strong>
+        <span>the grass wakes around Mossu; a first Karu pauses near the lake path</span>
         <div class="opening-sequence__beats" aria-hidden="true">
           <i>meadow</i>
           <i>water</i>
           <i>Karu</i>
         </div>
       </div>
-      <p class="opening-sequence__skip">Press any move key to begin</p>
+      <p class="opening-sequence__skip">Move to take over</p>
     `;
     return overlay;
   }
@@ -1529,6 +1586,7 @@ export class GameApp {
     this.openingSequenceOverlay.classList.add("opening-sequence--visible");
     this.openingSequenceOverlay.setAttribute("aria-hidden", "false");
     this.followCamera.setOpeningSequenceProgress(0);
+    this.suppressPostProcessing(OPENING_SEQUENCE_SECONDS + POST_PROCESSING_RESUME_DELAY_SECONDS);
     this.renderer.domElement.tabIndex = -1;
     this.syncHud();
     this.focusGameplaySurface();
@@ -1576,9 +1634,46 @@ export class GameApp {
     this.followCamera.setOpeningSequenceProgress(null);
     this.openingSequenceOverlay.classList.remove("opening-sequence--visible");
     this.openingSequenceOverlay.setAttribute("aria-hidden", "true");
+    this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
     this.syncHud();
     this.focusGameplaySurface();
   }
+
+  private suppressPostProcessing(seconds: number) {
+    this.postProcessingSuppressedUntil = Math.max(this.postProcessingSuppressedUntil, this.elapsed + seconds);
+  }
+
+  private logRenderPathEvent(event: string) {
+    if (!this.perfDebugEnabled && !this.qaDebugEnabled) {
+      return;
+    }
+    console.info("Mossu render path", {
+      event,
+      elapsed: Number(this.elapsed.toFixed(3)),
+      path: this.activeRenderPath,
+      title: this.titleScreenOpen,
+      opening: this.openingSequenceActive,
+      pause: this.pauseMenuOpen,
+      character: this.characterScreenOpen,
+      viewMode: this.viewMode,
+      postReady: this.composer !== null,
+      suppressedMs: Math.max(0, Math.round((this.postProcessingSuppressedUntil - this.elapsed) * 1000)),
+      pixelRatio: Number(this.activePixelRatio.toFixed(2)),
+      contextLost: this.webGlContextLostCount,
+    });
+  }
+
+  private handleWebGlContextLost = (event: Event) => {
+    this.webGlContextLostCount += 1;
+    event.preventDefault();
+    this.logRenderPathEvent("webgl-context-lost");
+  };
+
+  private handleWebGlContextRestored = () => {
+    this.webGlContextRestoredCount += 1;
+    this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
+    this.logRenderPathEvent("webgl-context-restored");
+  };
 
   private handleTitleKeyDown = (event: KeyboardEvent) => {
     if (!this.titleScreenOpen) {

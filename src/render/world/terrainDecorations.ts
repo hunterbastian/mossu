@@ -65,6 +65,12 @@ interface InstancedTreePlacement {
   z: number;
   y: number;
   scale: number;
+  /**
+   * Y-only scale multiplier on top of `scale`. Most trees are 1.0; a fraction
+   * become "old growth pillars" at 1.2-1.45 to break the canopy ceiling and
+   * give the spec's tall connected forest read.
+   */
+  verticalLift: number;
   yaw: number;
 }
 
@@ -379,34 +385,37 @@ function sampleInstancedTreeDensity(kind: InstancedForestKind, x: number, z: num
 
   if (kind === "round") {
     // alpine gets a low crossfade density that tapers with altitude so round trees thin out gracefully
-    const alpineFade = zone === "alpine" ? MathUtils.clamp(1 - MathUtils.smoothstep(y, 84, 118), 0, 1) * 0.16 : 0;
+    const alpineFade = zone === "alpine" ? MathUtils.clamp(1 - MathUtils.smoothstep(y, 84, 118), 0, 1) * 0.18 : 0;
     const biomeDensity =
-      zone === "plains" ? 0.13 :
-      zone === "hills" ? 0.3 :
-      zone === "foothills" ? 0.28 :
+      zone === "plains" ? 0.16 :
+      zone === "hills" ? 0.42 :
+      zone === "foothills" ? 0.5 :
       alpineFade;
     return (biomeDensity + edgeBoost) * waterFade * forestEnvelope * clumpGate * clearingFade * (1 - habitat.meadow * 0.5) * (1 - routeReadability * 0.86);
   }
 
   // pines get a sparse plains/hills fringe density so the lowland edge crossfades rather than hard-cuts
-  const lowlandPineFade = (zone === "plains" || zone === "hills") ? MathUtils.clamp(firApproach * 0.16, 0, 0.1) : 0;
+  const lowlandPineFade = (zone === "plains" || zone === "hills") ? MathUtils.clamp(firApproach * 0.18, 0, 0.12) : 0;
   const biomeDensity =
-    zone === "hills" ? 0.14 :
-    zone === "foothills" ? 0.5 :
-    zone === "alpine" ? 0.68 :
-    zone === "ridge" ? 0.5 :
+    zone === "hills" ? 0.18 :
+    zone === "foothills" ? 0.66 :
+    zone === "alpine" ? 0.78 :
+    zone === "ridge" ? 0.58 :
     lowlandPineFade;
   return (biomeDensity + edgeBoost) * waterFade * MathUtils.clamp(forestEnvelope + firApproach * 0.34, 0, 1) * clumpGate * clearingFade * (1 - habitat.meadow * 0.42) * (1 - routeReadability * 0.82);
 }
 
 function buildInstancedTreePlacements(kind: InstancedForestKind) {
   const placements: InstancedTreePlacement[] = [];
+  // Poisson radius tightened to match the post-TREE_SCALE_LOCK crown size — at
+  // the previous 17m/15.5m, 4× crowns barely touched. ~12m gives the spec's
+  // overlapping connected canopy without crowns clipping into each other.
   const candidates = samplePoissonDisk(
     FOREST_MIN_X,
     FOREST_MAX_X,
     FOREST_MIN_Z,
     FOREST_MAX_Z,
-    kind === "round" ? 17 : 15.5,
+    kind === "round" ? 12 : 10.5,
     kind === "round" ? 184031 : 92713,
   );
 
@@ -428,16 +437,35 @@ function buildInstancedTreePlacements(kind: InstancedForestKind) {
         : 0.86 + forestHash(x, z, 61) * 0.48;
     const altitudeScale = zone === "ridge" || zone === "alpine" ? 1.08 : zone === "foothills" ? 1 : 0.92;
     const edgeLift = 1 + sampleForestComposition(x, z, y).edge * 0.1;
+
+    // Vertical lift: ~30% of trees become old-growth pillars (1.18-1.42x Y),
+    // the rest stay uniform. Bias toward pillars in foothills/forest where the
+    // spec wants the connected-canopy ceiling broken by occasional towering
+    // older trees. Pines lift more dramatically than rounded broadleaf since
+    // their conical silhouette reads as "tallest in the stand" naturally.
+    const pillarHash = forestHash(x, z, kind === "round" ? 113 : 127);
+    const pillarChance =
+      zone === "foothills" || zone === "alpine" || zone === "ridge" ? 0.34 :
+      zone === "hills" ? 0.22 :
+      0.12;
+    const pillarStrength = kind === "pine" ? 1.42 : 1.28;
+    const verticalLift = pillarHash < pillarChance
+      ? 1.0 + (pillarStrength - 1.0) * (0.6 + forestHash(x, z, 131) * 0.4)
+      : 1.0;
+
     placements.push({
       x,
       z,
       y,
       scale: scaleBase * altitudeScale * edgeLift,
+      verticalLift,
       yaw: forestHash(x, z, 71 + index * 0.01) * Math.PI * 2,
     });
   });
 
-  return placements.slice(0, kind === "round" ? 82 : 112);
+  // Caps raised to absorb the denser Poisson sampling — without this the slice
+  // would chop the new candidates and we'd see no canopy difference.
+  return placements.slice(0, kind === "round" ? 220 : 320);
 }
 
 function mergeTreeGeometry(parts: Array<{ geometry: BufferGeometry; color: string; windWeight: number }>) {
@@ -740,7 +768,8 @@ function applyTreeInstances(mesh: InstancedMesh, placements: InstancedTreePlacem
   placements.forEach((placement, index) => {
     dummy.position.set(placement.x, placement.y, placement.z);
     dummy.rotation.set(0, placement.yaw, 0);
-    dummy.scale.setScalar(placement.scale * scaleMultiplier);
+    const xz = placement.scale * scaleMultiplier;
+    dummy.scale.set(xz, xz * placement.verticalLift, xz);
     dummy.updateMatrix();
     mesh.setMatrixAt(index, dummy.matrix);
   });

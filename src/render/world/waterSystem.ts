@@ -860,10 +860,10 @@ function createWebGLWaterController(
   });
   const volumeGeometry = createWaterVolumeGeometry(geometry);
   const volumeOpacity =
-    profile.key === "stillPool" ? 0.008 :
-    profile.key === "waterfallOutflow" ? 0.004 :
-    profile.key === "alpineRunoff" || profile.key === "foothillCreek" ? 0.006 :
-    0.007;
+    profile.key === "stillPool" ? 0.024 :
+    profile.key === "waterfallOutflow" ? 0.018 :
+    profile.key === "alpineRunoff" || profile.key === "foothillCreek" ? 0.022 :
+    0.024;
   const volumeMaterial = new MeshBasicMaterial({
     color: deepColor.clone().lerp(shallowColor, profile.key === "stillPool" ? 0.42 : 0.34),
     transparent: true,
@@ -1340,10 +1340,10 @@ function createWebGLWaterController(
 
         float waterFbm(vec2 p) {
           float value = 0.0;
-          float amplitude = 0.5;
-          for (int i = 0; i < 4; i++) {
+          float amplitude = 0.55;
+          for (int i = 0; i < 3; i++) {
             value += waterNoise(p) * amplitude;
-            p = p * 2.02 + vec2(17.3, 9.1);
+            p = p * 2.04 + vec2(17.3, 9.1);
             amplitude *= 0.5;
           }
           return value;
@@ -1392,7 +1392,7 @@ function createWebGLWaterController(
         float sparkleNoise = waterFbm(flowUv * 4.8 + vec2(uTime * 0.48 * uFlowDirection, uTime * 0.16));
         vec2 bedUv = vWaterWorldPosition.xz * vec2(0.048, 0.044) + vec2(flowWarp * 0.38, eddyNoise * 0.26);
         float bedNoise = waterFbm(bedUv + vec2(13.4, -7.8));
-        float pebbleNoise = waterFbm(bedUv * 2.2 + vec2(-4.6, 9.3));
+        float pebbleNoise = fract(bedNoise * 5.7);
         float broadFlow = sin(vWaterFlowT * uBaseFrequency - uTime * uFlowSpeed * 1.5 * uFlowDirection + vWaterWorldPosition.x * 0.022 + vWaterWorldPosition.z * 0.015 + flowWarp * 3.0 + flowCurl * 2.6) * 0.5 + 0.5;
         float detailFlow = cos(vWaterFlowT * uDetailFrequency - uTime * uFlowSpeed * 2.6 * uFlowDirection + vWaterUv.x * 16.0 + vWaterWorldPosition.z * 0.03 + eddyNoise * 2.2 + flowCurl * 1.5) * 0.5 + 0.5;
         float currentBands = sin(flowUv.x * 6.5 - uTime * uFlowSpeed * 1.55 * uFlowDirection + flowWarp * 4.2 + flowUv.y * 2.4 + flowCurl * 2.1) * 0.5 + 0.5;
@@ -1439,7 +1439,9 @@ function createWebGLWaterController(
         shorelineMilkMask = min(shorelineMilkMask, 0.2);
         waterTint = mix(waterTint, uShorelineMilkColor, shorelineMilkMask);
         vec3 bedTint = mix(uWaterShallow, uWaterDeep, channelDepth * 0.5 + bedNoise * 0.08 + pebbleNoise * 0.04);
-        float bedVisibility = 0.0;
+        bedTint = mix(bedTint, uBedColor, (1.0 - channelDepth) * 0.55);
+        bedTint = mix(bedTint, uSedimentColor, bankMask * 0.3);
+        float bedVisibility = (1.0 - channelDepth) * 0.34 * (1.0 - bankMask * 0.45);
         float causticPattern = sin(bedUv.x * 16.0 + currentBands * 2.8 - uTime * 1.6 * uFlowDirection)
           * cos(bedUv.y * 18.0 - detailFlow * 3.1 + uTime * 1.2);
         causticPattern = causticPattern * 0.5 + 0.5;

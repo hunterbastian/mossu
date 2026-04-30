@@ -61,15 +61,19 @@
         z-index: 1;
         min-width: min(28rem, calc(100vw - 2rem));
         padding: clamp(1.25rem, 4vw, 2.2rem) clamp(1.25rem, 5vw, 2.8rem);
-        border: 3px solid rgba(125, 86, 36, 0.86);
-        border-radius: 1.2rem;
+        border: 1px solid rgba(255, 255, 255, 0.72);
+        border-radius: 1.6rem;
         background:
-          linear-gradient(180deg, rgba(255, 251, 222, 0.94), rgba(239, 210, 138, 0.88)),
-          rgba(255, 237, 176, 0.92);
+          linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.16) 46%, rgba(178, 234, 223, 0.34) 100%),
+          linear-gradient(135deg, rgba(143, 216, 219, 0.42), rgba(196, 234, 153, 0.38));
+        backdrop-filter: blur(28px) saturate(1.4);
+        -webkit-backdrop-filter: blur(28px) saturate(1.4);
         box-shadow:
-          inset 0 0 0 2px rgba(255, 246, 198, 0.9),
-          0 0.5rem 0 rgba(116, 78, 33, 0.38),
-          0 1.6rem 3rem rgba(55, 75, 42, 0.2);
+          inset 0 1px 0 rgba(255, 255, 255, 0.9),
+          inset 0 -1px 0 rgba(255, 255, 255, 0.22),
+          0 0 0 1px rgba(255, 255, 255, 0.12),
+          0 24px 60px -16px rgba(54, 110, 130, 0.42),
+          0 6px 18px -6px rgba(86, 156, 162, 0.28);
       }
 
       .instant-title strong {
@@ -108,27 +112,35 @@
       .instant-title__mark span {
         position: absolute;
         bottom: 0;
-        width: 1.18rem;
-        height: 1.18rem;
+        width: 1.55rem;
+        height: 1.55rem;
+        border: 1px solid rgba(255, 255, 255, 0.85);
         border-radius: 999px;
-        background: #78b56d;
+        background:
+          radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.05) 28%, transparent 42%),
+          linear-gradient(150deg, rgba(180, 240, 220, 0.85), rgba(122, 200, 180, 0.7) 60%, rgba(82, 160, 158, 0.6));
         box-shadow:
-          inset 0 0.18rem 0 rgba(255, 255, 255, 0.45),
-          0 0.35rem 0 rgba(69, 121, 69, 0.13);
+          inset 0 -2px 4px rgba(40, 100, 110, 0.28),
+          0 0 12px rgba(180, 240, 220, 0.5),
+          0 4px 10px -2px rgba(40, 100, 110, 0.32);
       }
 
       .instant-title__mark span:nth-child(1) {
-        left: 0.35rem;
+        left: 0.15rem;
       }
 
       .instant-title__mark span:nth-child(2) {
-        left: 2rem;
-        background: #f1bd5c;
+        left: 1.85rem;
+        background:
+          radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.06) 30%, transparent 44%),
+          linear-gradient(150deg, rgba(195, 240, 200, 0.85), rgba(120, 200, 175, 0.72) 55%, rgba(70, 158, 152, 0.62));
       }
 
       .instant-title__mark span:nth-child(3) {
-        left: 3.65rem;
-        background: #5bb6b2;
+        left: 3.55rem;
+        background:
+          radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.05) 28%, transparent 42%),
+          linear-gradient(150deg, rgba(220, 250, 195, 0.85), rgba(160, 220, 170, 0.7) 60%, rgba(118, 178, 130, 0.6));
       }
 
       .instant-title span {

@@ -2132,7 +2132,7 @@ export function sampleObjectiveText(progress?: {
   if (!cataloged?.has("start-burrow")) {
     return {
       title: "Wake at Burrow Hollow",
-      body: "Step through the grass, skim the lake edge, and stamp Mossu's first keepsake card before following the river north.",
+      body: "Walk out from the nest, let the grass wake around Mossu, then follow the bright lake edge to the first keepsake card.",
     };
   }
 
