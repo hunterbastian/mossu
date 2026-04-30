@@ -56,6 +56,7 @@ export function respawnPlayerAtStart(player: PlayerState, runtime: PlayerSimulat
   player.floating = false;
   player.grounded = true;
   player.swimming = false;
+  player.waterMode = "onLand";
   player.waterDepth = 0;
   player.waterSurfaceY = 0;
   player.fallingToVoid = false;

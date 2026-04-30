@@ -35,6 +35,10 @@ function parseArgs(argv) {
     softwareGl: process.env.PERF_GUARD_SOFTWARE_GL === "1",
     minAverageFps: undefined,
     maxP95FrameMs: undefined,
+    maxAverageFpsDrop: undefined,
+    maxP95FrameMsIncrease: undefined,
+    maxCheckpointAverageFpsDrop: undefined,
+    maxCheckpointP95FrameMsIncrease: undefined,
     screenshotDir: process.env.PERF_GUARD_SCREENSHOT_DIR ?? defaultScreenshotDir,
     skipScreenshots: process.env.PERF_GUARD_SCREENSHOTS === "0",
   };
@@ -56,6 +60,14 @@ function parseArgs(argv) {
       args.minAverageFps = Number(arg.slice("--min-average-fps=".length));
     } else if (arg.startsWith("--max-p95-frame-ms=")) {
       args.maxP95FrameMs = Number(arg.slice("--max-p95-frame-ms=".length));
+    } else if (arg.startsWith("--max-average-fps-drop=")) {
+      args.maxAverageFpsDrop = Number(arg.slice("--max-average-fps-drop=".length));
+    } else if (arg.startsWith("--max-p95-frame-ms-increase=")) {
+      args.maxP95FrameMsIncrease = Number(arg.slice("--max-p95-frame-ms-increase=".length));
+    } else if (arg.startsWith("--max-checkpoint-average-fps-drop=")) {
+      args.maxCheckpointAverageFpsDrop = Number(arg.slice("--max-checkpoint-average-fps-drop=".length));
+    } else if (arg.startsWith("--max-checkpoint-p95-frame-ms-increase=")) {
+      args.maxCheckpointP95FrameMsIncrease = Number(arg.slice("--max-checkpoint-p95-frame-ms-increase=".length));
     } else if (arg.startsWith("--screenshot-dir=")) {
       args.screenshotDir = path.resolve(arg.slice("--screenshot-dir=".length));
     } else if (arg === "--skip-screenshots") {
@@ -870,6 +882,15 @@ function compareBaseline(current, baseline) {
       contrastDelta: checkpoint.visual?.available && baselineCheckpoint.visual?.available
         ? round(checkpoint.visual.contrast - baselineCheckpoint.visual.contrast, 1)
         : null,
+      averageChromaDelta: checkpoint.visual?.available && baselineCheckpoint.visual?.available
+        ? round(checkpoint.visual.averageChroma - baselineCheckpoint.visual.averageChroma, 1)
+        : null,
+      nonBlankRatioDelta: checkpoint.visual?.available && baselineCheckpoint.visual?.available
+        ? round(checkpoint.visual.nonBlankRatio - baselineCheckpoint.visual.nonBlankRatio, 3)
+        : null,
+      screenshotBytesDelta: Number.isFinite(checkpoint.screenshot?.bytes) && Number.isFinite(baselineCheckpoint.screenshot?.bytes)
+        ? checkpoint.screenshot.bytes - baselineCheckpoint.screenshot.bytes
+        : null,
     };
   });
   return {
@@ -883,6 +904,52 @@ function compareBaseline(current, baseline) {
       (baseline.finalState?.performance?.renderer?.triangles ?? 0),
     checkpoints: checkpointComparison,
   };
+}
+
+function findBaselineFailures(comparison, guardrails, args) {
+  if (!comparison) {
+    return ["baseline comparison unavailable"];
+  }
+
+  const maxAverageFpsDrop = args.maxAverageFpsDrop ?? guardrails.maxAverageFpsDrop;
+  const maxP95FrameMsIncrease = args.maxP95FrameMsIncrease ?? guardrails.maxP95FrameMsIncrease;
+  const routeGuardrails = guardrails.route ?? {};
+  const maxCheckpointAverageFpsDrop = args.maxCheckpointAverageFpsDrop ?? routeGuardrails.maxCheckpointAverageFpsDrop;
+  const maxCheckpointP95FrameMsIncrease =
+    args.maxCheckpointP95FrameMsIncrease ?? routeGuardrails.maxCheckpointP95FrameMsIncrease;
+  const failures = [];
+
+  if (Number.isFinite(maxAverageFpsDrop) && comparison.averageFpsDelta < -maxAverageFpsDrop) {
+    failures.push(`baseline average FPS drop ${Math.abs(comparison.averageFpsDelta)} > ${maxAverageFpsDrop}`);
+  }
+  if (Number.isFinite(maxP95FrameMsIncrease) && comparison.p95FrameMsDelta > maxP95FrameMsIncrease) {
+    failures.push(`baseline p95 frame increase ${comparison.p95FrameMsDelta}ms > ${maxP95FrameMsIncrease}ms`);
+  }
+
+  for (const checkpoint of comparison.checkpoints ?? []) {
+    if (checkpoint.error) {
+      failures.push(`${checkpoint.label} baseline comparison error: ${checkpoint.error}`);
+      continue;
+    }
+    if (
+      Number.isFinite(maxCheckpointAverageFpsDrop) &&
+      checkpoint.averageFpsDelta < -maxCheckpointAverageFpsDrop
+    ) {
+      failures.push(
+        `${checkpoint.label} baseline average FPS drop ${Math.abs(checkpoint.averageFpsDelta)} > ${maxCheckpointAverageFpsDrop}`,
+      );
+    }
+    if (
+      Number.isFinite(maxCheckpointP95FrameMsIncrease) &&
+      checkpoint.p95FrameMsDelta > maxCheckpointP95FrameMsIncrease
+    ) {
+      failures.push(
+        `${checkpoint.label} baseline p95 frame increase ${checkpoint.p95FrameMsDelta}ms > ${maxCheckpointP95FrameMsIncrease}ms`,
+      );
+    }
+  }
+
+  return failures;
 }
 
 async function run() {
@@ -988,11 +1055,14 @@ async function run() {
           path: path.relative(root, args.baseline),
           comparison: compareBaseline(result, baseline),
         };
+        result.baseline.failures = findBaselineFailures(result.baseline.comparison, fixture.guardrails?.baseline ?? {}, args);
+        result.failures.push(...result.baseline.failures);
       } catch (error) {
         result.baseline = {
           path: path.relative(root, args.baseline),
           error: error instanceof Error ? error.message : String(error),
         };
+        result.failures.push(`baseline could not be loaded: ${result.baseline.error}`);
       }
     }
 
@@ -1019,6 +1089,9 @@ async function run() {
       console.log(
         `baseline delta fps ${result.baseline.comparison.averageFpsDelta}, p95 ${result.baseline.comparison.p95FrameMsDelta}ms, calls ${result.baseline.comparison.rendererCallsDelta}, tris ${result.baseline.comparison.trianglesDelta}`,
       );
+      if (result.baseline.failures?.length) {
+        console.log(`baseline regression failures: ${result.baseline.failures.join("; ")}`);
+      }
     }
     console.log(`wrote ${path.relative(root, args.output)}`);
 

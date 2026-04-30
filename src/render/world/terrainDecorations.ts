@@ -1,4 +1,5 @@
 import {
+  AdditiveBlending,
   BoxGeometry,
   BufferGeometry,
   CircleGeometry,
@@ -456,8 +457,8 @@ function makeRoundForestGeometry() {
   const leafBase = "#6ba848";
   const leafLight = "#cde87a";
   const leafMist = "#9dcc88";
-  const leafShade = "#2f5530";
-  const leafDeep = "#1e3a24";
+  const leafShade = "#4f7744";
+  const leafDeep = "#3b623a";
 
   const trunk = new CylinderGeometry(0.3, 0.58, 3.5, 18);
   trunk.translate(0, 1.75, 0);
@@ -553,12 +554,12 @@ function makePineForestGeometry() {
   const trunk = new CylinderGeometry(0.16, 0.3, 4.6, 18);
   trunk.translate(0, 2.3, 0);
   const wood = "#5c4736";
-  const t1 = "#2a4030";
-  const t2 = "#3a5038";
-  const t3 = "#4a6242";
-  const t4 = "#5a7852";
-  const t5 = "#729466";
-  const tTop = "#8fb078";
+  const t1 = "#4f6d49";
+  const t2 = "#5f8052";
+  const t3 = "#71945f";
+  const t4 = "#86ad70";
+  const t5 = "#9cc982";
+  const tTop = "#c0dc9a";
 
   const lower = new ConeGeometry(1.32, 2.1, segs);
   lower.rotateY(0.5);
@@ -587,7 +588,7 @@ function makePineForestGeometry() {
 
   return mergeTreeGeometry([
     { geometry: trunk, color: wood, windWeight: 0 },
-    { geometry: stub, color: makeTint(wood, "#1a1a1a", 0.25), windWeight: 0 },
+    { geometry: stub, color: makeTint(wood, "#7a6448", 0.3), windWeight: 0 },
     { geometry: lower, color: t1, windWeight: 0.78 },
     { geometry: lowMid, color: t2, windWeight: 0.86 },
     { geometry: middle, color: t3, windWeight: 0.92 },
@@ -842,7 +843,7 @@ function makePineTree(scale: number, tone = "#5b7d4d") {
   const group = new Group();
   const segs = 24;
   const wood = new MeshLambertMaterial({ color: "#5c4736" });
-  const stubMat = new MeshLambertMaterial({ color: makeTint("#5c4736", "#1a1a1a", 0.25) });
+  const stubMat = new MeshLambertMaterial({ color: makeTint("#5c4736", "#6f5a43", 0.34) });
   const trunk = markCameraCollider(new Mesh(
     new CylinderGeometry(0.16 * scaledSize, 0.3 * scaledSize, 4.6 * scaledSize, 18),
     wood,
@@ -858,12 +859,12 @@ function makePineTree(scale: number, tone = "#5b7d4d") {
   stub.rotation.z = 0.5;
   group.add(stub);
 
-  const t1 = makeTint(tone, "#1a2818", 0.62);
-  const t2 = makeTint(tone, "#1e3020", 0.5);
-  const t3 = makeTint(tone, "#2a4028", 0.35);
-  const t4 = makeTint(tone, "#4a6a40", 0.18);
-  const t5 = makeTint(tone, "#6a9058", 0.15);
-  const tTop = makeTint(tone, "#8fb078", 0.28);
+  const t1 = makeTint(tone, "#5f8750", 0.3);
+  const t2 = makeTint(tone, "#6e9659", 0.26);
+  const t3 = makeTint(tone, "#7ca965", 0.22);
+  const t4 = makeTint(tone, "#94c978", 0.2);
+  const t5 = makeTint(tone, "#a7da88", 0.18);
+  const tTop = makeTint(tone, "#c0e6a0", 0.24);
   const layers: Array<{ y: number; r: number; h: number; color: string; rot: number; sx?: number; sz?: number }> = [
     { y: 2.4, r: 1.32, h: 2.1, color: t1, rot: 0.5 },
     { y: 3.2, r: 1.1, h: 1.85, color: t2, rot: 1.25, sx: 1.04, sz: 0.96 },
@@ -1645,9 +1646,9 @@ function makeShoreShelfPatch(scale: number, tone: string, opacity: number) {
 function makeCanopyShadowPatch(scale: number, tone: string, opacity: number) {
   const group = new Group();
   const material = new MeshBasicMaterial({
-    color: tone,
+    color: new Color(tone).lerp(new Color("#c7dd98"), 0.88),
     transparent: true,
-    opacity,
+    opacity: opacity * 0.045,
     depthWrite: false,
     side: DoubleSide,
   });
@@ -1780,9 +1781,9 @@ function makeCodexCaveMouth(scale: number) {
   const group = new Group();
   group.name = "codex-cave-mouth";
   const shadowMaterial = new MeshBasicMaterial({
-    color: "#242821",
+    color: "#78856c",
     transparent: true,
-    opacity: 0.86,
+    opacity: 0.22,
     depthWrite: false,
     side: DoubleSide,
   });
@@ -1948,6 +1949,75 @@ function makeWaterfallRibbon(height: number, width: number) {
   return group;
 }
 
+function makeHighlandSprayCloud(scale: number, opacity = 0.18) {
+  const group = new Group();
+  const colors = ["#f7fdff", "#fff6d8", "#e7fbff"];
+  for (let i = 0; i < 7; i += 1) {
+    const radius = scale * (0.14 + (i % 4) * 0.034);
+    const puff = new Mesh(
+      new CircleGeometry(radius, 14),
+      new MeshBasicMaterial({
+        color: colors[i % colors.length],
+        transparent: true,
+        opacity: opacity * (0.32 + (i % 3) * 0.1),
+        blending: AdditiveBlending,
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+    );
+    puff.position.set(
+      Math.sin(i * 1.7) * scale * 0.58,
+      scale * (0.14 + (i % 5) * 0.15),
+      Math.cos(i * 1.1) * scale * 0.14,
+    );
+    puff.rotation.y = (i % 3 - 1) * 0.24;
+    puff.rotation.z = Math.sin(i * 0.9) * 0.16;
+    group.add(puff);
+  }
+  return group;
+}
+
+function makeHighlandFoamPatch(scale: number, opacity = 0.34) {
+  const group = new Group();
+  for (let i = 0; i < 4; i += 1) {
+    const foam = new Mesh(
+      new CircleGeometry(scale * (0.42 - i * 0.045), 20),
+      new MeshBasicMaterial({
+        color: i % 2 === 0 ? futureLakeArt.foam : futureLakeArt.foamCool,
+        transparent: true,
+        opacity: opacity * (0.62 - i * 0.08),
+        blending: AdditiveBlending,
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+    );
+    foam.rotation.x = -Math.PI / 2;
+    foam.scale.z = 0.28 + i * 0.05;
+    foam.position.set(Math.sin(i * 1.4) * scale * 0.22, 0.03 + i * 0.006, Math.cos(i * 1.9) * scale * 0.18);
+    group.add(foam);
+  }
+  return group;
+}
+
+function makeHighlandWetStone(scale: number) {
+  const group = makeRockFormation(scale, "#aeb5aa");
+  const shine = new Mesh(
+    new PlaneGeometry(0.72 * scale, 0.16 * scale, 1, 1),
+    new MeshBasicMaterial({
+      color: "#d7e8dd",
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      side: DoubleSide,
+    }),
+  );
+  shine.rotation.x = -Math.PI / 2;
+  shine.rotation.z = -0.24;
+  shine.position.set(-0.12 * scale, 0.42 * scale, 0.28 * scale);
+  group.add(shine);
+  return group;
+}
+
 function makeMushroom(scale: number, capColor: string) {
   const group = new Group();
   const stem = new Mesh(
@@ -2023,7 +2093,7 @@ export function buildGroundLayer() {
   scenicPockets.forEach((pocket) => {
     const isStartPocket = pocket.id === "start-meadow";
     const isUpperRoutePocket =
-      pocket.id === "mistfall-basin" ||
+      pocket.id === "highland-basin" ||
       pocket.id === "windstep-shelf" ||
       pocket.id === "cloudback-overlook" ||
       pocket.id === "skyward-ledge-rim" ||
@@ -3415,12 +3485,55 @@ export function buildHighlandAccents() {
         }
       }
 
-      if (pocket.id === "mistfall-cascade") {
-        const waterfall = makeWaterfallRibbon(28, 8);
+      if (pocket.id === "highland-cascade") {
+        const waterfall = makeWaterfallRibbon(32, 9.4);
         waterfall.position.set(pocket.position.x + 10, pocket.position.y + 4, pocket.position.z - 2);
         waterfall.rotation.y = -0.18;
         waterfall.rotation.z = 0.08;
         group.add(waterfall);
+        const lowerSpray = makeHighlandSprayCloud(2.6, 0.16);
+        lowerSpray.position.set(pocket.position.x + 7.2, pocket.position.y + 4.2, pocket.position.z + 1.8);
+        lowerSpray.rotation.y = -0.28;
+        group.add(lowerSpray);
+        const upperSpray = makeHighlandSprayCloud(1.45, 0.1);
+        upperSpray.position.set(pocket.position.x + 11.2, pocket.position.y + 20.5, pocket.position.z - 2.4);
+        upperSpray.rotation.y = -0.18;
+        group.add(upperSpray);
+        for (const [xOffset, zOffset, scale, yaw] of [
+          [6.6, 2.6, 3.8, -0.24],
+          [11.2, 5.8, 2.8, 0.34],
+        ] as const) {
+          addHighlandObject(makeHighlandFoamPatch(scale, scale > 3 ? 0.26 : 0.2), pocket.position.x + xOffset, pocket.position.z + zOffset, 0.13, yaw);
+        }
+        for (const [xOffset, zOffset, scale, yaw] of [
+          [-2.8, 7.2, 1.18, -0.36],
+          [13.8, 4.4, 0.92, 0.58],
+          [4.4, -7.2, 0.84, 1.08],
+        ] as const) {
+          addHighlandObject(makeHighlandWetStone(scale), pocket.position.x + xOffset, pocket.position.z + zOffset, 0.02, yaw);
+        }
+        for (const [xOffset, zOffset, scale, yaw] of [
+          [-5.4, 6.4, 0.86, -0.18],
+          [9.4, 8.2, 0.78, 0.42],
+        ] as const) {
+          addHighlandObject(makeAlpineHerbCluster(scale, "#fff1b8"), pocket.position.x + xOffset, pocket.position.z + zOffset, 0.05, yaw);
+        }
+      }
+
+      if (pocket.id === "highland-basin") {
+        for (const [xOffset, zOffset, scale, yaw] of [
+          [-4.2, -1.2, 2.9, -0.12],
+          [3.8, 4.8, 2.35, 0.56],
+        ] as const) {
+          addHighlandObject(makeHighlandFoamPatch(scale, 0.18), pocket.position.x + xOffset, pocket.position.z + zOffset, 0.12, yaw);
+        }
+        for (const [xOffset, zOffset, scale, yaw] of [
+          [-8.4, 3.4, 1.06, -0.64],
+          [7.2, -3.6, 0.94, 0.84],
+        ] as const) {
+          addHighlandObject(makeHighlandWetStone(scale), pocket.position.x + xOffset, pocket.position.z + zOffset, 0.02, yaw);
+        }
+        addHighlandObject(makeHighlandSprayCloud(1.35, 0.08), pocket.position.x - 2.2, pocket.position.z - 3.4, 0.42, -0.18);
       }
 
       if (pocket.id === "fir-gate-entry") {

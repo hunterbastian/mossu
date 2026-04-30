@@ -34,7 +34,9 @@ import {
   STAMINA_ACTION_THRESHOLD,
   SWIM_ACCELERATION,
   SWIM_DECELERATION,
+  SWIM_MIN_DEPTH,
   SWIM_SPEED,
+  SWIM_UNDERWATER_SPEED,
   WALK_SPEED,
 } from "./playerSimulationConstants";
 
@@ -73,6 +75,8 @@ export function createMovementScratch(): MovementScratch {
 const INPUT_RISE_DAMPING = 9.6;
 const INPUT_RELEASE_DAMPING = 13.2;
 const INPUT_DEADZONE = 0.015;
+const WADE_SPEED_MIN_MULTIPLIER = 0.72;
+const WADE_ACCELERATION_MULTIPLIER = 0.82;
 
 export function tickMovementTimers(
   player: PlayerState,
@@ -161,18 +165,23 @@ export function applyMovementPhysics(
   }
   player.rollingBoostActive = runtime.rollingChargeSeconds >= ROLL_BOOST_DELAY;
 
-  const groundSpeed = player.rolling
+  const wadeAmount = player.waterMode === "wading"
+    ? MathUtils.clamp(player.waterDepth / Math.max(0.001, SWIM_MIN_DEPTH), 0, 1)
+    : 0;
+  const wadeSpeedMultiplier = MathUtils.lerp(1, WADE_SPEED_MIN_MULTIPLIER, wadeAmount);
+  const groundSpeed = (player.rolling
     ? ROLL_SPEED * (player.rollingBoostActive ? ROLL_BOOST_MULTIPLIER : 1)
-    : WALK_SPEED;
+    : WALK_SPEED) * wadeSpeedMultiplier;
   const rollSpeedLimit = player.rolling
     ? groundSpeed + terrainSlope * ROLL_SLOPE_SPEED_BONUS
     : groundSpeed;
   const airSpeedLimit = player.rolling ? AIR_SPEED + ROLL_AIR_SPEED_BONUS : AIR_SPEED;
+  const swimSpeed = player.waterMode === "underwater" ? SWIM_UNDERWATER_SPEED : SWIM_SPEED;
 
   scratch.planarVelocity.set(player.velocity.x, 0, player.velocity.z);
   scratch.desiredPlanarVelocity
     .copy(scratch.worldMove)
-    .multiplyScalar(player.swimming ? SWIM_SPEED : player.grounded ? groundSpeed : AIR_SPEED);
+    .multiplyScalar(player.swimming ? swimSpeed : player.grounded ? groundSpeed : AIR_SPEED);
 
   const hasMoveInput = scratch.worldMove.lengthSq() > 0.001;
   let alignment = 1;
@@ -188,8 +197,8 @@ export function applyMovementPhysics(
     ? SWIM_ACCELERATION
     : player.grounded
       ? player.rolling
-        ? alignment < 0 ? ROLL_TURN_ACCELERATION : GROUND_ACCELERATION * ROLL_ACCELERATION_MULTIPLIER
-        : alignment < 0 ? GROUND_TURN_ACCELERATION : GROUND_ACCELERATION
+        ? (alignment < 0 ? ROLL_TURN_ACCELERATION : GROUND_ACCELERATION * ROLL_ACCELERATION_MULTIPLIER) * MathUtils.lerp(1, WADE_ACCELERATION_MULTIPLIER, wadeAmount)
+        : (alignment < 0 ? GROUND_TURN_ACCELERATION : GROUND_ACCELERATION) * MathUtils.lerp(1, WADE_ACCELERATION_MULTIPLIER, wadeAmount)
       : AIR_ACCELERATION;
   const deceleration = player.swimming
     ? SWIM_DECELERATION
@@ -220,7 +229,7 @@ export function applyMovementPhysics(
       Math.min(scratch.planarVelocity.length(), rollSpeedLimit),
     );
   } else if (player.swimming && scratch.planarVelocity.lengthSq() > 0.0001) {
-    scratch.planarVelocity.setLength(Math.min(scratch.planarVelocity.length(), SWIM_SPEED + 2));
+    scratch.planarVelocity.setLength(Math.min(scratch.planarVelocity.length(), swimSpeed + 2));
   } else if (scratch.planarVelocity.lengthSq() > 0.0001) {
     scratch.planarVelocity.setLength(Math.min(scratch.planarVelocity.length(), airSpeedLimit + 2.5));
   }

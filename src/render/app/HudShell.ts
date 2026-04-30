@@ -102,6 +102,11 @@ export class HudShell {
   private readonly characterSummary = document.createElement("p");
   private readonly characterNearby = document.createElement("p");
   private readonly characterStamp = document.createElement("div");
+  private readonly characterProgress = document.createElement("div");
+  private readonly keepsakeProgressFill = document.createElement("span");
+  private readonly goodsProgressFill = document.createElement("span");
+  private readonly keepsakeProgressLabel = document.createElement("strong");
+  private readonly goodsProgressLabel = document.createElement("strong");
   private readonly statsGrid = document.createElement("div");
   private readonly upgradesGrid = document.createElement("div");
   private readonly collectionsList = document.createElement("div");
@@ -529,11 +534,27 @@ export class HudShell {
       (entry) => entry.forageableId === characterData.latestGatheredGoodId,
     );
 
+    const keepsakeRatio = characterData.totals.total <= 0
+      ? 0
+      : characterData.totals.discovered / characterData.totals.total;
+    const goodsRatio = characterData.gatheredTotals.total <= 0
+      ? 0
+      : characterData.gatheredTotals.gathered / characterData.gatheredTotals.total;
+    const totalCollected = characterData.totals.discovered + characterData.gatheredTotals.gathered;
+    const totalCollectibles = characterData.totals.total + characterData.gatheredTotals.total;
+    const totalRatio = totalCollectibles <= 0 ? 0 : totalCollected / totalCollectibles;
+
     this.characterSummary.textContent =
-      characterData.totals.discovered === 0 && characterData.gatheredTotals.gathered === 0
-        ? "Mossu's holo binder lists every keepsake and pouch good on the route. Stamps register when you reach landmarks; trail finds log when you gather."
-        : `Mossu's handbook is still filling in. ${characterData.totals.discovered} of ${characterData.totals.total} keepsake cards have been stamped, and ${characterData.gatheredTotals.gathered} of ${characterData.gatheredTotals.total} pouch goods have been gathered so far.`;
-    this.characterStamp.textContent = `${characterData.totals.discovered}/${characterData.totals.total} cards · ${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total} goods`;
+      totalCollected === 0
+        ? "Mossu's holo binder starts empty, but every landmark and tiny trail find has a proper sleeve waiting for it."
+        : totalCollected === totalCollectibles
+          ? "The binder is full. Every stamped keepsake and pouch good now reads like a finished island set."
+          : `The binder is filling in: ${totalCollected} of ${totalCollectibles} field cards are sleeved, with the next blank spaces still visible on the page.`;
+    this.characterStamp.textContent = `${Math.round(totalRatio * 100)}% sleeved`;
+    this.characterProgress.style.setProperty("--keepsake-progress", keepsakeRatio.toFixed(3));
+    this.characterProgress.style.setProperty("--goods-progress", goodsRatio.toFixed(3));
+    this.keepsakeProgressLabel.textContent = `${characterData.totals.discovered}/${characterData.totals.total} keepsakes`;
+    this.goodsProgressLabel.textContent = `${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total} goods`;
     this.collectionsSectionBadge.textContent = `${characterData.totals.discovered}/${characterData.totals.total}`;
     this.gatheredGoodsSectionBadge.textContent = `${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total}`;
 
@@ -604,6 +625,7 @@ export class HudShell {
           "inventory-holo-card",
           "inventory-holo-card--keepsake",
           `inventory-holo-card--tone-${index % 5}`,
+          entry.discovered ? "inventory-holo-card--owned" : "inventory-holo-card--missing",
           entry.discovered ? "collection-entry--discovered" : "collection-entry--locked",
           entry.landmarkId === highlightedCollectionId ? "collection-entry--highlighted" : "",
         ]
@@ -641,7 +663,7 @@ export class HudShell {
 
         const status = document.createElement("p");
         status.className = "inventory-holo-card__status";
-        status.textContent = entry.discovered ? "Logged" : "Hidden";
+        status.textContent = entry.discovered ? "Sleeved" : "Blank";
 
         header.append(number, status);
 
@@ -656,6 +678,10 @@ export class HudShell {
         zone.className = "collection-entry__zone";
         zone.textContent = this.prettyZone(entry.zone);
 
+        const rarity = document.createElement("p");
+        rarity.className = "inventory-holo-card__rarity";
+        rarity.textContent = entry.discovered ? this.cardSeriesLabel(index, characterData.collections.length) : "unfound";
+
         const title = document.createElement("h3");
         title.className = "collection-entry__title";
         title.textContent = entry.discovered ? entry.keepsakeTitle : "Unfound keepsake";
@@ -666,15 +692,19 @@ export class HudShell {
 
         const meta = document.createElement("div");
         meta.className = "inventory-holo-card__meta";
-        meta.append(zone, landmark);
+        meta.append(zone, rarity, landmark);
 
         const body = document.createElement("p");
         body.className = "collection-entry__body";
         body.textContent = entry.discovered
           ? entry.keepsakeSummary
-          : `A keepsake silhouette remains at ${entry.landmarkTitle}, waiting for Mossu to wander close enough to log it.`;
+          : `A blank sleeve points toward ${entry.landmarkTitle}. Reach the spot to stamp this page.`;
 
-        content.append(header, art, title, meta, body);
+        const stamp = document.createElement("p");
+        stamp.className = "inventory-holo-card__binder-stamp";
+        stamp.textContent = entry.discovered ? "Filed in Mossu's route set" : "Not stamped yet";
+
+        content.append(header, art, title, meta, body, stamp);
         article.append(foil, sheen, content);
         return article;
       }),
@@ -688,6 +718,7 @@ export class HudShell {
           "inventory-holo-card",
           "inventory-holo-card--good",
           `inventory-holo-card--tone-${(index + 2) % 5}`,
+          entry.gathered ? "inventory-holo-card--owned" : "inventory-holo-card--missing",
           entry.gathered ? "gathered-good--collected" : "gathered-good--locked",
           `gathered-good--${entry.kind}`,
         ].join(" ");
@@ -723,7 +754,7 @@ export class HudShell {
 
         const status = document.createElement("p");
         status.className = "inventory-holo-card__status";
-        status.textContent = entry.gathered ? "Gathered" : "Trace";
+        status.textContent = entry.gathered ? "Sleeved" : "Trace";
 
         header.append(number, status);
 
@@ -746,17 +777,25 @@ export class HudShell {
         kind.className = "gathered-good__kind";
         kind.textContent = entry.gathered ? this.formatForageableKind(entry.kind) : "Uncollected";
 
+        const rarity = document.createElement("p");
+        rarity.className = "inventory-holo-card__rarity";
+        rarity.textContent = entry.gathered ? this.cardSeriesLabel(index, characterData.gatheredGoods.length) : "trace";
+
         const meta = document.createElement("div");
         meta.className = "inventory-holo-card__meta";
-        meta.append(zone, kind);
+        meta.append(zone, rarity, kind);
 
         const body = document.createElement("p");
         body.className = "gathered-good__body";
         body.textContent = entry.gathered
           ? entry.summary
-          : "Something small waits here for Mossu to pick up and tuck into the gather pouch.";
+          : "A faint outline waits on this sleeve. Gather the trail good to reveal its full field card.";
 
-        content.append(header, art, title, meta, body);
+        const stamp = document.createElement("p");
+        stamp.className = "inventory-holo-card__binder-stamp";
+        stamp.textContent = entry.gathered ? "Filed in Mossu's pouch set" : "Not gathered yet";
+
+        content.append(header, art, title, meta, body, stamp);
         article.append(foil, sheen, content);
         return article;
       }),
@@ -776,7 +815,7 @@ export class HudShell {
       this.buildMetric("Area", this.statusValues.zone, "area"),
       this.buildMetric("Landmark", this.statusValues.landmark, "landmark"),
       this.buildMetric("Breeze", this.statusValues.wind, "breeze"),
-      this.buildMetric("Cards", this.statusValues.collections, "cards"),
+      this.buildMetric("Log", this.statusValues.collections, "cards"),
     );
 
     const bottom = document.createElement("div");
@@ -859,7 +898,7 @@ export class HudShell {
 
     const eyebrow = document.createElement("p");
     eyebrow.className = "pickup-card__eyebrow";
-    eyebrow.textContent = "Card Logged";
+    eyebrow.textContent = "Field Log";
 
     this.pickupCardTitle.className = "pickup-card__title";
     this.pickupCardKind.className = "pickup-card__kind";
@@ -919,10 +958,10 @@ export class HudShell {
     header.className = "pouch-hud__header";
     const title = document.createElement("p");
     title.className = "pouch-hud__title";
-    title.textContent = "Pouch";
+    title.textContent = "Field Pack";
     const hint = document.createElement("p");
     hint.className = "pouch-hud__hint";
-    hint.textContent = "gathered";
+    hint.textContent = "stored";
     header.append(title, hint);
 
     this.pouchItems.className = "pouch-hud__items";
@@ -1011,11 +1050,16 @@ export class HudShell {
     title.textContent = "Mossu Handbook";
     this.characterSummary.className = "character-screen__summary";
     this.characterStamp.className = "character-screen__stamp";
+    this.characterProgress.className = "character-screen__progress";
+    this.characterProgress.append(
+      this.buildCharacterProgressRow("Keepsakes", "keepsake", this.keepsakeProgressLabel, this.keepsakeProgressFill),
+      this.buildCharacterProgressRow("Pouch", "goods", this.goodsProgressLabel, this.goodsProgressFill),
+    );
     const previewCard = document.createElement("div");
     previewCard.className = "character-screen__preview-card";
     previewCard.append(previewElement);
     this.characterNearby.className = "character-screen__nearby";
-    aside.append(eyebrow, title, this.characterSummary, this.characterStamp, previewCard, this.characterNearby);
+    aside.append(eyebrow, title, this.characterSummary, this.characterStamp, this.characterProgress, previewCard, this.characterNearby);
 
     const content = document.createElement("div");
     content.className = "character-screen__content";
@@ -1090,6 +1134,26 @@ export class HudShell {
     this.setActiveBinderSection(this.activeBinderSection, false);
 
     return tabs;
+  }
+
+  private buildCharacterProgressRow(labelText: string, kind: "keepsake" | "goods", valueNode: HTMLElement, fillNode: HTMLElement) {
+    const row = document.createElement("div");
+    row.className = `character-screen__progress-row character-screen__progress-row--${kind}`;
+
+    const header = document.createElement("div");
+    header.className = "character-screen__progress-header";
+    const label = document.createElement("span");
+    label.textContent = labelText;
+    valueNode.textContent = "0/0";
+    header.append(label, valueNode);
+
+    const track = document.createElement("span");
+    track.className = "character-screen__progress-track";
+    fillNode.className = "character-screen__progress-fill";
+    track.append(fillNode);
+
+    row.append(header, track);
+    return row;
   }
 
   private setActiveBinderSection(sectionId: BinderSectionId, scrollToSection: boolean) {
@@ -1853,6 +1917,11 @@ export class HudShell {
       feather: "Feather",
     };
     return symbols[kind];
+  }
+
+  private cardSeriesLabel(index: number, total: number) {
+    const chapter = total <= 0 ? 1 : Math.floor((index / Math.max(1, total)) * 4) + 1;
+    return `set ${Math.min(4, chapter)}`;
   }
 
   private binderZoneCode(zone: string) {

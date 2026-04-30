@@ -41,7 +41,7 @@ Add query parameters to the dev or built URL (e.g. `http://localhost:5173/?perfD
 
 - **WebGPU** (`three/webgpu`) is optional. Initialization can fail on drivers or policies; the app falls back to **WebGL2** and records a reason in perf/debug output when that happens.
 - **Bloom** is intentionally mild (single `UnrealBloomPass`). On WebGPU builds, postprocessing is not wired through the same composer path today.
-- **Desktop-first performance**: validate grass instancing, water, and draw calls with `perfHud`/`perfDebug` and GPU tools; dynamic resolution adjusts pixel ratio from frame time when not in `quality=low` mode. `npm run perf:guard` remains the repeatable FPS gate; the HUD/capture path is for manual renderer checks beside that script.
+- **Desktop-first performance**: validate grass instancing, water, and draw calls with `perfHud`/`perfDebug` and GPU tools; dynamic resolution adjusts pixel ratio from frame time when not in `quality=low` mode. For visual passes, run `npm run perf:guard:baseline` before the change and `npm run perf:guard:candidate` after it. The automated route targets 60fps, compares candidate output to the saved baseline, and keeps HUD/capture checks as the manual renderer companion.
 
 ## Related docs
 

@@ -24,8 +24,10 @@ import {
   clampSwimVelocity,
   resolveWaterContact,
   shouldSwim,
+  syncPlayerWaterMode,
 } from "./waterTraversal";
 import { STAMINA_MAX } from "./playerSimulationConstants";
+import type { PlayerWaterMovementState } from "./swimmingController";
 
 export interface PlayerState {
   position: Vector3;
@@ -41,6 +43,7 @@ export interface PlayerState {
   floating: boolean;
   grounded: boolean;
   swimming: boolean;
+  waterMode: PlayerWaterMovementState;
   waterDepth: number;
   waterSurfaceY: number;
   fallingToVoid: boolean;
@@ -123,6 +126,7 @@ export class GameState {
         floating: false,
         grounded: true,
         swimming: false,
+        waterMode: "onLand",
         waterDepth: 0,
         waterSurfaceY: 0,
         fallingToVoid: false,
@@ -163,6 +167,7 @@ export class GameState {
     const waterStateAtStart = sampleWaterState(player.position.x, player.position.z);
     applyWaterState(player, waterStateAtStart);
     player.swimming = shouldSwim(player, waterStateAtStart);
+    syncPlayerWaterMode(player, waterStateAtStart);
 
     if (player.fallingToVoid) {
       if (updateVoidFall(player, dt)) {
@@ -184,8 +189,8 @@ export class GameState {
     );
 
     if (player.swimming && waterStateAtStart) {
-      applySwimForces(player, waterStateAtStart, dt);
-      clampSwimVelocity(player, input.jumpHeld, dt);
+      applySwimForces(player, waterStateAtStart, input.abilityHeld, dt);
+      clampSwimVelocity(player, input.jumpHeld, input.abilityHeld, dt);
     }
 
     player.position.addScaledVector(player.velocity, dt);
@@ -218,7 +223,7 @@ export class GameState {
     const player = this.frame.player.position;
     const height = sampleTerrainHeight(player.x, player.z);
     this.frame.currentZone = sampleBiomeZone(player.x, player.z, height);
-    this.frame.objective = sampleObjectiveText();
+    this.frame.objective = sampleObjectiveText(this.frame.save);
     const landmarkProgress = updateLandmarkProgress(player, this.frame.save.catalogedLandmarkIds);
     const forageableProgress = updateForageableProgress(player, this.frame.save.gatheredForageableIds, gatherPressed);
     this.frame.currentLandmark = landmarkProgress.currentLandmark;

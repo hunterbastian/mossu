@@ -191,10 +191,17 @@ export const RIVER_BRANCH_SEGMENTS: readonly RiverBranchSegment[] = [
 // Total rendered-water footprint scale. Keep this aligned with waterSystem ribbon width.
 export const MAIN_RIVER_RENDER_WIDTH_SCALE = 1.0608;
 export const BRANCH_RIVER_RENDER_WIDTH_SCALE = 0.9996;
+/** Extra water volume width shared by rendering and gameplay so filled banks remain swimmable/consistent. */
+export const RIVER_WATER_VISUAL_FILL_SCALE = 1.22;
 export const MAIN_RIVER_SURFACE_OFFSET = 4.1;
 export const FOOTHILL_CREEK_SURFACE_OFFSET = 1.5;
 export const ALPINE_RUNOFF_SURFACE_OFFSET = 1.3;
 export const WATERFALL_OUTFLOW_SURFACE_OFFSET = 1.8;
+/** Ellipse scale for rendered pool volume; gameplay uses this for shallow contact/ripples too. */
+export const STARTING_WATER_VISUAL_FILL_SCALE = 1.14;
+export const WATER_TERRAIN_FILL_CLEARANCE = 0.46;
+export const WATER_EDGE_TERRAIN_CLEARANCE = 0.22;
+export const WATER_SWIM_MIN_DEPTH = 1.35;
 export const OPENING_LAKE_CENTER_X = -34;
 export const OPENING_LAKE_CENTER_Z = -112;
 export const OPENING_LAKE_RADIUS = 24.5;
@@ -231,7 +238,7 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     flowStrength: 0.04,
     flowSpeed: 0.08,
     opacity: 0.78,
-    swimAllowed: false,
+    swimAllowed: true,
     edgeSoftness: 0.46,
   },
   {
@@ -248,7 +255,7 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     flowStrength: 0.035,
     flowSpeed: 0.07,
     opacity: 0.8,
-    swimAllowed: false,
+    swimAllowed: true,
     edgeSoftness: 0.5,
   },
   {
@@ -265,7 +272,7 @@ export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
     flowStrength: 0.045,
     flowSpeed: 0.09,
     opacity: 0.78,
-    swimAllowed: false,
+    swimAllowed: true,
     edgeSoftness: 0.48,
   },
 ] as const;
@@ -380,7 +387,7 @@ export function sampleRiverRenderWidthScale(id: RiverChannelId) {
 }
 
 export function sampleRiverSurfaceHalfWidth(channel: RiverChannelSample) {
-  return Math.max(0.48, channel.width * sampleRiverRenderWidthScale(channel.id) * 0.5);
+  return Math.max(0.48, channel.width * sampleRiverRenderWidthScale(channel.id) * RIVER_WATER_VISUAL_FILL_SCALE * 0.5);
 }
 
 export function sampleRiverSurfaceMask(x: number, z: number) {
@@ -396,7 +403,7 @@ export function sampleRiverSurfaceMask(x: number, z: number) {
 export function sampleRiverWetness(x: number, z: number) {
   return sampleRiverChannels(z).reduce((best, channel) => {
     const distance = Math.abs(x - channel.centerX);
-    const halfWidth = channel.width * 0.5;
+    const halfWidth = sampleRiverSurfaceHalfWidth(channel);
     const wetness = 1 - smootherStep(halfWidth * 0.78, halfWidth * 1.28, distance);
     return Math.max(best, wetness * channel.envelope);
   }, 0);
@@ -409,11 +416,20 @@ export function sampleRiverDampBankMask(x: number, z: number) {
 function sampleRiverBankMask(x: number, z: number) {
   return sampleRiverChannels(z).reduce((best, channel) => {
     const distance = Math.abs(x - channel.centerX);
-    const halfWidth = channel.width * 0.5;
+    const halfWidth = sampleRiverSurfaceHalfWidth(channel);
     const innerBank = smootherStep(halfWidth * 0.86, halfWidth * 1.18, distance);
     const outerBank = 1 - smootherStep(halfWidth * 1.18, halfWidth * 1.92, distance);
     return Math.max(best, innerBank * outerBank * channel.envelope);
   }, 0);
+}
+
+export function sampleFilledWaterSurfaceY(flatSurfaceY: number, x: number, z: number, bank = 0, edgeBlend = 0) {
+  const terrainY = sampleTerrainHeight(x, z);
+  const shoreInfluence = MathUtils.clamp(Math.max(bank, edgeBlend), 0, 1);
+  const clearance = MathUtils.lerp(WATER_TERRAIN_FILL_CLEARANCE, WATER_EDGE_TERRAIN_CLEARANCE, shoreInfluence);
+  const bankBoost = MathUtils.clamp(bank, 0, 1) * 0.14;
+  const channelLift = (1 - MathUtils.clamp(bank, 0, 1)) * 0.12;
+  return Math.max(flatSurfaceY, terrainY + clearance + bankBoost + channelLift);
 }
 
 function emptyWaterBankShape(): WaterBankShape {
@@ -710,7 +726,14 @@ export function sampleStartingWaterSurfaceMask(x: number, z: number) {
 /** Lake mesh / dirt-path fade: same centers as `STARTING_WATER_POOLS` but `renderRadiusX/Z` to match the water disc. */
 export function sampleStartingWaterRenderSurfaceMask(x: number, z: number) {
   return STARTING_WATER_POOLS.reduce((best, pool) => {
-    const distance = ellipseDistance(x, z, pool.x, pool.z, pool.renderRadiusX, pool.renderRadiusZ);
+    const distance = ellipseDistance(
+      x,
+      z,
+      pool.x,
+      pool.z,
+      pool.renderRadiusX * STARTING_WATER_VISUAL_FILL_SCALE,
+      pool.renderRadiusZ * STARTING_WATER_VISUAL_FILL_SCALE,
+    );
     const surface = 1 - smootherStep(0.86, 1, distance);
     return Math.max(best, surface);
   }, 0);
@@ -718,7 +741,9 @@ export function sampleStartingWaterRenderSurfaceMask(x: number, z: number) {
 
 export function sampleStartingWaterWetness(x: number, z: number) {
   return STARTING_WATER_POOLS.reduce((best, pool) => {
-    const distance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX * 1.34, pool.radiusZ * 1.34);
+    const wetRadiusX = Math.max(pool.radiusX * 1.34, pool.renderRadiusX * STARTING_WATER_VISUAL_FILL_SCALE * 1.04);
+    const wetRadiusZ = Math.max(pool.radiusZ * 1.34, pool.renderRadiusZ * STARTING_WATER_VISUAL_FILL_SCALE * 1.04);
+    const distance = ellipseDistance(x, z, pool.x, pool.z, wetRadiusX, wetRadiusZ);
     const wetness = 1 - smootherStep(0.74, 1, distance);
     return Math.max(best, wetness);
   }, 0);
@@ -1068,7 +1093,7 @@ export const HIGHLAND_CREEK_PATHS: readonly HighlandCreekPath[] = [
     opacity: 0.48,
   },
   {
-    id: "mistfall-runoff",
+    id: "highland-runoff",
     kind: "creek",
     profile: "waterfallOutflow",
     points: [
@@ -1144,12 +1169,22 @@ function samplePoolWater(x: number, z: number): WaterState | null {
   let bestDepth = 0;
 
   for (const pool of STARTING_WATER_POOLS) {
-    const distance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX, pool.radiusZ);
-    if (distance > 1) {
+    const swimDistance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX, pool.radiusZ);
+    const visualDistance = ellipseDistance(
+      x,
+      z,
+      pool.x,
+      pool.z,
+      pool.renderRadiusX * STARTING_WATER_VISUAL_FILL_SCALE,
+      pool.renderRadiusZ * STARTING_WATER_VISUAL_FILL_SCALE,
+    );
+    if (visualDistance > 1) {
       continue;
     }
 
-    const surfaceY = sampleTerrainHeight(pool.x, pool.z) + pool.surfaceOffset;
+    const flatSurfaceY = sampleTerrainHeight(pool.x, pool.z) + pool.surfaceOffset;
+    const edgeBlend = MathUtils.smoothstep(1 - pool.edgeSoftness, 1, visualDistance);
+    const surfaceY = sampleFilledWaterSurfaceY(flatSurfaceY, x, z, MathUtils.clamp(visualDistance, 0, 1), edgeBlend);
     const depth = surfaceY - sampleTerrainHeight(x, z);
     if (depth <= 0.2 || depth <= bestDepth) {
       continue;
@@ -1163,7 +1198,7 @@ function samplePoolWater(x: number, z: number): WaterState | null {
       depth,
       flowDirection: new Vector2(Math.cos(swirlAngle), Math.sin(swirlAngle)).normalize(),
       flowStrength: pool.flowStrength,
-      swimAllowed: pool.swimAllowed,
+      swimAllowed: pool.swimAllowed && swimDistance <= 1 && depth >= WATER_SWIM_MIN_DEPTH,
     };
   }
 
@@ -1181,7 +1216,11 @@ export function sampleWaterState(x: number, z: number): WaterState | null {
       continue;
     }
 
-    const surfaceY = sampleTerrainHeight(channel.centerX, z) + MAIN_RIVER_SURFACE_OFFSET;
+    const flatSurfaceY = sampleTerrainHeight(channel.centerX, z) + MAIN_RIVER_SURFACE_OFFSET;
+    const edgeT = riverDistance / Math.max(0.001, activeWidth);
+    const bank = MathUtils.clamp(edgeT, 0, 1);
+    const edgeBlend = MathUtils.smoothstep(0.82, 1, edgeT);
+    const surfaceY = sampleFilledWaterSurfaceY(flatSurfaceY, x, z, bank, edgeBlend);
     let depth = surfaceY - sampleTerrainHeight(x, z);
     // Where the heightfield is slightly above the flat water plane but the river still renders
     // as surface (asymmetric bank / bed noise), keep a minimal wade depth so gameplay matches visuals
@@ -1204,7 +1243,7 @@ export function sampleWaterState(x: number, z: number): WaterState | null {
         depth,
         flowDirection: tangent,
         flowStrength: channel.flowStrength,
-        swimAllowed: depth >= 2.4,
+        swimAllowed: depth >= WATER_SWIM_MIN_DEPTH && edgeT < 0.94,
       };
     }
   }
@@ -1298,7 +1337,11 @@ export function sampleWaterAmbience(x: number, z: number): WaterAmbienceSample {
 
 export function sampleRiverEdgeState(x: number, z: number): RiverEdgeSample {
   const water = sampleWaterState(x, z);
-  const surfaceMask = Math.max(sampleRiverSurfaceMask(x, z), sampleStartingWaterSurfaceMask(x, z));
+  const surfaceMask = Math.max(
+    sampleRiverSurfaceMask(x, z),
+    sampleStartingWaterSurfaceMask(x, z),
+    sampleStartingWaterRenderSurfaceMask(x, z),
+  );
   const dampBankMask = Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z));
   const wetness = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
   const nookMask = sampleRiverNookMask(x, z);
@@ -1628,14 +1671,14 @@ export const worldLandmarks: WorldLandmark[] = [
     },
   },
   {
-    id: "mistfall-basin",
+    id: "highland-basin",
     type: "cliff_path",
     position: new Vector3(42, sampleTerrainHeight(42, 134), 134),
-    title: "Mistfall Basin",
-    flavorPing: "Spray and cold air—the basin listens upstream.",
+    title: "Highland Basin",
+    flavorPing: "Spray and cold air collect around the highland stones.",
     interactionRadius: 15,
     inventoryEntry: {
-      title: "Mistdrop Vial",
+      title: "Basin Vial",
       summary: "A tiny glass vial beaded with basin spray. The satchel note says the air starts tasting colder here, even before the ridge proper.",
     },
   },
@@ -1751,11 +1794,11 @@ export const worldMapMarkers: readonly WorldMapMarker[] = [
     landmarkId: "orange-tree-overlook",
   },
   {
-    id: "special-mistfall",
+    id: "special-highland-basin",
     kind: "special",
-    title: "Mistfall",
+    title: "Highland Basin",
     position: new Vector3(42, sampleTerrainHeight(42, 134), 134),
-    landmarkId: "mistfall-basin",
+    landmarkId: "highland-basin",
   },
   {
     id: "special-moss-crown",
@@ -1816,11 +1859,11 @@ export const worldForageables: WorldForageable[] = [
     interactionRadius: 7,
   },
   {
-    id: "mistfall-shell-chip",
+    id: "highland-shell-chip",
     kind: "shell",
     position: new Vector3(34, sampleTerrainHeight(34, 128), 128),
-    title: "Mistfall Shell Chip",
-    summary: "A thin shell chip lifted from the spray around Mistfall's runoff stones.",
+    title: "Highland Shell Chip",
+    summary: "A thin shell chip lifted from the spray around the highland runoff stones.",
     interactionRadius: 7,
   },
   {
@@ -1940,14 +1983,14 @@ export const scenicPockets: ScenicPocket[] = [
     radius: 18,
   },
   {
-    id: "mistfall-cascade",
+    id: "highland-cascade",
     kind: "stream_bend",
     zone: "alpine",
     position: new Vector3(34, sampleTerrainHeight(34, 126), 126),
     radius: 18,
   },
   {
-    id: "mistfall-basin",
+    id: "highland-basin",
     kind: "stream_bend",
     zone: "alpine",
     position: new Vector3(42, sampleTerrainHeight(42, 134), 134),
@@ -2014,7 +2057,33 @@ export const scenicPockets: ScenicPocket[] = [
 export const startingPosition = new Vector3(-58, sampleTerrainHeight(-58, -158) + 2.2, -158);
 export const startingLookTarget = new Vector3(18, sampleTerrainHeight(18, 108) + 12, 108);
 
-export function sampleObjectiveText() {
+export function sampleObjectiveText(progress?: {
+  catalogedLandmarkIds?: ReadonlySet<string>;
+  gatheredForageableIds?: ReadonlySet<string>;
+}) {
+  const cataloged = progress?.catalogedLandmarkIds;
+  const gathered = progress?.gatheredForageableIds;
+  if (!cataloged?.has("start-burrow")) {
+    return {
+      title: "Wake at Burrow Hollow",
+      body: "Step through the grass, skim the lake edge, and stamp Mossu's first keepsake card before following the river north.",
+    };
+  }
+
+  if (!gathered?.has("lake-shell")) {
+    return {
+      title: "Fill the first binder sleeve",
+      body: "Look along the soft lake shore for a small pouch good, then keep the river on Mossu's right as the meadow opens.",
+    };
+  }
+
+  if (!cataloged?.has("orange-tree-overlook")) {
+    return {
+      title: "Find the amber lookout",
+      body: "Follow the warm meadow rise toward the lone amber tree. A Karu pocket nearby can join the trail with E.",
+    };
+  }
+
   return {
     title: "Climb toward the shrine",
     body: "Follow the river through Whisper Pass, drift the high shelves, and cross the ridges to reach Moss Crown Shrine.",

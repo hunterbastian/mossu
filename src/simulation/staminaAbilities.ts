@@ -7,6 +7,7 @@ import {
   STAMINA_REGEN_GROUND,
   STAMINA_REGEN_SWIM,
   STAMINA_VISIBLE_EPSILON,
+  SWIM_UNDERWATER_STAMINA_DRAIN,
 } from "./playerSimulationConstants";
 
 export function canUseBreezeFloat(save: SaveState) {
@@ -23,7 +24,11 @@ export function updateStaminaAndAbilityState(
   runtime: PlayerSimulationRuntime,
   isFloating: boolean,
 ) {
-  const staminaDrainRate = isFloating ? FLOAT_STAMINA_DRAIN : 0;
+  const staminaDrainRate = isFloating
+    ? FLOAT_STAMINA_DRAIN
+    : player.waterMode === "underwater"
+      ? SWIM_UNDERWATER_STAMINA_DRAIN
+      : 0;
   if (staminaDrainRate > 0) {
     player.stamina = Math.max(0, player.stamina - staminaDrainRate * dt);
     runtime.staminaRegenDelayRemaining = STAMINA_REGEN_DELAY;

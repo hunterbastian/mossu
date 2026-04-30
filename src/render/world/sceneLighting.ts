@@ -20,10 +20,10 @@ export function getAtmosphereHorizonTints(
   outCloudShadow: Color,
 ) {
   const m = MathUtils.clamp(mood, 0, 1);
-  outHorizonTint.set("#f3e3d4").lerp(new Color(0xcee8f2), m * 0.55);
-  outHorizonHaze.set("#e4eef6").lerp(new Color(0xc8dcea), m * 0.45);
-  outCloudBright.set("#fbfeff").lerp(new Color(0xe8f2fb), m * 0.35);
-  outCloudShadow.set("#b8c9dc").lerp(new Color(0x9db0c4), m * 0.25);
+  outHorizonTint.set("#e3f8ff").lerp(new Color(0xd9f3ff), m * 0.55);
+  outHorizonHaze.set("#eefcff").lerp(new Color(0xdcefff), m * 0.45);
+  outCloudBright.set("#ffffff").lerp(new Color(0xf2fbff), m * 0.35);
+  outCloudShadow.set("#d7eaf6").lerp(new Color(0xc9dfef), m * 0.25);
 }
 
 const _ambScratch = new Color();

@@ -90,7 +90,7 @@
         "maxDurationMs": 12000
       },
       {
-        "label": "Mistfall Basin water",
+        "label": "Highland Basin water",
         "target": {
           "x": 42,
           "z": 134
@@ -102,8 +102,8 @@
           "lift": 20
         },
         "arrivalRadius": 18,
-        "landmarkId": "mistfall-basin",
-        "expectedLandmark": "Mistfall Basin",
+        "landmarkId": "highland-basin",
+        "expectedLandmark": "Highland Basin",
         "maxDurationMs": 14000
       },
       {
@@ -194,22 +194,22 @@
     ]
   },
   "guardrails": {
-    "minAverageFps": 24,
-    "maxP95FrameMs": 85,
+    "minAverageFps": 60,
+    "maxP95FrameMs": 18,
     "minFrameSamples": 600,
     "minForwardProgress": 330,
     "maxAbsX": 95,
     "route": {
       "minCheckpointsReached": 12,
-      "minCheckpointAverageFps": 20,
-      "maxCheckpointP95FrameMs": 110,
+      "minCheckpointAverageFps": 60,
+      "maxCheckpointP95FrameMs": 20,
       "requiredLandmarkIds": [
         "start-burrow",
         "orange-tree-overlook",
         "river-bend",
         "fir-gate",
         "foothill-pass",
-        "mistfall-basin",
+        "highland-basin",
         "windstep-shelf",
         "ridge-overlook",
         "skyward-ledge",
@@ -225,6 +225,14 @@
       "minNonBlankRatio": 0.92,
       "maxDarkRatio": 0.72,
       "maxLightRatio": 0.72
+    },
+    "baseline": {
+      "maxAverageFpsDrop": 3,
+      "maxP95FrameMsIncrease": 3,
+      "route": {
+        "maxCheckpointAverageFpsDrop": 5,
+        "maxCheckpointP95FrameMsIncrease": 5
+      }
     }
   }
 }

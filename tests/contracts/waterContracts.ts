@@ -1,13 +1,18 @@
-import { Vector2 } from "three";
+import { MathUtils, Vector2 } from "three";
+import { sampleRenderedWaterSurfaceY } from "../../src/render/world/waterSystem";
 import {
+  sampleFilledWaterSurfaceY,
+  MAIN_RIVER_SURFACE_OFFSET,
   sampleRiverChannelAt,
   sampleRiverEdgeState,
   sampleRiverSurfaceHalfWidth,
   sampleRiverSurfaceMask,
+  sampleTerrainHeight,
   sampleStartingWaterSurfaceMask,
   sampleWaterAmbience,
   sampleWaterBankShape,
   sampleWaterState,
+  STARTING_WATER_VISUAL_FILL_SCALE,
   STARTING_WATER_POOLS,
 } from "../../src/simulation/world";
 import { assert, assertApprox } from "./testHarness";
@@ -26,6 +31,41 @@ function assertFlowVector(flow: Vector2, label: string) {
   assertApprox(flow.length(), 1, 0.001, `${label} flow direction is normalized`);
 }
 
+function assertRenderedWaterClearsTerrain(
+  flatSurfaceY: number,
+  x: number,
+  z: number,
+  bank: number,
+  edgeBlend: number,
+  label: string,
+) {
+  const terrainY = sampleTerrainHeight(x, z);
+  const gameplaySurfaceY = sampleFilledWaterSurfaceY(flatSurfaceY, x, z, bank, edgeBlend);
+  const renderedSurfaceY = sampleRenderedWaterSurfaceY(flatSurfaceY, x, z, bank, edgeBlend);
+  assertApprox(renderedSurfaceY, gameplaySurfaceY, 0.001, `${label} rendered water uses filled gameplay surface`);
+  assert(
+    renderedSurfaceY >= terrainY + 0.02,
+    `${label} rendered water clears terrain`,
+  );
+  assert(
+    renderedSurfaceY <= gameplaySurfaceY + 0.001,
+    `${label} rendered water does not overfill above gameplay height`,
+  );
+}
+
+function findDryBankProbe(centerX: number, halfWidth: number, z: number, label: string) {
+  for (const factor of [1.16, 1.32, 1.48, 1.68]) {
+    for (const side of [1, -1]) {
+      const x = centerX + halfWidth * factor * side;
+      if (sampleWaterState(x, z) === null) {
+        return x;
+      }
+    }
+  }
+  assert(false, `${label} has a dry-bank probe outside nearby rendered water`);
+  return centerX + halfWidth * 1.68;
+}
+
 export function runWaterContracts() {
   MAIN_RIVER_CHECKPOINT_Z.forEach((z) => {
     const channel = sampleRiverChannelAt("main", z);
@@ -42,7 +82,7 @@ export function runWaterContracts() {
     assert(ambience.kind === "river", `main river center ambience resolves to river at z=${z}`);
     assertFlowVector(water.flowDirection, `main river z=${z}`);
 
-    const dryBankX = channel.centerX + sampleRiverSurfaceHalfWidth(channel) * 1.16;
+    const dryBankX = findDryBankProbe(channel.centerX, sampleRiverSurfaceHalfWidth(channel), z, `main river z=${z}`);
     const bankWater = sampleWaterState(dryBankX, z);
     const bankEdge = sampleRiverEdgeState(dryBankX, z);
     const bankShape = sampleWaterBankShape(dryBankX, z);
@@ -59,6 +99,7 @@ export function runWaterContracts() {
     // steeper banks can fail shallow-depth earlier than the half-width disc.
     const innerX = channel.centerX + half * 0.28;
     const nearEdgeX = channel.centerX + half * 0.92;
+    const flatSurfaceY = sampleTerrainHeight(channel.centerX, z) + MAIN_RIVER_SURFACE_OFFSET;
     const innerWater = sampleWaterState(innerX, z);
     const nearEdgeWater = sampleWaterState(nearEdgeX, z);
     const innerMask = sampleRiverSurfaceMask(innerX, z);
@@ -68,6 +109,7 @@ export function runWaterContracts() {
 
     assert(innerWater !== null, `main river mid-bank has gameplay water at z=${z}`);
     assert(innerMask > 0.12, `main river mid-bank has rendered surface mask at z=${z}`);
+    assertRenderedWaterClearsTerrain(flatSurfaceY, innerX, z, 0.28, 0, `main river mid-bank at z=${z}`);
     assert(
       innerEdge.zone === "shallow_water" || innerEdge.zone === "swim_water",
       `main river mid-bank edge zone is water at z=${z}`,
@@ -75,6 +117,14 @@ export function runWaterContracts() {
 
     if (nearEdgeWater !== null) {
       assert(nearMask > 0.05, `where gameplay water exists near channel edge, surface mask is non-zero at z=${z}`);
+      assertRenderedWaterClearsTerrain(
+        flatSurfaceY,
+        nearEdgeX,
+        z,
+        0.92,
+        MathUtils.smoothstep(0.82, 1, 0.92),
+        `main river near-edge at z=${z}`,
+      );
       assert(
         nearEdge.zone === "shallow_water" || nearEdge.zone === "swim_water",
         `near-edge water matches edge zone at z=${z}`,
@@ -93,10 +143,11 @@ export function runWaterContracts() {
     assertFlowVector(water.flowDirection, `${id} z=${z}`);
 
     const half = sampleRiverSurfaceHalfWidth(channel);
-    const dryBankX = channel.centerX + half * 1.16;
+    const dryBankX = findDryBankProbe(channel.centerX, half, z, `${id} z=${z}`);
     assert(sampleWaterState(dryBankX, z) === null, `${id} dry bank is not gameplay water at z=${z}`);
     const innerX = channel.centerX + half * 0.28;
     const nearEdgeX = channel.centerX + half * 0.92;
+    const flatSurfaceY = sampleTerrainHeight(channel.centerX, z) + MAIN_RIVER_SURFACE_OFFSET;
     const innerWater = sampleWaterState(innerX, z);
     const nearEdgeWater = sampleWaterState(nearEdgeX, z);
     const innerMask = sampleRiverSurfaceMask(innerX, z);
@@ -105,12 +156,21 @@ export function runWaterContracts() {
     const nearEdge = sampleRiverEdgeState(nearEdgeX, z);
     assert(innerWater !== null, `${id} mid-bank has gameplay water at z=${z}`);
     assert(innerMask > 0.1, `${id} mid-bank has rendered surface mask at z=${z}`);
+    assertRenderedWaterClearsTerrain(flatSurfaceY, innerX, z, 0.28, 0, `${id} mid-bank at z=${z}`);
     assert(
       innerEdge.zone === "shallow_water" || innerEdge.zone === "swim_water",
       `${id} mid-bank edge zone is water at z=${z}`,
     );
     if (nearEdgeWater !== null) {
       assert(nearMask > 0.05, `${id} near-edge water has surface mask at z=${z}`);
+      assertRenderedWaterClearsTerrain(
+        flatSurfaceY,
+        nearEdgeX,
+        z,
+        0.92,
+        MathUtils.smoothstep(0.82, 1, 0.92),
+        `${id} near-edge at z=${z}`,
+      );
       assert(
         nearEdge.zone === "shallow_water" || nearEdge.zone === "swim_water",
         `${id} near-edge water matches edge zone at z=${z}`,
@@ -134,6 +194,22 @@ export function runWaterContracts() {
       `${pool.id} rim has shaped bank mask`,
     );
     assertFlowVector(water.flowDirection, `${pool.id}`);
+
+    for (const [nx, nz] of [[0.42, 0.1], [-0.34, 0.38], [0.72, -0.18]] as const) {
+      const x = pool.x + pool.renderRadiusX * STARTING_WATER_VISUAL_FILL_SCALE * nx;
+      const z = pool.z + pool.renderRadiusZ * STARTING_WATER_VISUAL_FILL_SCALE * nz;
+      const visualDistance = Math.sqrt(nx * nx + nz * nz);
+      const edgeBlend = MathUtils.smoothstep(1 - pool.edgeSoftness, 1, visualDistance);
+      const flatSurfaceY = sampleTerrainHeight(pool.x, pool.z) + pool.surfaceOffset;
+      assertRenderedWaterClearsTerrain(
+        flatSurfaceY,
+        x,
+        z,
+        MathUtils.clamp(visualDistance, 0, 1),
+        edgeBlend,
+        `${pool.id} visible fill sample ${nx},${nz}`,
+      );
+    }
   });
 
   const cloudbackCreek = sampleWaterAmbience(-22, 170);

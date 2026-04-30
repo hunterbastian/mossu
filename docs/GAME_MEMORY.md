@@ -36,7 +36,7 @@ Route:
 3. Silver Bend
 4. Fir Gate
 5. Whisper Pass
-6. Mistfall Basin
+6. Highland Basin
 7. Windstep Shelf
 8. Cloudback Ridge
 9. Ridge Saddle

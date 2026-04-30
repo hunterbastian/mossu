@@ -38,6 +38,7 @@ export class CharacterPreview {
     floating: false,
     grounded: true,
     swimming: false,
+    waterMode: "onLand",
     waterDepth: 0,
     waterSurfaceY: 0,
     fallingToVoid: false,

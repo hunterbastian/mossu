@@ -480,14 +480,14 @@ export class FollowCamera {
       const handoffT = MathUtils.smoothstep(introT, OPENING_HANDOFF_START, 1);
       this.openingSequenceTarget
         .copy(startingPosition)
-        .addScaledVector(START_DIRECTION, MathUtils.lerp(12, 58, vistaT))
-        .addScaledVector(START_RIGHT, MathUtils.lerp(-1.5, 8.5, vistaT))
-        .add(this.focusOffset.set(0, MathUtils.lerp(5.4, 9.4, vistaT), 0));
+        .addScaledVector(START_DIRECTION, MathUtils.lerp(10, 72, vistaT))
+        .addScaledVector(START_RIGHT, MathUtils.lerp(-5.5, 10.5, vistaT))
+        .add(this.focusOffset.set(0, MathUtils.lerp(4.8, 10.8, vistaT), 0));
       this.openingSequencePosition
         .copy(startingPosition)
-        .addScaledVector(START_DIRECTION, MathUtils.lerp(-34, -62, vistaT))
-        .addScaledVector(START_RIGHT, MathUtils.lerp(-8, 16, vistaT))
-        .add(this.focusOffset.set(0, MathUtils.lerp(15, 24, vistaT), 0));
+        .addScaledVector(START_DIRECTION, MathUtils.lerp(-30, -58, vistaT))
+        .addScaledVector(START_RIGHT, MathUtils.lerp(-16, 18, vistaT))
+        .add(this.focusOffset.set(0, MathUtils.lerp(12, 25, vistaT), 0));
       this.gameplayPosition.lerpVectors(this.openingSequencePosition, this.gameplayPosition, handoffT);
       this.gameplayTarget.lerpVectors(this.openingSequenceTarget, this.gameplayTarget, handoffT);
     }

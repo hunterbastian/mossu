@@ -15,7 +15,7 @@ const ROUTE_IDS = [
   "river-bend",
   "fir-gate",
   "foothill-pass",
-  "mistfall-basin",
+  "highland-basin",
   "windstep-shelf",
   "ridge-overlook",
   "skyward-ledge",

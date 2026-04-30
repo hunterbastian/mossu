@@ -19,6 +19,7 @@ declare global {
       teleportPlayerTo?: (x: number, z: number) => void;
       applySaveState?: (payload: MossuDebugSaveStatePayload) => void;
       faceRouteHeading?: (heading: number, cameraOptions?: { distance?: number; focusHeight?: number; lift?: number }) => void;
+      setWaterDepthDebug?: (enabled: boolean) => void;
     };
     render_game_to_text?: () => string;
     mossuReportError?: (details: MossuErrorDetail) => void;
@@ -31,6 +32,7 @@ interface MossuAppRuntime {
   debugTeleportPlayerTo?: (x: number, z: number) => void;
   debugApplySaveState?: (payload: MossuDebugSaveStatePayload) => void;
   debugFaceRouteHeading?: (heading: number, cameraOptions?: { distance?: number; focusHeight?: number; lift?: number }) => void;
+  debugSetWaterDepthDebug?: (enabled: boolean) => void;
   renderGameToText: () => string;
   start: () => void;
 }
@@ -136,6 +138,7 @@ function attachRuntime(app: MossuAppRuntime, mode: MossuE2eBridge["mode"]) {
       teleportPlayerTo: (x, z) => app.debugTeleportPlayerTo?.(x, z),
       applySaveState: (payload) => app.debugApplySaveState?.(payload),
       faceRouteHeading: (heading, cameraOptions) => app.debugFaceRouteHeading?.(heading, cameraOptions),
+      setWaterDepthDebug: (enabled) => app.debugSetWaterDepthDebug?.(enabled),
     };
   }
   app.start();

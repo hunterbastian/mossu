@@ -311,7 +311,7 @@ These are not all separate model families, but they should remain visually disti
 - Silver Bend
 - Fir Gate
 - Whisper Pass
-- Mistfall Basin
+- Highland Basin
 - Windstep Shelf
 - Cloudback Ridge
 - Ridge Saddle

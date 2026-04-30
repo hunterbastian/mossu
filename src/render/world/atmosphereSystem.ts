@@ -9,7 +9,6 @@ import {
   MathUtils,
   Mesh,
   MeshBasicMaterial,
-  MeshLambertMaterial,
   ShaderMaterial,
   SphereGeometry,
   Vector3,
@@ -200,7 +199,7 @@ function makeCloudCluster(position: Vector3, scale: number, puffMaterial: Shader
 function makeMistPuff(scale: number, color: string, opacity: number) {
   const puff = new Mesh(
     new SphereGeometry(1, 12, 10),
-    new MeshLambertMaterial({
+    new MeshBasicMaterial({
       color,
       transparent: true,
       opacity,

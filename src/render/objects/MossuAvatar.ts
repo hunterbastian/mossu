@@ -1,5 +1,4 @@
 import {
-  IcosahedronGeometry,
   Group,
   MathUtils,
   Mesh,
@@ -66,12 +65,12 @@ export class MossuAvatar {
     this.locomotionRoot.add(this.rollingRoot);
     this.locomotionRoot.add(this.legRoot);
 
-    const bodyGeometry = new IcosahedronGeometry(this.radius, 2);
+    const bodyGeometry = new SphereGeometry(this.radius, 28, 20);
     this.bodyMaterial = new MeshStandardMaterial({
       color: mossuArt.body,
       roughness: materialArt.characterBodyRoughness,
       metalness: 0,
-      flatShading: true,
+      flatShading: false,
     });
     this.body = new Mesh(bodyGeometry, this.bodyMaterial);
     this.body.castShadow = true;
@@ -79,11 +78,11 @@ export class MossuAvatar {
     this.body.scale.set(1.06, 0.9, 1.02);
     this.rollingRoot.add(this.body);
 
-    const puffGeometry = new IcosahedronGeometry(0.52, 1);
+    const puffGeometry = new SphereGeometry(0.52, 16, 12);
     const puffMaterial = new MeshStandardMaterial({
       color: mossuArt.fluff,
       roughness: materialArt.characterSoftRoughness,
-      flatShading: true,
+      flatShading: false,
     });
 
     const puffOffsets = [
@@ -109,23 +108,23 @@ export class MossuAvatar {
     });
 
     const facePatch = new Mesh(
-      new SphereGeometry(0.92, 10, 8),
+      new SphereGeometry(0.92, 18, 12),
       new MeshStandardMaterial({
         color: mossuArt.face,
         roughness: 0.94,
-        flatShading: true,
+        flatShading: false,
       }),
     );
     facePatch.scale.set(1.16, 0.82, 0.34);
     facePatch.position.set(0, 0.18, 1.82);
     this.faceAnchor.add(facePatch);
 
-    const eyeGeometry = new SphereGeometry(0.31, 10, 8);
+    const eyeGeometry = new SphereGeometry(0.31, 16, 12);
     const eyeMaterial = new MeshStandardMaterial({
       color: mossuArt.eye,
       roughness: materialArt.characterEyeRoughness,
       metalness: 0,
-      flatShading: true,
+      flatShading: false,
     });
     const leftEye = new Mesh(eyeGeometry, eyeMaterial);
     const rightEye = new Mesh(eyeGeometry, eyeMaterial);
@@ -136,13 +135,13 @@ export class MossuAvatar {
     this.eyeMeshes.push(leftEye, rightEye);
     this.faceAnchor.add(leftEye, rightEye);
 
-    const catchlightGeometry = new SphereGeometry(0.048, 6, 5);
+    const catchlightGeometry = new SphereGeometry(0.048, 10, 8);
     const catchlightMaterial = new MeshStandardMaterial({
       color: mossuArt.catchlight,
       emissive: mossuArt.catchlightEmissive,
       emissiveIntensity: 0.18,
       roughness: materialArt.characterHighlightRoughness,
-      flatShading: true,
+      flatShading: false,
     });
     const leftCatchlight = new Mesh(catchlightGeometry, catchlightMaterial);
     const rightCatchlight = new Mesh(catchlightGeometry, catchlightMaterial);
@@ -153,13 +152,13 @@ export class MossuAvatar {
     this.catchlightMeshes.push(leftCatchlight, rightCatchlight);
     this.faceAnchor.add(leftCatchlight, rightCatchlight);
 
-    const cheekGeometry = new SphereGeometry(0.13, 7, 5);
+    const cheekGeometry = new SphereGeometry(0.13, 12, 8);
     const cheekMaterial = new MeshStandardMaterial({
       color: mossuArt.cheek,
       roughness: 1,
       transparent: true,
       opacity: 0.38,
-      flatShading: true,
+      flatShading: false,
     });
     const leftCheek = new Mesh(cheekGeometry, cheekMaterial);
     const rightCheek = new Mesh(cheekGeometry, cheekMaterial);
@@ -170,11 +169,11 @@ export class MossuAvatar {
     this.cheekMeshes.push(leftCheek, rightCheek);
     this.faceAnchor.add(leftCheek, rightCheek);
 
-    const tuftGeometry = new IcosahedronGeometry(0.36, 1);
+    const tuftGeometry = new SphereGeometry(0.36, 14, 10);
     const tuftMaterial = new MeshStandardMaterial({
       color: mossuArt.tuft,
       roughness: 0.95,
-      flatShading: true,
+      flatShading: false,
     });
     const tuftOffsets = [
       new Vector3(-0.72, 1.74, 0.1),
@@ -198,11 +197,11 @@ export class MossuAvatar {
       this.rollingRoot.add(tuft);
     });
 
-    const legGeometry = new IcosahedronGeometry(0.36, 1);
+    const legGeometry = new SphereGeometry(0.36, 14, 10);
     const legMaterial = new MeshStandardMaterial({
       color: mossuArt.leg,
       roughness: 0.96,
-      flatShading: true,
+      flatShading: false,
     });
     const legOffsets = [
       new Vector3(-0.72, -1.88, 0.64),

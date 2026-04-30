@@ -148,11 +148,11 @@ function buildCloudShadowPatches() {
   const geometry = new CircleGeometry(1, 28);
   geometry.rotateX(-Math.PI / 2);
   const patches = [
-    [-72, -118, 34, 14, 0.18, -0.2],
-    [28, -54, 48, 18, 0.14, 0.12],
-    [-22, 28, 58, 21, 0.12, -0.08],
-    [36, 98, 52, 18, 0.11, 0.18],
-    [-34, 156, 62, 22, 0.1, -0.14],
+    [-72, -118, 34, 14, 0.07, -0.2],
+    [28, -54, 48, 18, 0.06, 0.12],
+    [-22, 28, 58, 21, 0.05, -0.08],
+    [36, 98, 52, 18, 0.048, 0.18],
+    [-34, 156, 62, 22, 0.044, -0.14],
   ] as const;
 
   return patches.flatMap(([x, z, sx, sz, opacity, yaw], index) => {

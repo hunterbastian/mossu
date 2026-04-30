@@ -258,7 +258,7 @@ export function buildTerrainFormStrokes() {
     color: terrainArt.formStroke,
     vertexColors: true,
     transparent: true,
-    opacity: 0.024,
+    opacity: 0.0035,
     depthWrite: false,
   });
   const mesh = new InstancedMesh(geometry, material, TERRAIN_FORM_STROKE_COUNT);

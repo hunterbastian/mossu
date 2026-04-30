@@ -1,4 +1,4 @@
-import { Vector3 } from "three";
+import { Vector2, Vector3 } from "three";
 import type { InputSnapshot } from "../../src/simulation/input";
 import type { PlayerState, SaveState } from "../../src/simulation/gameState";
 import {
@@ -18,9 +18,12 @@ import {
   ROLL_GRAVITY_MIN_SLOPE,
   ROLL_MODE_INDICATOR_DELAY,
   ROLL_SPEED,
+  SWIM_UNDERWATER_SPEED,
   WALK_SPEED,
 } from "../../src/simulation/playerSimulationConstants";
 import { updateStaminaAndAbilityState } from "../../src/simulation/staminaAbilities";
+import { applySwimForces, clampSwimVelocity, wantsUnderwaterDive } from "../../src/simulation/waterTraversal";
+import type { WaterState } from "../../src/simulation/world";
 import { startingPosition } from "../../src/simulation/world";
 import { assert } from "./testHarness";
 
@@ -57,6 +60,7 @@ function makePlayer(): PlayerState {
     floating: false,
     grounded: true,
     swimming: false,
+    waterMode: "onLand",
     waterDepth: 0,
     waterSurfaceY: 0,
     fallingToVoid: false,
@@ -219,4 +223,28 @@ export function runMovementContracts() {
     computeRollGravityStrength(steepNormal) >= computeRollGravityStrength(slopeNormal),
     `steeper slopes approach full roll gravity by ${ROLL_GRAVITY_FULL_SLOPE}`,
   );
+
+  const underwaterPlayer = makePlayer();
+  const underwaterRuntime = createPlayerSimulationRuntime();
+  const deepWater: WaterState = {
+    kind: "pool",
+    surfaceY: 10,
+    depth: 5,
+    flowDirection: new Vector2(1, 0),
+    flowStrength: 0,
+    swimAllowed: true,
+  };
+  underwaterPlayer.position.set(0, deepWater.surfaceY - 0.9, 0);
+  underwaterPlayer.velocity.set(SWIM_UNDERWATER_SPEED + 7, 0, 0);
+  underwaterPlayer.swimming = true;
+  underwaterPlayer.waterMode = "underwater";
+  underwaterPlayer.waterDepth = deepWater.depth;
+  underwaterPlayer.waterSurfaceY = deepWater.surfaceY;
+  assert(wantsUnderwaterDive(underwaterPlayer, deepWater, true), "Q requests an underwater dive in deep swim water");
+  applySwimForces(underwaterPlayer, deepWater, true, 1 / 60);
+  clampSwimVelocity(underwaterPlayer, false, true, 1 / 60);
+  assert(underwaterPlayer.velocity.y < 0, "holding Q while swimming applies downward dive force");
+  assert(planarSpeed(underwaterPlayer) <= SWIM_UNDERWATER_SPEED + 1.81, "underwater swimming uses a slower speed cap");
+  updateStaminaAndAbilityState(underwaterPlayer, 1, underwaterRuntime, false);
+  assert(underwaterPlayer.stamina < underwaterPlayer.staminaMax, "underwater swimming drains stamina while submerged");
 }

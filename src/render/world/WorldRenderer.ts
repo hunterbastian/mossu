@@ -82,12 +82,8 @@ import {
 } from "./sceneLighting";
 import { buildTerrainFormStrokes, makeTerrainMesh } from "./terrainMesh";
 import {
-  buildStartingWaterSystem,
-  buildRiverSystem,
   buildHighlandWaterways,
-  WaterSurfaceController,
-  WaterSurfaceGroup,
-  WaterRippleSource,
+  WaterSystem,
 } from "./waterSystem";
 import {
   buildGrasslandImmersionSystem,
@@ -102,9 +98,6 @@ const FAR_GRASS_PATCH_COUNT = 1150;
 const ALPINE_GRASS_COUNT = 1850;
 const LANDING_SPLASH_PARTICLES = 18;
 const SNOW_TRAIL_PARTICLES = 20;
-const WATER_RIPPLE_LIMIT = 4;
-const WATER_RIPPLE_LIFETIME = 1.45;
-const WATER_RIPPLE_MIN_DEPTH = 0.16;
 
 interface LandingSplashParticle {
   mesh: Mesh;
@@ -144,14 +137,10 @@ interface ForageableVisual {
   spinDirection: number;
 }
 
-interface WaterRippleActorState {
-  inWater: boolean;
-  lastEmitAt: number;
-}
-
 interface WorldRendererOptions {
   debugSpiritCloseup?: boolean;
   webGpuCompatibleMaterials?: boolean;
+  waterDepthDebug?: boolean;
 }
 
 export interface WorldPerfStats {
@@ -417,9 +406,9 @@ function buildShadowPockets() {
       const radius = pocket.radius * (1 - i * 0.16);
       const depth = pocket.depth * (1 - i * 0.18);
       const material = new MeshBasicMaterial({
-        color: new Color().setHSL(pocket.hue, 0.12, 0.56 + i * 0.04),
+        color: new Color().setHSL(pocket.hue, 0.1, 0.7 + i * 0.035),
         transparent: true,
-        opacity: 0.026 - i * 0.004,
+        opacity: 0.012 - i * 0.002,
         depthWrite: false,
       });
       const layer = new Mesh(new CylinderGeometry(radius, radius * 0.86, depth, 24), material);
@@ -435,11 +424,11 @@ function buildShadowPockets() {
 function buildValleyMist() {
   const group = new Group();
   const patches = [
-    [-54, -118, 54, 20, 3.6, 0.045, -0.08],
-    [-8, -28, 112, 34, 7.2, 0.07, 0.04],
-    [26, 72, 92, 26, 10.2, 0.055, -0.14],
-    [18, 134, 84, 28, 13.4, 0.045, 0.1],
-    [-18, 190, 134, 40, 17, 0.07, -0.02],
+    [-54, -118, 54, 20, 3.6, 0.026, -0.08],
+    [-8, -28, 112, 34, 7.2, 0.036, 0.04],
+    [26, 72, 92, 26, 10.2, 0.03, -0.14],
+    [18, 134, 84, 28, 13.4, 0.024, 0.1],
+    [-18, 190, 134, 40, 17, 0.034, -0.02],
   ] as const;
 
   patches.forEach(([x, z, width, depth, lift, opacity, rotation], index) => {
@@ -468,9 +457,9 @@ function buildFloatingIslandShell() {
   group.name = "floating-island-shell";
 
   const upperMaterial = new MeshStandardMaterial({ color: "#d4cdb8", roughness: 0.98, side: DoubleSide });
-  const lowerMaterial = new MeshStandardMaterial({ color: "#a9a191", roughness: 0.99, side: DoubleSide });
-  const lowerShadowMaterial = new MeshStandardMaterial({ color: "#827c6f", roughness: 0.99, side: DoubleSide });
-  const underbellyMaterial = new MeshStandardMaterial({ color: "#5c655c", roughness: 0.99, side: DoubleSide, metalness: 0.02 });
+  const lowerMaterial = new MeshStandardMaterial({ color: "#b9b7a2", roughness: 0.99, side: DoubleSide });
+  const lowerShadowMaterial = new MeshStandardMaterial({ color: "#9fa28d", roughness: 0.99, side: DoubleSide });
+  const underbellyMaterial = new MeshStandardMaterial({ color: "#788d77", roughness: 0.99, side: DoubleSide, metalness: 0.02 });
   const mossMaterial = new MeshStandardMaterial({
     color: "#6f965d",
     roughness: 0.97,
@@ -540,7 +529,7 @@ function buildFloatingIslandShell() {
     new MeshBasicMaterial({
       color: "#d0e2ec",
       transparent: true,
-      opacity: 0.13,
+      opacity: 0.065,
       depthWrite: false,
       side: DoubleSide,
     }),
@@ -551,9 +540,9 @@ function buildFloatingIslandShell() {
   const mist2 = new Mesh(
     new CircleGeometry(maxR * 0.88, 48),
     new MeshBasicMaterial({
-      color: "#9aadb8",
+      color: "#bdd3dd",
       transparent: true,
-      opacity: 0.08,
+      opacity: 0.04,
       depthWrite: false,
       side: DoubleSide,
     }),
@@ -564,9 +553,9 @@ function buildFloatingIslandShell() {
   const mist3 = new Mesh(
     new CircleGeometry(maxR * 0.64, 40),
     new MeshBasicMaterial({
-      color: "#7a8a94",
+      color: "#aac1cb",
       transparent: true,
-      opacity: 0.06,
+      opacity: 0.028,
       depthWrite: false,
       side: DoubleSide,
     }),
@@ -955,11 +944,9 @@ export class WorldRenderer {
   private readonly treeWindMeshes: Array<InstancedMesh> = [];
   private readonly grassImpostorMeshes: Array<InstancedMesh> = [];
   private readonly smallPropMeshes: Array<InstancedMesh> = [];
-  private readonly waterControllers: Array<WaterSurfaceController> = [];
-  private readonly waterRipples: WaterRippleSource[] = [];
-  private readonly waterRippleActorStates = new Map<string, WaterRippleActorState>();
+  private readonly waterSystem: WaterSystem;
   private readonly cameraCollisionMeshes: Mesh[] = [];
-  private readonly gameplayFog = new FogExp2(grasslandsArt.scene.fog, 0.00096);
+  private readonly gameplayFog = new FogExp2(grasslandsArt.scene.fog, 0.00054);
   private readonly lowlandBackground = new Color(grasslandsArt.scene.lowlandBackground);
   private readonly highlandBackground = new Color(grasslandsArt.scene.highlandBackground);
   private readonly lowlandFogColor = new Color(grasslandsArt.scene.lowlandFog);
@@ -970,20 +957,19 @@ export class WorldRenderer {
   private readonly highlandSkyFillColor = new Color(grasslandsArt.scene.highlandSkyFill);
   private readonly lowlandGroundFillColor = new Color(grasslandsArt.scene.lowlandGroundFill);
   private readonly highlandGroundFillColor = new Color(grasslandsArt.scene.highlandGroundFill);
-  private readonly ambientLight = new AmbientLight(grasslandsArt.scene.ambient, 0.74);
-  private readonly skyFill = new HemisphereLight(grasslandsArt.scene.skyFill, grasslandsArt.scene.skyGround, 0.92);
-  private readonly skyBounce = new DirectionalLight(grasslandsArt.scene.skyBounce, 0.3);
+  private readonly ambientLight = new AmbientLight(grasslandsArt.scene.ambient, 1.06);
+  private readonly skyFill = new HemisphereLight(grasslandsArt.scene.skyFill, grasslandsArt.scene.skyGround, 1.24);
+  private readonly skyBounce = new DirectionalLight(grasslandsArt.scene.skyBounce, 0.42);
   private readonly scenePatchHaze = new Color();
   private readonly scenePatchBright = new Color();
   private readonly scenePatchShadow = new Color();
   private readonly scenePatchHorizon = new Color();
   private readonly scenePatchSunDir = new Vector3();
   private elevationMood = 0;
+  private waterDepthDebug = false;
   private grassLodFrame = 0;
 
   private readonly shrine = buildShrine();
-  private readonly riverSystem = buildRiverSystem();
-  private readonly startingWater = buildStartingWaterSystem();
   private readonly terrainFormStrokes = buildTerrainFormStrokes();
   private readonly openingNestVista = batchStaticDecorations(buildOpeningNestVista(), "opening-nest-vista-batch");
   private readonly openingWaterComposition = batchStaticDecorations(buildOpeningWaterComposition(), "opening-water-composition-batch");
@@ -997,19 +983,18 @@ export class WorldRenderer {
   private readonly anchorSceneAccents = batchStaticDecorations(buildAnchorSceneAccents(), "anchor-scene-batch");
   private readonly highlandAccents = batchStaticDecorations(buildHighlandAccents(), "highland-accent-batch");
   private readonly grasslandImmersion = buildGrasslandImmersionSystem();
-  private readonly highlandWaterways: WaterSurfaceGroup = { group: new Group(), controllers: [] };
   private readonly mountainAtmosphere = new Group();
   private readonly valleyMist = new Group();
   private readonly shadowVolumes = new Group();
   private readonly landmarkTrees = new Group();
   private readonly mountainSilhouettes = new Group();
-  private readonly sun = new DirectionalLight(grasslandsArt.scene.sun, 3.12);
+  private readonly sun = new DirectionalLight(grasslandsArt.scene.sun, 3.28);
   private readonly mossuContactShadow = new Mesh(
     new CircleGeometry(1, 32),
     new MeshBasicMaterial({
       color: grasslandsArt.scene.contactShadow,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.14,
       depthWrite: false,
     }),
   );
@@ -1061,6 +1046,8 @@ export class WorldRenderer {
   private deferredWorldFrame = 0;
 
   constructor(private readonly scene: Scene, options: WorldRendererOptions = {}) {
+    this.waterDepthDebug = options.waterDepthDebug ?? false;
+    this.waterSystem = new WaterSystem({ depthDebug: this.waterDepthDebug });
     this.skyDome = buildSkyDome({
       webGpuCompatible: options.webGpuCompatibleMaterials ?? false,
     });
@@ -1093,8 +1080,7 @@ export class WorldRenderer {
     this.mossuContactShadow.renderOrder = 1;
     scene.add(this.mossuContactShadow);
     scene.add(this.islandShell);
-    scene.add(this.riverSystem.group);
-    scene.add(this.startingWater.group);
+    scene.add(this.waterSystem.group);
     scene.add(this.groundLayer);
     scene.add(this.midLayer);
     scene.add(this.treeClusters);
@@ -1104,7 +1090,6 @@ export class WorldRenderer {
     scene.add(this.anchorSceneAccents);
     scene.add(this.highlandAccents);
     scene.add(this.grasslandImmersion.group);
-    scene.add(this.highlandWaterways.group);
     scene.add(this.mountainAtmosphere);
     scene.add(this.valleyMist);
     scene.add(this.landmarkTrees);
@@ -1322,7 +1307,6 @@ export class WorldRenderer {
       this.mapMarkerGroup.add(marker.group);
     });
 
-    this.waterControllers.push(...this.riverSystem.controllers, ...this.startingWater.controllers);
     this.registerCameraCollider(this.terrain);
     this.collectCameraColliders(this.islandShell);
     this.collectCameraColliders(this.shrine);
@@ -1347,8 +1331,7 @@ export class WorldRenderer {
       this.openingNestVista,
       this.openingWaterComposition,
       this.islandShell,
-      this.riverSystem.group,
-      this.startingWater.group,
+      this.waterSystem.group,
       this.groundLayer,
       this.midLayer,
       this.treeClusters,
@@ -1358,7 +1341,6 @@ export class WorldRenderer {
       this.anchorSceneAccents,
       this.highlandAccents,
       this.grasslandImmersion.staticLayer,
-      this.highlandWaterways.group,
       this.shadowVolumes,
       this.landmarkTrees,
       this.shrine,
@@ -1374,6 +1356,15 @@ export class WorldRenderer {
 
   getPerfStats() {
     return this.createPerfStats();
+  }
+
+  setWaterDepthDebugEnabled(enabled: boolean) {
+    this.waterDepthDebug = enabled;
+    this.waterSystem.setDepthDebugEnabled(enabled);
+  }
+
+  isWaterDepthDebugEnabled() {
+    return this.waterDepthDebug;
   }
 
   getQaStats(): WorldQaStats {
@@ -1437,9 +1428,7 @@ export class WorldRenderer {
       },
       () => {
         const waterways = buildHighlandWaterways();
-        this.highlandWaterways.group.add(waterways.group);
-        this.highlandWaterways.controllers.push(...waterways.controllers);
-        this.waterControllers.push(...waterways.controllers);
+        this.waterSystem.addWaterGroup(waterways);
       },
       () => {
         const visuals = buildForageableVisuals();
@@ -1463,10 +1452,10 @@ export class WorldRenderer {
             [0.24, 0.02, 0.34, 1.08, 0.86],
           ];
 
-          const colorBase = new Color("#a5b991");
-          const colorRock = new Color("#9aa39d");
-          const colorShade = new Color("#7f8c84");
-          const colorSnow = new Color("#f1eee1");
+          const colorBase = new Color("#bdd89a");
+          const colorRock = new Color("#bec8b3");
+          const colorShade = new Color("#aebca8");
+          const colorSnow = new Color("#fff8df");
 
           lobes.push(
             ...lobeSpec.map(([rb, rt, h, yOff, snowFrac]) => {
@@ -1487,7 +1476,7 @@ export class WorldRenderer {
                 } else {
                   col.lerpColors(colorRock, colorSnow, (t - 0.5) * 2 * snowFrac);
                 }
-                col.lerp(colorShade, Math.max(0, -vx) * 0.08 + Math.max(0, 0.42 - t) * 0.08);
+                col.lerp(colorShade, Math.max(0, -vx) * 0.035 + Math.max(0, 0.42 - t) * 0.035);
                 colors[v * 3]     = col.r;
                 colors[v * 3 + 1] = col.g;
                 colors[v * 3 + 2] = col.b;
@@ -1502,7 +1491,7 @@ export class WorldRenderer {
           return merged;
         };
 
-        const mountainMaterial = new MeshLambertMaterial({ vertexColors: true });
+        const mountainMaterial = new MeshBasicMaterial({ vertexColors: true });
         const sharedGeo = buildMountainGeometry();
 
         // [worldX, worldZ, scaleX, scaleY, scaleZ, yaw, lift]
@@ -1647,7 +1636,8 @@ export class WorldRenderer {
   }
 
   private createPerfStats(): WorldPerfStats {
-    const waterGeometryStats = this.waterControllers.reduce(
+    const waterControllers = this.waterSystem.getControllers();
+    const waterGeometryStats = waterControllers.reduce(
       (stats, controller) => {
         stats.vertices += countGeometryVertices(controller.mesh.geometry);
         stats.triangles += countGeometryTriangles(controller.mesh.geometry);
@@ -1680,13 +1670,13 @@ export class WorldRenderer {
       smallPropMeshes: this.smallPropMeshes.length,
       smallPropInstances,
       smallPropEstimatedTriangles: countInstancedTriangles(this.smallPropMeshes),
-      waterSurfaces: this.waterControllers.length,
+      waterSurfaces: waterControllers.length,
       waterVertices: waterGeometryStats.vertices,
       waterTriangles: waterGeometryStats.triangles,
-      animatedShaderMeshes: this.windMeshes.length + this.treeWindMeshes.length + this.waterControllers.length,
+      animatedShaderMeshes: this.windMeshes.length + this.treeWindMeshes.length + waterControllers.length,
       grassShaderMeshes: this.windMeshes.length,
       treeShaderMeshes: this.treeWindMeshes.length,
-      waterShaderSurfaces: this.waterControllers.length,
+      waterShaderSurfaces: waterControllers.length,
     };
   }
 
@@ -1723,7 +1713,7 @@ export class WorldRenderer {
     this.mossuContactShadow.visible = !mapLookdown && groundedFade > 0.02;
     this.mossuContactShadow.position.set(player.position.x, surfaceY + 0.055, player.position.z);
     this.mossuContactShadow.scale.set(shadowScale * 1.08, shadowScale * 0.74, 1);
-    material.opacity = 0.2 * groundedFade * waterFade;
+    material.opacity = 0.12 * groundedFade * waterFade;
   }
 
   private updateGrassLod(frame: FrameState, mapLookdown: boolean) {
@@ -1775,16 +1765,16 @@ export class WorldRenderer {
     }
 
     this.gameplayFog.color.copy(this.lowlandFogColor).lerp(this.highlandFogColor, this.elevationMood);
-    this.gameplayFog.density = MathUtils.lerp(0.00088, 0.00108, this.elevationMood);
+    this.gameplayFog.density = MathUtils.lerp(0.00048, 0.00068, this.elevationMood);
     this.sun.color.copy(this.lowlandSunColor).lerp(this.highlandSunColor, this.elevationMood);
-    this.sun.intensity = MathUtils.lerp(3.7, 3.1, this.elevationMood);
-    this.ambientLight.intensity = MathUtils.lerp(0.78, 0.66, this.elevationMood);
+    this.sun.intensity = MathUtils.lerp(3.34, 3.04, this.elevationMood);
+    this.ambientLight.intensity = MathUtils.lerp(1.08, 0.98, this.elevationMood);
     this.skyFill.color.copy(this.lowlandSkyFillColor).lerp(this.highlandSkyFillColor, this.elevationMood);
     this.skyFill.groundColor.copy(this.lowlandGroundFillColor).lerp(this.highlandGroundFillColor, this.elevationMood);
-    this.skyFill.intensity = MathUtils.lerp(0.98, 0.84, this.elevationMood);
-    this.skyBounce.intensity = MathUtils.lerp(0.38, 0.34, this.elevationMood);
-    this.meadowGlow.intensity = MathUtils.lerp(0.76, 0.28, this.elevationMood);
-    this.alpineGlow.intensity = MathUtils.lerp(0.38, 0.72, this.elevationMood);
+    this.skyFill.intensity = MathUtils.lerp(1.26, 1.12, this.elevationMood);
+    this.skyBounce.intensity = MathUtils.lerp(0.56, 0.5, this.elevationMood);
+    this.meadowGlow.intensity = MathUtils.lerp(0.72, 0.34, this.elevationMood);
+    this.alpineGlow.intensity = MathUtils.lerp(0.58, 0.9, this.elevationMood);
     syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera, elapsed);
 
     getAtmosphereHorizonTints(
@@ -1815,7 +1805,7 @@ export class WorldRenderer {
     this.treeWindMeshes.forEach((mesh) => {
       applyPatch(mesh.userData.windShader);
     });
-    this.waterControllers.forEach((controller) => {
+    this.waterSystem.getControllers().forEach((controller) => {
       const mat = controller.mesh.material as MeshStandardMaterial & {
         userData?: { waterShader?: GrassShader };
       };
@@ -1824,18 +1814,14 @@ export class WorldRenderer {
   }
 
   private updateWaterInteractions(frame: FrameState, elapsed: number, mapLookdown: boolean) {
-    for (let index = this.waterRipples.length - 1; index >= 0; index -= 1) {
-      if (elapsed - this.waterRipples[index].startTime > WATER_RIPPLE_LIFETIME) {
-        this.waterRipples.splice(index, 1);
-      }
-    }
+    this.waterSystem.beginFrame(elapsed);
 
     if (mapLookdown) {
       return;
     }
 
     const playerSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
-    this.emitWaterRippleForActor(
+    this.waterSystem.emitRippleForActor(
       "mossu",
       frame.player.position,
       playerSpeed,
@@ -1845,14 +1831,11 @@ export class WorldRenderer {
 
     this.ambientBlobs.forEach((blob) => {
       if (!blob.recruited || (blob.waterReaction !== "splash" && blob.waterReaction !== "float")) {
-        const state = this.waterRippleActorStates.get(blob.id);
-        if (state) {
-          state.inWater = false;
-        }
+        this.waterSystem.markActorDry(`karu-${blob.id}`);
         return;
       }
 
-      this.emitWaterRippleForActor(
+      this.waterSystem.emitRippleForActor(
         `karu-${blob.id}`,
         blob.group.position,
         blob.velocity.length(),
@@ -1860,40 +1843,6 @@ export class WorldRenderer {
         blob.waterReaction === "float" ? 0.48 : 0.58,
       );
     });
-  }
-
-  private emitWaterRippleForActor(
-    key: string,
-    position: Vector3,
-    planarSpeed: number,
-    elapsed: number,
-    baseStrength: number,
-  ) {
-    const water = sampleWaterState(position.x, position.z);
-    const inWater = !!water && water.depth > WATER_RIPPLE_MIN_DEPTH;
-    const state = this.waterRippleActorStates.get(key) ?? { inWater: false, lastEmitAt: -999 };
-    const enteredWater = inWater && !state.inWater;
-
-    if (inWater && water) {
-      const speedFactor = MathUtils.clamp(planarSpeed / 9, 0, 1);
-      const depthFactor = water.swimAllowed ? 1 : MathUtils.clamp(water.depth / 1.8, 0.35, 1);
-      const interval = MathUtils.lerp(0.42, 0.16, speedFactor) * (baseStrength < 0.7 ? 1.24 : 1);
-      if ((enteredWater || speedFactor > 0.16) && elapsed - state.lastEmitAt >= interval) {
-        this.waterRipples.push({
-          x: position.x,
-          z: position.z,
-          startTime: elapsed,
-          strength: MathUtils.clamp(baseStrength * (0.48 + speedFactor * 0.52) * depthFactor, 0.22, 1.18),
-        });
-        state.lastEmitAt = elapsed;
-        if (this.waterRipples.length > WATER_RIPPLE_LIMIT) {
-          this.waterRipples.splice(0, this.waterRipples.length - WATER_RIPPLE_LIMIT);
-        }
-      }
-    }
-
-    state.inWater = inWater;
-    this.waterRippleActorStates.set(key, state);
   }
 
   private updateValleyMist(elapsed: number) {
@@ -1911,9 +1860,8 @@ export class WorldRenderer {
   }
 
   private updateWater(elapsed: number, mapLookdown: boolean) {
-    this.waterControllers.forEach((controller) => {
-      controller.update(elapsed, this.waterRipples, mapLookdown);
-    });
+    this.waterSystem.setDepthDebugEnabled(this.waterDepthDebug);
+    this.waterSystem.update(elapsed, mapLookdown);
   }
 
   private updateClouds(elapsed: number) {

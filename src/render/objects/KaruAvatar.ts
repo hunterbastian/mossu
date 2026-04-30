@@ -1,7 +1,6 @@
 import {
   CanvasTexture,
   Group,
-  IcosahedronGeometry,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -109,7 +108,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
     emissiveIntensity: karuArt.body.emissiveIntensity,
     roughness: karuArt.body.roughness,
     metalness: 0,
-    flatShading: true,
+    flatShading: false,
   });
   const fluffMaterial = new MeshStandardMaterial({
     color: karuArt.fluff.color,
@@ -120,7 +119,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
     emissiveIntensity: karuArt.fluff.emissiveIntensity,
     roughness: karuArt.fluff.roughness,
     metalness: 0,
-    flatShading: true,
+    flatShading: false,
   });
   const deepFluffMaterial = new MeshStandardMaterial({
     color: karuArt.deepFluff.color,
@@ -131,7 +130,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
     emissiveIntensity: karuArt.deepFluff.emissiveIntensity,
     roughness: karuArt.deepFluff.roughness,
     metalness: 0,
-    flatShading: true,
+    flatShading: false,
   });
   const glowMaterial = new MeshBasicMaterial({
     color: karuArt.glow.color,
@@ -146,7 +145,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
     bumpScale: materialArt.karuBumpSoft,
     roughness: karuArt.foot.roughness,
     metalness: 0,
-    flatShading: true,
+    flatShading: false,
   });
   const cheekMaterial = new MeshStandardMaterial({
     color: karuArt.cheek.color,
@@ -154,14 +153,14 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
     emissiveIntensity: karuArt.cheek.emissiveIntensity,
     roughness: 1,
     metalness: 0,
-    flatShading: true,
+    flatShading: false,
   });
   const mouthMaterial = new MeshBasicMaterial({ color: karuArt.mouth });
   const eyeMaterial = new MeshStandardMaterial({
     color: karuArt.eye,
     roughness: materialArt.characterEyeRoughness,
     metalness: 0,
-    flatShading: true,
+    flatShading: false,
   });
   const eyeHighlightMaterial = new MeshBasicMaterial({
     color: karuArt.eyeHighlight,
@@ -169,12 +168,12 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
 
   group.add(root);
 
-  const body = new Mesh(new IcosahedronGeometry(0.58 * scale, 2), bodyMaterial);
+  const body = new Mesh(new SphereGeometry(0.58 * scale, 22, 16), bodyMaterial);
   body.scale.set(1.18, 1.02, 1.12);
   body.position.y = 0.62 * scale;
   root.add(body);
 
-  const glow = new Mesh(new SphereGeometry(0.59 * scale, 9, 7), glowMaterial);
+  const glow = new Mesh(new SphereGeometry(0.59 * scale, 16, 12), glowMaterial);
   glow.scale.set(1.22, 1.1, 1.2);
   glow.position.y = 0.62 * scale;
   root.add(glow);
@@ -192,7 +191,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
     { x: 0.26, y: 0.43, z: 0.38, sx: 0.19, sy: 0.12, sz: 0.14, material: fluffMaterial },
     { x: 0, y: 0.5, z: -0.82, sx: 0.16, sy: 0.16, sz: 0.2, material: deepFluffMaterial },
   ].forEach(({ x, y, z, sx, sy, sz, material }) => {
-    const puff = new Mesh(new IcosahedronGeometry(0.5 * scale, 1), material);
+    const puff = new Mesh(new SphereGeometry(0.5 * scale, 14, 10), material);
     puff.position.set(x * scale, y * scale, z * scale);
     puff.scale.set(sx * scale, sy * scale, sz * scale);
     puff.userData.baseScale = { x: sx * scale, y: sy * scale, z: sz * scale };
@@ -204,11 +203,11 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
   face.position.set(0, 0.73 * scale, 0.56 * scale);
   root.add(face);
 
-  const leftEye = new Mesh(new SphereGeometry(0.115 * scale, 9, 7), eyeMaterial);
+  const leftEye = new Mesh(new SphereGeometry(0.115 * scale, 14, 10), eyeMaterial);
   leftEye.scale.set(0.72, 1.48, 0.28);
   leftEye.position.set(-0.2 * scale, 0.07 * scale, 0.045 * scale);
   face.add(leftEye);
-  const leftEyeHighlight = new Mesh(new SphereGeometry(0.02 * scale, 6, 5), eyeHighlightMaterial);
+  const leftEyeHighlight = new Mesh(new SphereGeometry(0.02 * scale, 8, 6), eyeHighlightMaterial);
   leftEyeHighlight.scale.set(0.62, 0.86, 0.28);
   leftEyeHighlight.position.set(-0.02 * scale, 0.05 * scale, 0.042 * scale);
   leftEye.add(leftEyeHighlight);
@@ -217,11 +216,11 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
   rightEye.position.x = 0.19 * scale;
   face.add(rightEye);
 
-  const mouth = new Mesh(new SphereGeometry(0.018 * scale, 6, 4), mouthMaterial);
+  const mouth = new Mesh(new SphereGeometry(0.018 * scale, 8, 6), mouthMaterial);
   mouth.scale.set(1.08, 0.28, 0.18);
   mouth.position.set(0, -0.13 * scale, 0.045 * scale);
   face.add(mouth);
-  const leftCheek = new Mesh(new SphereGeometry(0.06 * scale, 6, 5), cheekMaterial);
+  const leftCheek = new Mesh(new SphereGeometry(0.06 * scale, 10, 8), cheekMaterial);
   leftCheek.scale.set(1.45, 0.62, 0.18);
   leftCheek.position.set(-0.33 * scale, -0.07 * scale, 0.035 * scale);
   face.add(leftCheek);
@@ -235,7 +234,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
     { x: -0.25, z: -0.32, front: 0 },
     { x: 0.25, z: -0.32, front: 0 },
   ].map((spec) => {
-    const foot = new Mesh(new IcosahedronGeometry(0.102 * scale, 1), footMaterial);
+    const foot = new Mesh(new SphereGeometry(0.102 * scale, 10, 8), footMaterial);
     foot.scale.set(spec.front ? 1.18 : 1, 0.42, spec.front ? 0.82 : 0.74);
     foot.position.set(spec.x * scale, 0.09 * scale, spec.z * scale);
     foot.userData.homeX = spec.x;
@@ -245,7 +244,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
     return foot;
   }) as unknown as [Mesh, Mesh, Mesh, Mesh];
 
-  const tail = new Mesh(new IcosahedronGeometry(0.2 * scale, 1), fluffMaterial);
+  const tail = new Mesh(new SphereGeometry(0.2 * scale, 12, 8), fluffMaterial);
   tail.scale.set(0.54, 0.46, 0.86);
   tail.position.set(0, 0.46 * scale, -0.72 * scale);
   root.add(tail);
