@@ -23,6 +23,7 @@ import {
   movementYawToTrailingCameraYaw,
   shouldAutoRecenterForMovement,
 } from "./cameraYaw";
+import { easeInOutSine, easeOutCubic } from "../motionCurves";
 
 CameraControls.install({ THREE });
 (BufferGeometry.prototype as BufferGeometry & { computeBoundsTree?: typeof computeBoundsTree }).computeBoundsTree =
@@ -47,10 +48,17 @@ const OPENING_HANDOFF_START = 0.72;
 const MIN_POLAR_ANGLE = 0.58;
 const MAX_POLAR_ANGLE = 2.28;
 const MANUAL_LOOK_COOLDOWN_SECONDS = 3.4;
+const IDLE_ORBIT_YAW_SPEED = 0.16;
+const IDLE_ORBIT_YAW_DAMPING = 2.4;
+const IDLE_ORBIT_DISTANCE_BOOST = 3.8;
+const IDLE_ORBIT_POLAR_OFFSET = -0.035;
+const IDLE_ORBIT_BLEND_IN_DAMPING = 1.45;
+const IDLE_ORBIT_BLEND_OUT_DAMPING = 6.8;
 const MAP_ZOOM_MIN = 0.72;
 const MAP_ZOOM_MAX = 1.2;
 const MAP_ZOOM_WHEEL_SENSITIVITY = 0.00085;
 const MAP_KEYBOARD_PAN_SPEED = 118;
+const CINEMATIC_SHOULDER_DRIFT = 0.24;
 
 type CameraProfileName = "walk" | "roll" | "air" | "swim" | "ridge" | "summit" | "void";
 
@@ -97,12 +105,12 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
     speedPolarLift: 0.008,
     fov: 48,
     shoulder: 0.14,
-    yawResponsiveness: 0.54,
-    focusDamping: 4.4,
-    distanceDamping: 3.8,
-    profileDamping: 3.1,
-    positionDamping: 5.8,
-    targetDamping: 4.8,
+    yawResponsiveness: 0.42,
+    focusDamping: 3.8,
+    distanceDamping: 3.2,
+    profileDamping: 2.7,
+    positionDamping: 4.7,
+    targetDamping: 3.9,
   },
   roll: {
     name: "roll",
@@ -118,12 +126,12 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
     speedPolarLift: 0.025,
     fov: 54,
     shoulder: 0.16,
-    yawResponsiveness: 0.74,
-    focusDamping: 4.7,
-    distanceDamping: 3.9,
-    profileDamping: 3.4,
-    positionDamping: 5.9,
-    targetDamping: 4.8,
+    yawResponsiveness: 0.6,
+    focusDamping: 4.05,
+    distanceDamping: 3.15,
+    profileDamping: 3.0,
+    positionDamping: 4.9,
+    targetDamping: 3.95,
   },
   air: {
     name: "air",
@@ -139,12 +147,12 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
     speedPolarLift: 0,
     fov: 52,
     shoulder: 0.18,
-    yawResponsiveness: 0.42,
-    focusDamping: 4,
-    distanceDamping: 3.3,
-    profileDamping: 2.8,
-    positionDamping: 5.4,
-    targetDamping: 4.3,
+    yawResponsiveness: 0.34,
+    focusDamping: 3.45,
+    distanceDamping: 2.85,
+    profileDamping: 2.45,
+    positionDamping: 4.35,
+    targetDamping: 3.5,
   },
   swim: {
     name: "swim",
@@ -160,12 +168,12 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
     speedPolarLift: 0.02,
     fov: 50,
     shoulder: 0.1,
-    yawResponsiveness: 0.58,
-    focusDamping: 4.1,
-    distanceDamping: 3.65,
-    profileDamping: 3.35,
-    positionDamping: 5.45,
-    targetDamping: 4.35,
+    yawResponsiveness: 0.48,
+    focusDamping: 3.7,
+    distanceDamping: 3.05,
+    profileDamping: 2.95,
+    positionDamping: 4.5,
+    targetDamping: 3.65,
   },
   ridge: {
     name: "ridge",
@@ -181,12 +189,12 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
     speedPolarLift: 0.01,
     fov: 49,
     shoulder: 0.35,
-    yawResponsiveness: 0.48,
-    focusDamping: 3.9,
-    distanceDamping: 3.2,
-    profileDamping: 2.7,
-    positionDamping: 4.8,
-    targetDamping: 3.9,
+    yawResponsiveness: 0.36,
+    focusDamping: 3.25,
+    distanceDamping: 2.7,
+    profileDamping: 2.35,
+    positionDamping: 3.85,
+    targetDamping: 3.05,
   },
   summit: {
     name: "summit",
@@ -202,12 +210,12 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
     speedPolarLift: 0,
     fov: 49,
     shoulder: 0.28,
-    yawResponsiveness: 0.38,
-    focusDamping: 3.4,
-    distanceDamping: 2.8,
-    profileDamping: 2.5,
-    positionDamping: 4.3,
-    targetDamping: 3.4,
+    yawResponsiveness: 0.3,
+    focusDamping: 2.9,
+    distanceDamping: 2.35,
+    profileDamping: 2.15,
+    positionDamping: 3.45,
+    targetDamping: 2.75,
   },
   void: {
     name: "void",
@@ -290,9 +298,19 @@ export class FollowCamera {
   private openingSequenceProgress: number | null = null;
   private initialized = false;
   private manualLookCooldown = 0;
+  private idleOrbitRequested = false;
+  private idleOrbitBlend = 0;
+  private idleOrbitYaw = 0;
+  private controlActivityPending = false;
   private distanceBias = 0;
   private lastProfileName: CameraProfileName = "walk";
   private polarFeedbackKick = 0;
+  private distanceFeedbackKick = 0;
+  private shoulderFeedbackKick = 0;
+  private landingSettle = 0;
+  private rollSettle = 0;
+  private cinematicTime = 0;
+  private previousRolling = false;
   private activeProfileName: CameraProfileName = "walk";
   private autoRecenterEligible = false;
   private currentDistance = DEFAULT_DISTANCE;
@@ -341,6 +359,8 @@ export class FollowCamera {
 
   private readonly handleControl = () => {
     if (this.viewMode === "third_person") {
+      this.controlActivityPending = true;
+      this.idleOrbitRequested = false;
       this.manualLookCooldown = MANUAL_LOOK_COOLDOWN_SECONDS;
     }
   };
@@ -371,6 +391,7 @@ export class FollowCamera {
   }
 
   update(player: PlayerState, dt: number) {
+    this.cinematicTime += dt;
     const terrainLift = MathUtils.clamp((player.position.z + 160) / 360, 0, 1);
     const speed = Math.hypot(player.velocity.x, player.velocity.z);
     const speedBoost = MathUtils.clamp(speed / 24, 0, 1);
@@ -381,11 +402,47 @@ export class FollowCamera {
       this.lastProfileName = profile.name;
     }
     this.manualLookCooldown = Math.max(0, this.manualLookCooldown - dt);
+    const idleOrbitAllowed =
+      this.idleOrbitRequested &&
+      this.viewMode === "third_person" &&
+      this.openingSequenceProgress === null &&
+      !player.fallingToVoid;
+    this.idleOrbitBlend = MathUtils.damp(
+      this.idleOrbitBlend,
+      idleOrbitAllowed ? 1 : 0,
+      idleOrbitAllowed ? IDLE_ORBIT_BLEND_IN_DAMPING : IDLE_ORBIT_BLEND_OUT_DAMPING,
+      dt,
+    );
+    if (idleOrbitAllowed) {
+      this.idleOrbitYaw += IDLE_ORBIT_YAW_SPEED * dt;
+    }
     this.polarFeedbackKick = MathUtils.damp(this.polarFeedbackKick, 0, 11, dt);
+    this.distanceFeedbackKick = MathUtils.damp(this.distanceFeedbackKick, 0, 5.8, dt);
+    this.shoulderFeedbackKick = MathUtils.damp(this.shoulderFeedbackKick, 0, 6.6, dt);
+    this.landingSettle = MathUtils.damp(this.landingSettle, 0, 5.8, dt);
+    this.rollSettle = MathUtils.damp(this.rollSettle, 0, 4.2, dt);
+    if (player.justLanded) {
+      this.landingSettle = Math.max(
+        this.landingSettle,
+        MathUtils.clamp(0.18 + player.landingImpact * 0.18, 0.18, 0.42),
+      );
+    }
+    if (player.rolling && !this.previousRolling) {
+      this.rollSettle = Math.max(this.rollSettle, 0.34);
+    }
 
     const focusHeightTarget = profile.focusHeight + terrainLift * profile.terrainFocusLift;
     const lookAheadTarget = profile.lookAheadBase + speedBoost * profile.lookAheadSpeed;
-    const shoulderTarget = profile.shoulder * MathUtils.lerp(0.45, 1, speedBoost);
+    const shoulderDrift =
+      Math.sin(this.cinematicTime * 0.34 + terrainLift * 0.8) *
+      CINEMATIC_SHOULDER_DRIFT *
+      (1 - speedBoost * 0.52) *
+      (profile.name === "void" ? 0 : 1);
+    const shoulderTarget =
+      profile.shoulder * MathUtils.lerp(0.45, 1, speedBoost) +
+      shoulderDrift +
+      this.shoulderFeedbackKick +
+      this.rollSettle * 0.28;
     this.currentFocusHeight = MathUtils.damp(this.currentFocusHeight, focusHeightTarget, profile.profileDamping, dt);
     this.currentLookAhead = MathUtils.damp(this.currentLookAhead, lookAheadTarget, profile.profileDamping, dt);
     this.currentShoulder = MathUtils.damp(this.currentShoulder, shoulderTarget, profile.profileDamping, dt);
@@ -422,8 +479,18 @@ export class FollowCamera {
         profile.distance
         + terrainLift * profile.terrainDistanceBoost
         + speedBoost * profile.speedDistanceBoost
-        + this.distanceBias;
-      this.currentDistance = MathUtils.damp(this.currentDistance, targetDistance, profile.distanceDamping, dt);
+        + this.distanceBias
+        + this.distanceFeedbackKick
+        + this.rollSettle * 3.8
+        + this.landingSettle * 1.35
+        + IDLE_ORBIT_DISTANCE_BOOST * this.idleOrbitBlend;
+      const easedOrbitBlend = easeInOutSine(this.idleOrbitBlend);
+      this.currentDistance = MathUtils.damp(
+        this.currentDistance,
+        targetDistance - IDLE_ORBIT_DISTANCE_BOOST * this.idleOrbitBlend + IDLE_ORBIT_DISTANCE_BOOST * easedOrbitBlend,
+        profile.distanceDamping,
+        dt,
+      );
       controls._targetEnd.copy(this.focus);
       controls._sphericalEnd.radius = MathUtils.clamp(
         this.currentDistance,
@@ -436,7 +503,10 @@ export class FollowCamera {
           profile.polar
           + terrainLift * profile.terrainPolarLift
           + speedBoost * profile.speedPolarLift
-          + this.polarFeedbackKick;
+          + this.polarFeedbackKick
+          - this.landingSettle * 0.055
+          + this.rollSettle * 0.018
+          + IDLE_ORBIT_POLAR_OFFSET * easeInOutSine(this.idleOrbitBlend);
         this.currentPolar = MathUtils.damp(this.currentPolar, targetPolar, profile.profileDamping, dt);
         controls._sphericalEnd.phi = MathUtils.clamp(
           this.currentPolar,
@@ -454,7 +524,13 @@ export class FollowCamera {
       );
 
       if (this.manualLookCooldown <= 0 && !player.fallingToVoid) {
-        if (player.grounded && this.autoRecenterEligible && profile.yawResponsiveness > 0) {
+        if (this.idleOrbitBlend > 0.02) {
+          const currentYaw = controls._sphericalEnd.theta;
+          const delta = Math.atan2(Math.sin(this.idleOrbitYaw - currentYaw), Math.cos(this.idleOrbitYaw - currentYaw));
+          controls._sphericalEnd.theta =
+            currentYaw + delta * (1 - Math.exp(-dt * IDLE_ORBIT_YAW_DAMPING * this.idleOrbitBlend));
+          this.autoRecenterEligible = false;
+        } else if (player.grounded && this.autoRecenterEligible && profile.yawResponsiveness > 0) {
           const desiredYaw = Math.atan2(player.velocity.x, player.velocity.z);
           const desiredCameraYaw = movementYawToTrailingCameraYaw(desiredYaw);
           const currentYaw = controls._sphericalEnd.theta;
@@ -476,8 +552,8 @@ export class FollowCamera {
 
     if (this.openingSequenceProgress !== null && this.viewMode === "third_person") {
       const introT = MathUtils.clamp(this.openingSequenceProgress, 0, 1);
-      const vistaT = MathUtils.smoothstep(introT, 0, 1);
-      const handoffT = MathUtils.smoothstep(introT, OPENING_HANDOFF_START, 1);
+      const vistaT = easeOutCubic(MathUtils.smoothstep(introT, 0, 1));
+      const handoffT = easeInOutSine(MathUtils.smoothstep(introT, OPENING_HANDOFF_START, 1));
       this.openingSequenceTarget
         .copy(startingPosition)
         .addScaledVector(START_DIRECTION, MathUtils.lerp(10, 72, vistaT))
@@ -516,7 +592,7 @@ export class FollowCamera {
 
     const targetBlend = this.viewMode === "map_lookdown" ? 1 : 0;
     this.mapBlend = MathUtils.damp(this.mapBlend, targetBlend, 10, dt);
-    const easedBlend = this.mapBlend * this.mapBlend * (3 - 2 * this.mapBlend);
+    const easedBlend = easeInOutSine(this.mapBlend);
 
     this.finalPosition.lerpVectors(this.gameplayPosition, this.mapPosition, easedBlend);
     this.finalTarget.lerpVectors(this.gameplayTarget, this.mapTarget, easedBlend);
@@ -537,6 +613,7 @@ export class FollowCamera {
     this.currentUp.lerpVectors(this.gameplayUp, this.mapUp, easedBlend).normalize();
     this.camera.up.copy(this.currentUp);
     this.camera.lookAt(this.currentTarget);
+    this.previousRolling = player.rolling;
   }
 
   getYaw() {
@@ -589,6 +666,8 @@ export class FollowCamera {
         z: Number(this.mapPanOffset.z.toFixed(2)),
       },
       pointerLocked: this.pointerLocked,
+      idleOrbitActive: this.idleOrbitRequested,
+      idleOrbitBlend: Number(this.idleOrbitBlend.toFixed(3)),
       distance: Number(this.currentDistance.toFixed(2)),
       polar: Number(this.currentPolar.toFixed(3)),
       fov: Number(this.currentFov.toFixed(1)),
@@ -610,8 +689,29 @@ export class FollowCamera {
   setViewMode(viewMode: ViewMode) {
     this.viewMode = viewMode;
     if (viewMode === "map_lookdown") {
+      this.setIdleOrbitActive(false);
       this.releasePointerLock();
     }
+  }
+
+  setIdleOrbitActive(active: boolean) {
+    if (active === this.idleOrbitRequested) {
+      return;
+    }
+
+    this.idleOrbitRequested = active;
+    if (active) {
+      const controls = this.controls as CameraControlsInternals;
+      this.idleOrbitYaw = controls._sphericalEnd.theta;
+    } else {
+      this.idleOrbitBlend = 0;
+    }
+  }
+
+  consumeControlActivity() {
+    const active = this.controlActivityPending;
+    this.controlActivityPending = false;
+    return active;
   }
 
   adjustMapZoomFromWheel(deltaY: number) {
@@ -631,6 +731,13 @@ export class FollowCamera {
   /** Brief polar nudge for landing / interact / zone feedback (decays automatically). */
   kickPolar(radians: number) {
     this.polarFeedbackKick += radians;
+  }
+
+  /** Small cinematic nudges for reveals without taking control away from the player. */
+  kickCinematic(options: { polar?: number; distance?: number; shoulder?: number }) {
+    this.polarFeedbackKick += options.polar ?? 0;
+    this.distanceFeedbackKick += options.distance ?? 0;
+    this.shoulderFeedbackKick += options.shoulder ?? 0;
   }
 
   setOpeningSequenceProgress(progress: number | null) {
@@ -759,6 +866,8 @@ export class FollowCamera {
         return;
       }
 
+      this.controlActivityPending = true;
+      this.setIdleOrbitActive(false);
       this.controls.mouseButtons.left = CameraControls.ACTION.ROTATE;
       const originalRequestPointerLock = this.domElement.requestPointerLock;
       this.domElement.requestPointerLock = ((...args: Parameters<HTMLElement["requestPointerLock"]>) => {
@@ -790,6 +899,8 @@ export class FollowCamera {
       }
 
       event.preventDefault();
+      this.controlActivityPending = true;
+      this.idleOrbitRequested = false;
       this.manualLookCooldown = 1.2;
       this.distanceBias = MathUtils.clamp(this.distanceBias + event.deltaY * 0.012, -6.5, 8);
     };

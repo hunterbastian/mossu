@@ -47,6 +47,7 @@ export interface HudShellUpdate {
     recruitedCount: number;
     nearestRecruitableDistance: number | null;
     recruitedThisFrame: number;
+    firstEncounterActive: boolean;
     rollingCount: number;
     mossuCollisionCount: number;
     dominantMood: "curious" | "shy" | "brave" | "sleepy";
@@ -236,6 +237,16 @@ export class HudShell {
       fauna.nearestRecruitableDistance <= 14.5;
     const shouldShowControlsPanel = pauseMenuOpen || characterScreenOpen;
     const overlayOpen = isMapMode || pauseMenuOpen || characterScreenOpen;
+    const cinematicFocus =
+      !overlayOpen &&
+      (
+        frame.player.rolling ||
+        frame.player.floating ||
+        latestCollection !== undefined ||
+        latestGatheredGood !== undefined ||
+        fauna.recruitedThisFrame > 0 ||
+        fauna.firstEncounterActive
+      );
 
     this.statusValues.zone.textContent = this.prettyZone(frame.currentZone);
     this.statusValues.landmark.textContent = frame.currentLandmark;
@@ -246,6 +257,7 @@ export class HudShell {
     this.element.classList.toggle("hud--map", isMapMode);
     this.element.classList.toggle("hud--pause", pauseMenuOpen);
     this.element.classList.toggle("hud--character-screen", characterScreenOpen);
+    this.element.classList.toggle("hud--cinematic-focus", cinematicFocus);
     this.pauseMenu.classList.toggle("pause-menu--open", pauseMenuOpen);
     this.characterScreen.classList.toggle("character-screen--open", characterScreenOpen);
     this.controlsPanel.classList.toggle("controls-panel--visible", shouldShowControlsPanel);
@@ -302,6 +314,7 @@ export class HudShell {
       latestCollection !== undefined ||
       nearbyForageable !== null ||
       fauna.recruitedThisFrame > 0 ||
+      fauna.firstEncounterActive ||
       fauna.rollingCount > 0 ||
       (fauna.callHeardActive && fauna.recruitedCount > 0) ||
       (fauna.regroupActive && fauna.recruitedCount > 0) ||
@@ -323,6 +336,8 @@ export class HudShell {
       this.statusValues.prompt.innerHTML = `<strong>Forage</strong> Press E to tuck ${nearbyForageable.title} into Mossu's pouch.`;
     } else if (fauna.recruitedThisFrame > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.recruitedThisFrame} ${faunaName} joined Mossu's trail.</span>`;
+    } else if (fauna.firstEncounterActive) {
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> A Karu is watching from the grass. Ease closer, then press E.</span>`;
     } else if (fauna.rollingCount > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.rollingCount} rolling with Mossu.</span>`;
     } else if (fauna.callHeardActive && fauna.recruitedCount > 0) {

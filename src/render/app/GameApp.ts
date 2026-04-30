@@ -45,6 +45,7 @@ const RETRO_TEXTURE_VIGNETTE_STRENGTH = 0.025;
 const RETRO_TEXTURE_QUANTIZE_STRENGTH = 0.035;
 const OPENING_SEQUENCE_SECONDS = 5.4;
 const OPENING_SEQUENCE_SKIP_AFTER_SECONDS = 1.05;
+const IDLE_CAMERA_ORBIT_DELAY_SECONDS = 6;
 const PERF_HUD_SAMPLE_LIMIT = 240;
 const PERF_HUD_UPDATE_MS = 250;
 const PERF_CAPTURE_FLASH_MS = 2200;
@@ -92,6 +93,25 @@ const PAUSED_INPUT: InputSnapshot = {
   mapFocusNextPressed: false,
   escapePressed: false,
 };
+
+function hasControlActivity(input: InputSnapshot) {
+  return (
+    Math.abs(input.moveX) > 0.01 ||
+    Math.abs(input.moveY) > 0.01 ||
+    input.jumpHeld ||
+    input.jumpPressed ||
+    input.abilityHeld ||
+    input.abilityPressed ||
+    input.interactHeld ||
+    input.interactPressed ||
+    input.rollHeld ||
+    input.inventoryTogglePressed ||
+    input.mapTogglePressed ||
+    input.mapViewResetPressed ||
+    input.mapFocusNextPressed ||
+    input.escapePressed
+  );
+}
 
 function isLowQuality(params: URLSearchParams): boolean {
   const q = params.get("quality")?.toLowerCase();
@@ -293,7 +313,9 @@ export class GameApp {
   private perfCaptureLatest: { capturedAt: string; route: string; performance: ReturnType<GameApp["getPerformanceSnapshot"]> } | null = null;
   private perfCaptureFlashUntil = 0;
   private waterDepthDebugEnabled = false;
+  private idleControlSeconds = 0;
   private faunaRegroupReady = true;
+  private firstKaruEncounterSeen = false;
   private mapFocusedRouteIndex = -1;
   private mapDragPointerId: number | null = null;
   private mapDragX = 0;
@@ -611,6 +633,7 @@ export class GameApp {
           swimming: frame.player.swimming,
           waterMode: frame.player.waterMode,
         },
+        camera: this.followCamera.getDebugState(),
         zone: frame.currentZone,
         landmark: frame.currentLandmark,
       });
@@ -701,6 +724,7 @@ export class GameApp {
             ? null
             : Number(faunaStats.nearestRecruitableDistance.toFixed(1)),
         recruitedThisFrame: faunaStats.recruitedThisFrame,
+        firstEncounterActive: faunaStats.firstEncounterActive,
         rollingCount: faunaStats.rollingCount,
         mossuCollisionCount: faunaStats.mossuCollisionCount,
         dominantMood: faunaStats.dominantMood,
@@ -793,21 +817,26 @@ export class GameApp {
       const frame = this.state.frame;
       if (preZoneForFeedback !== frame.currentZone) {
         this.gameplayFeedback.playZoneChange();
-        this.followCamera.kickPolar(0.022);
+        this.followCamera.kickCinematic({ polar: 0.022, distance: 0.75, shoulder: 0.08 });
       }
       if (preSwimForFeedback !== frame.player.swimming) {
         this.gameplayFeedback.playSwimSurface(frame.player.swimming);
       }
       if (frame.player.justLanded) {
         this.gameplayFeedback.playLand(frame.player.landingImpact);
-        this.followCamera.kickPolar(-0.055 * Math.min(1.2, frame.player.landingImpact));
+        this.followCamera.kickCinematic({
+          polar: -0.055 * Math.min(1.2, frame.player.landingImpact),
+          distance: 0.75 * Math.min(1.2, frame.player.landingImpact),
+          shoulder: 0.08 * Math.min(1.2, frame.player.landingImpact),
+        });
       }
       if (frame.lastCatalogedLandmarkId || frame.lastGatheredForageableId) {
         this.gameplayFeedback.playInteract();
-        this.followCamera.kickPolar(0.018);
+        this.followCamera.kickCinematic({ polar: 0.018, distance: 0.48, shoulder: -0.05 });
       }
     }
 
+    this.updateIdleCameraOrbit(input, dt);
     this.updateMovementAudio(dt);
     this.updateWaterAudio(dt);
 
@@ -828,6 +857,21 @@ export class GameApp {
       faunaRegroupPressed,
       this.followCamera.camera,
     );
+    const faunaStats = this.world.getFaunaStats();
+    if (
+      faunaStats.firstEncounterActive &&
+      !this.firstKaruEncounterSeen &&
+      !this.titleScreenOpen &&
+      !this.openingSequenceActive &&
+      !this.pauseMenuOpen &&
+      !this.characterScreenOpen &&
+      this.viewMode === "third_person"
+    ) {
+      this.firstKaruEncounterSeen = true;
+      this.followCamera.kickCinematic({ polar: -0.026, distance: 2.4, shoulder: 0.34 });
+      this.hud.showFlavorPing("A Karu pauses in the grass.");
+      this.syncHud();
+    }
     this.characterPreview.update(dt, this.characterScreenOpen);
     this.syncHudForFrame(dt);
     if (renderFrame) {
@@ -945,8 +989,7 @@ export class GameApp {
       faunaStats.recruitedThisFrame > 0 ||
       faunaStats.rollingCount > 0 ||
       faunaStats.regroupActive ||
-      faunaStats.callHeardActive ||
-      (faunaStats.nearestRecruitableDistance !== null && faunaStats.nearestRecruitableDistance <= 14.5);
+      faunaStats.callHeardActive;
 
     this.hudUpdateAccumulator += dt;
     if (!overlayActive && !contextualFeedbackActive && this.hudUpdateAccumulator < NORMAL_HUD_UPDATE_INTERVAL) {
@@ -1030,6 +1073,7 @@ export class GameApp {
       `distance ${camera.distance}  polar ${camera.polar} (${camera.minPolar}-${camera.maxPolar})  up ${camera.upLookLimitDegrees}deg`,
       `fov ${camera.fov}  shoulder ${camera.shoulder}  lookAhead ${camera.lookAhead}`,
       `focusY ${camera.focusHeight}  recenter ${camera.recenterCooldown}s  yaw ${camera.yawResponsiveness}  locked ${camera.pointerLocked}`,
+      `idle orbit ${camera.idleOrbitActive ? "on" : "off"}  blend ${camera.idleOrbitBlend}  idle ${this.idleControlSeconds.toFixed(1)}s`,
       `player x ${player.position.x.toFixed(1)} y ${player.position.y.toFixed(1)} z ${player.position.z.toFixed(1)}`,
       `river ${riverEdge.zone}  surface ${riverEdge.surfaceMask.toFixed(2)}  wet ${riverEdge.wetness.toFixed(2)}  damp ${riverEdge.dampBankMask.toFixed(2)}  nook ${riverEdge.nookMask.toFixed(2)}  depth ${riverEdge.waterDepth.toFixed(2)}`,
     ].join("\n");
@@ -1139,6 +1183,28 @@ export class GameApp {
     const sorted = [...this.perfFrameSamples].sort((a, b) => a - b);
     const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentile) - 1));
     return sorted[index];
+  }
+
+  private updateIdleCameraOrbit(input: InputSnapshot, dt: number) {
+    const canIdleOrbit =
+      !this.titleScreenOpen &&
+      !this.openingSequenceActive &&
+      !this.pauseMenuOpen &&
+      !this.characterScreenOpen &&
+      this.viewMode === "third_person";
+    const controlActive = hasControlActivity(input) || this.followCamera.consumeControlActivity();
+
+    if (!canIdleOrbit || controlActive || dt <= 0) {
+      this.idleControlSeconds = 0;
+      this.followCamera.setIdleOrbitActive(false);
+      return;
+    }
+
+    this.idleControlSeconds = Math.min(
+      IDLE_CAMERA_ORBIT_DELAY_SECONDS + 1,
+      this.idleControlSeconds + dt,
+    );
+    this.followCamera.setIdleOrbitActive(this.idleControlSeconds >= IDLE_CAMERA_ORBIT_DELAY_SECONDS);
   }
 
   private capturePerfSnapshot() {
@@ -1339,6 +1405,7 @@ export class GameApp {
     this.mapDragPointerId = null;
     if (this.viewMode !== "third_person") {
       this.setViewMode("third_person");
+      this.followCamera.kickCinematic({ polar: 0.012, distance: 1.1, shoulder: -0.08 });
     }
   }
 
@@ -1395,62 +1462,29 @@ export class GameApp {
     titleScreen.innerHTML = `
       <div class="title-screen__sky" aria-hidden="true"></div>
       <div class="title-screen__shade" aria-hidden="true"></div>
-      <div class="title-screen__sun" aria-hidden="true"></div>
-      <div class="title-screen__trail" aria-hidden="true"></div>
-      <div class="title-screen__fireflies" aria-hidden="true">
+      <div class="title-screen__bloom" aria-hidden="true"></div>
+      <div class="title-screen__bokeh" aria-hidden="true">
         <span></span>
         <span></span>
         <span></span>
         <span></span>
         <span></span>
-      </div>
-      <div class="title-screen__hills" aria-hidden="true">
-        <span class="title-screen__hill title-screen__hill--back"></span>
-        <span class="title-screen__hill title-screen__hill--mid"></span>
-        <span class="title-screen__hill title-screen__hill--front"></span>
+        <span></span>
       </div>
       <div class="title-screen__menu">
+        <span class="title-screen__glint title-screen__glint--one"></span>
+        <span class="title-screen__glint title-screen__glint--two"></span>
         <div class="title-screen__crest" aria-hidden="true">
           <span></span>
           <span></span>
           <span></span>
         </div>
-        <p class="title-screen__eyebrow">The Meadowlight Isles</p>
         <h1 class="title-screen__logo">Mossu</h1>
-        <p class="title-screen__splash">wake in the meadow, fill the holo binder, and climb toward Moss Crown</p>
-        <button class="title-screen__button" type="button">
-          <span>Begin Quest</span>
-          <small>Enter / Space</small>
-        </button>
-        <div class="title-screen__opening-cards" aria-hidden="true">
-          <span><strong>01</strong> Meadow</span>
-          <span><strong>02</strong> Lake</span>
-          <span><strong>03</strong> Karu</span>
-        </div>
-        <div class="title-screen__tool-flow" aria-label="Workshop flow">
-          <button class="title-screen__tool-step title-screen__tool-step--active title-screen__tool-step--play" type="button">
-            <span>Adventure</span>
-            <small>opening minute</small>
-          </button>
-          <a class="title-screen__tool-step title-screen__tool-step--active" href="?modelViewer=1">
-            <span>Companions</span>
-            <small>Mossu + Karu</small>
-          </a>
-          <span class="title-screen__tool-step title-screen__tool-step--locked" aria-disabled="true">
-            <span>Realm Atlas</span>
-            <small>coming soon</small>
-          </span>
-        </div>
-        <div class="title-screen__starter-row" aria-hidden="true">
-          <span>stamp cards</span>
-          <span>glide</span>
-          <span>befriend Karu</span>
-        </div>
-        <p class="title-screen__note">Tab opens the field guide · M unfolds the realm map</p>
+        <button class="title-screen__button" type="button" aria-label="Begin Mossu"></button>
       </div>
     `;
     titleScreen
-      .querySelectorAll<HTMLButtonElement>(".title-screen__button, .title-screen__tool-step--play")
+      .querySelectorAll<HTMLButtonElement>(".title-screen__button")
       .forEach((button) => {
         button.addEventListener("click", this.startFromTitle);
       });
