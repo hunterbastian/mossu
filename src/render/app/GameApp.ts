@@ -1,22 +1,44 @@
 import {
   ACESFilmicToneMapping,
   Clock,
-  MathUtils,
   Scene,
   SRGBColorSpace,
   Vector2,
-  WebGLRenderer,
 } from "three";
-import type { WebGPURenderer as ThreeWebGpuRenderer } from "three/webgpu";
 import type { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import type { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import type { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { GameState } from "../../simulation/gameState";
 import { InputController, InputSnapshot } from "../../simulation/input";
-import { sampleRiverEdgeState, sampleTerrainHeight, sampleWaterAmbience, sampleWaterState, sampleWindStrength } from "../../simulation/world";
-import type { AbilityId } from "../../simulation/world";
+import { sampleRiverEdgeState, sampleWaterAmbience, sampleWindStrength } from "../../simulation/world";
+import {
+  CoopStressSimulator,
+  getCoopStressRemoteCount,
+  type CoopStressSnapshot,
+} from "../../simulation/coopStress";
 import { ViewMode } from "../../simulation/viewMode";
 import { AmbientWaterAudio } from "./AmbientWaterAudio";
+import {
+  applyDebugPlayerSnapshot,
+  applyDebugSaveSnapshot,
+  resetDebugPlayerMovement,
+  teleportDebugPlayerTo,
+} from "./appDebugReplay";
+import {
+  BLOOM_MIN_PIXEL_RATIO,
+  BLOOM_RADIUS,
+  BLOOM_STRENGTH,
+  BLOOM_THRESHOLD,
+  IDLE_CAMERA_ORBIT_DELAY_SECONDS,
+  NORMAL_HUD_UPDATE_INTERVAL,
+  OPENING_SEQUENCE_SECONDS,
+  OPENING_SEQUENCE_SKIP_AFTER_SECONDS,
+  PAUSED_INPUT,
+  POST_PROCESSING_RESUME_DELAY_SECONDS,
+  hasControlActivity,
+  isLowQuality,
+  type DebugSaveStatePayload,
+} from "./appRuntimeConfig";
 import { CharacterPreview } from "./CharacterPreview";
 import { DebugRouteCameraOptions, FollowCamera } from "./FollowCamera";
 import { HudShell } from "./HudShell";
@@ -24,245 +46,59 @@ import { InterfaceAudio, isButtonLikeUiTarget } from "./InterfaceAudio";
 import { MovementAudio } from "./MovementAudio";
 import { GameplayFeedbackAudio } from "./GameplayFeedbackAudio";
 import { routeLandmarks } from "./worldMap";
-import type { WorldRenderer as WorldRendererType } from "../world/WorldRenderer";
+import type { WorldPerfStats, WorldRenderer as WorldRendererType } from "../world/WorldRenderer";
 import { UnderwaterEffect } from "./UnderwaterEffect";
-
-const QUALITY_SAMPLE_SECONDS = 0.55;
-const QUALITY_MIN_SAMPLE_FRAMES = 12;
-const PIXEL_RATIO_DOWNSHIFT_FRAME_SECONDS = 1 / 60;
-const PIXEL_RATIO_UPSHIFT_FRAME_SECONDS = 1 / 76;
-const PIXEL_RATIO_STEP_DOWN = 0.18;
-const PIXEL_RATIO_STEP_UP = 0.02;
-const NORMAL_HUD_UPDATE_INTERVAL = 1 / 12;
-const BLOOM_STRENGTH = 0.14;
-const BLOOM_RADIUS = 0.48;
-const BLOOM_THRESHOLD = 0.82;
-const BLOOM_MIN_PIXEL_RATIO = 0.74;
-const RETRO_TEXTURE_GRAIN_STRENGTH = 0.008;
-const RETRO_TEXTURE_DITHER_STRENGTH = 0.004;
-const RETRO_TEXTURE_SCANLINE_STRENGTH = 0;
-const RETRO_TEXTURE_VIGNETTE_STRENGTH = 0.025;
-const RETRO_TEXTURE_QUANTIZE_STRENGTH = 0.035;
-const OPENING_SEQUENCE_SECONDS = 5.4;
-const OPENING_SEQUENCE_SKIP_AFTER_SECONDS = 1.05;
-const IDLE_CAMERA_ORBIT_DELAY_SECONDS = 6;
-const POST_PROCESSING_RESUME_DELAY_SECONDS = 0.34;
-const SAFE_RENDER_CLEAR_COLOR = "#dff7ff";
-const PERF_HUD_SAMPLE_LIMIT = 240;
-const PERF_HUD_UPDATE_MS = 250;
-const PERF_CAPTURE_FLASH_MS = 2200;
-
-type RequestedRendererBackend = "webgl" | "webgpu" | "auto";
-type ActiveRendererBackend = "webgl" | "webgpu" | "webgpu-webgl2";
-type GameRenderer = WebGLRenderer | ThreeWebGpuRenderer;
-type RenderPath = "direct" | "composer";
-
-type DebugSaveStatePayload = {
-  player?: {
-    x?: number;
-    y?: number;
-    z?: number;
-    heading?: number;
-  };
-  save?: {
-    unlockedAbilities?: string[];
-    catalogedLandmarkIds?: string[];
-    gatheredForageableIds?: string[];
-  };
-};
-
-type RendererBundle = {
-  renderer: GameRenderer;
-  requestedBackend: RequestedRendererBackend;
-  activeBackend: ActiveRendererBackend;
-  webGpuAvailable: boolean;
-  fallbackReason: string | null;
-};
-
-const PAUSED_INPUT: InputSnapshot = {
-  moveX: 0,
-  moveY: 0,
-  jumpHeld: false,
-  jumpPressed: false,
-  abilityHeld: false,
-  abilityPressed: false,
-  interactHeld: false,
-  interactHoldSeconds: 0,
-  rollHeld: false,
-  interactPressed: false,
-  inventoryTogglePressed: false,
-  mapTogglePressed: false,
-  mapViewResetPressed: false,
-  mapFocusNextPressed: false,
-  escapePressed: false,
-};
-
-function hasControlActivity(input: InputSnapshot) {
-  return (
-    Math.abs(input.moveX) > 0.01 ||
-    Math.abs(input.moveY) > 0.01 ||
-    input.jumpHeld ||
-    input.jumpPressed ||
-    input.abilityHeld ||
-    input.abilityPressed ||
-    input.interactHeld ||
-    input.interactPressed ||
-    input.rollHeld ||
-    input.inventoryTogglePressed ||
-    input.mapTogglePressed ||
-    input.mapViewResetPressed ||
-    input.mapFocusNextPressed ||
-    input.escapePressed
-  );
-}
-
-function isLowQuality(params: URLSearchParams): boolean {
-  const q = params.get("quality")?.toLowerCase();
-  return q === "low" || params.has("lowQuality");
-}
-
-function getRequestedRendererBackend(params: URLSearchParams): RequestedRendererBackend {
-  const rendererParam = params.get("renderer")?.toLowerCase();
-  if (rendererParam === "webgpu" || params.has("webgpu")) {
-    return "webgpu";
-  }
-  if (rendererParam === "auto") {
-    return "auto";
-  }
-  return "webgl";
-}
-
-function hasNavigatorWebGpu() {
-  return typeof navigator !== "undefined" && "gpu" in navigator;
-}
-
-function createWebGlRendererBundle(
-  requestedBackend: RequestedRendererBackend,
-  webGpuAvailable: boolean,
-  fallbackReason: string | null = null,
-): RendererBundle {
-  return {
-    renderer: new WebGLRenderer({ antialias: true, powerPreference: "high-performance" }),
-    requestedBackend,
-    activeBackend: "webgl",
-    webGpuAvailable,
-    fallbackReason,
-  };
-}
-
-function getWebGpuBackendName(renderer: ThreeWebGpuRenderer): ActiveRendererBackend {
-  const backend = renderer.backend as unknown as { isWebGPUBackend?: boolean };
-  return backend.isWebGPUBackend ? "webgpu" : "webgpu-webgl2";
-}
-
-async function createRendererBundle(params: URLSearchParams): Promise<RendererBundle> {
-  const requestedBackend = getRequestedRendererBackend(params);
-  const webGpuAvailable = hasNavigatorWebGpu();
-  const shouldTryWebGpu =
-    requestedBackend === "webgpu" || (requestedBackend === "auto" && webGpuAvailable);
-
-  if (!shouldTryWebGpu) {
-    return createWebGlRendererBundle(requestedBackend, webGpuAvailable);
-  }
-
-  try {
-    const { WebGPURenderer } = await import("three/webgpu");
-    const renderer = new WebGPURenderer({ alpha: false, antialias: true });
-    await renderer.init();
-    return {
-      renderer,
-      requestedBackend,
-      activeBackend: getWebGpuBackendName(renderer),
-      webGpuAvailable,
-      fallbackReason: null,
-    };
-  } catch (error) {
-    const fallbackReason =
-      error instanceof Error ? error.message : "WebGPU renderer could not be initialized.";
-    return createWebGlRendererBundle(requestedBackend, webGpuAvailable, fallbackReason);
-  }
-}
-
-function isWebGlRenderer(renderer: GameRenderer): renderer is WebGLRenderer {
-  return renderer instanceof WebGLRenderer;
-}
-
-function setSafeRendererClearColor(renderer: GameRenderer) {
-  const maybeClearable = renderer as GameRenderer & {
-    setClearColor?: (color: string, alpha?: number) => void;
-  };
-  maybeClearable.setClearColor?.(SAFE_RENDER_CLEAR_COLOR, 1);
-}
-
-function formatPerfNumber(value: number) {
-  if (value >= 1_000_000) {
-    return `${Number((value / 1_000_000).toFixed(2))}M`;
-  }
-  if (value >= 10_000) {
-    return `${Number((value / 1_000).toFixed(1))}k`;
-  }
-  return `${value}`;
-}
-
-const RETRO_RENDER_TEXTURE_SHADER = {
-  uniforms: {
-    tDiffuse: { value: null },
-    uTime: { value: 0 },
-    uResolution: { value: new Vector2(1, 1) },
-    uGrainStrength: { value: RETRO_TEXTURE_GRAIN_STRENGTH },
-    uDitherStrength: { value: RETRO_TEXTURE_DITHER_STRENGTH },
-    uScanlineStrength: { value: RETRO_TEXTURE_SCANLINE_STRENGTH },
-    uVignetteStrength: { value: RETRO_TEXTURE_VIGNETTE_STRENGTH },
-    uQuantizeStrength: { value: RETRO_TEXTURE_QUANTIZE_STRENGTH },
-  },
-  vertexShader: `
-    varying vec2 vUv;
-
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform sampler2D tDiffuse;
-    uniform float uTime;
-    uniform vec2 uResolution;
-    uniform float uGrainStrength;
-    uniform float uDitherStrength;
-    uniform float uScanlineStrength;
-    uniform float uVignetteStrength;
-    uniform float uQuantizeStrength;
-    varying vec2 vUv;
-
-    float retroHash(vec2 p) {
-      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-    }
-
-    void main() {
-      vec4 texel = texture2D(tDiffuse, vUv);
-      vec2 pixel = floor(vUv * uResolution);
-      float luma = dot(texel.rgb, vec3(0.2126, 0.7152, 0.0722));
-      float grain = retroHash(pixel + floor(uTime * 24.0)) - 0.5;
-      float dither = retroHash(mod(pixel, vec2(4.0)) * 11.0 + vec2(3.7, 9.2)) - 0.5;
-      float scanline = step(1.0, mod(pixel.y, 2.0));
-      vec3 color = texel.rgb;
-      color += grain * uGrainStrength * (0.72 + luma * 0.28);
-      color += dither * uDitherStrength;
-      color *= 1.0 - scanline * uScanlineStrength;
-
-      vec3 quantized = floor(color * 128.0 + dither * 0.38) / 128.0;
-      color = mix(color, quantized, uQuantizeStrength);
-
-      vec2 centered = vUv * 2.0 - 1.0;
-      float vignette = smoothstep(1.35, 0.3, dot(centered, centered));
-      color *= mix(1.0 - uVignetteStrength, 1.0, vignette);
-
-      float warmLift = smoothstep(0.15, 0.85, luma);
-      color = mix(color, color * vec3(1.03, 1.016, 0.97), 0.07 * warmLift);
-      gl_FragColor = vec4(clamp(color, 0.0, 1.0), texel.a);
-    }
-  `,
-};
+import { RETRO_RENDER_TEXTURE_SHADER } from "./retroTextureShader";
+import {
+  PERF_CAPTURE_FLASH_MS,
+  PERF_HUD_UPDATE_MS,
+  WORLD_PERF_STATS_UPDATE_MS,
+  buildCompactPerfDebugText,
+  buildFullPerfDebugText,
+  createPerfCapture,
+  createPerformanceSnapshot,
+  getPerfFramePercentile,
+  recordPerfFrameSample,
+  type MossuPerformanceSnapshot,
+  type PerfCapture,
+} from "./appPerformance";
+import {
+  createPostProcessingRuntime,
+  getPostProcessingSuppressedMs,
+  getRenderPath,
+  markPostProcessingScheduled,
+  shouldUsePostProcessing as shouldUsePostProcessingRuntime,
+  shouldUseRetroTexture as shouldUseRetroTextureRuntime,
+  suppressPostProcessing as suppressPostProcessingRuntime,
+  updateRenderPath,
+  updateRetroTexturePass,
+} from "./appPostProcessing";
+import {
+  createRenderQualityRuntime,
+  createRenderResolutionPolicy,
+  getRenderResolutionSnapshot,
+  type RenderResolutionPolicy,
+  sampleAdaptivePixelRatio,
+} from "./appRenderQuality";
+import { getUnderwaterEffectTargetIntensity } from "./appUnderwaterEffect";
+import { MapDragController } from "./appMapDrag";
+import { shouldUsePersistentSave } from "./localSave";
+import {
+  createLocalSaveRuntime,
+  persistLocalSaveState as persistStoredSaveState,
+  restoreLocalSaveState as restoreStoredSaveState,
+} from "./appSaveState";
+import {
+  createRendererBundle,
+  isWebGlRenderer,
+  setSafeRendererClearColor,
+  type ActiveRendererBackend,
+  type GameRenderer,
+  type RendererBundle,
+  type RequestedRendererBackend,
+} from "./rendererBackend";
+import { createOpeningSequenceOverlay, createTitleScreen } from "./appTitleScreen";
+import { serializeE2eGameTextState, serializeGameTextState } from "./appTextState";
 
 export class GameApp {
   private readonly renderer: GameRenderer;
@@ -299,41 +135,51 @@ export class GameApp {
   private focusedCollectionId: string | null = null;
   private suppressPauseOnPointerUnlock = false;
   private suppressPointerUnlockPauseUntil = 0;
-  private readonly maxPixelRatio: number;
-  private readonly minPixelRatio: number;
+  private maxPixelRatio: number;
+  private minPixelRatio: number;
   private activePixelRatio: number;
-  private frameTimeAccumulator = 0;
-  private frameSampleAccumulator = 0;
+  private renderResolutionPolicy: RenderResolutionPolicy;
   private hudUpdateAccumulator = 0;
   private latestFrameMs = 1000 / 60;
   private smoothedFrameMs = 1000 / 60;
-  private qualitySampleFrameMs = 1000 / 60;
+  private readonly renderQuality = createRenderQualityRuntime();
   private readonly cameraDebugEnabled: boolean;
   private readonly perfDebugEnabled: boolean;
+  private readonly perfHudEnabled: boolean;
   private readonly perfHudCompact: boolean;
   private readonly qaDebugEnabled: boolean;
+  private readonly retroRenderEnabled: boolean;
   /** `?e2e=1` — small render_game_to_text for Playwright (avoids heavy sync snapshot on main thread). */
   private readonly e2eMinimal: boolean;
+  /** `?visualProbe=1` keeps e2e startup light but lets advanceTime render deterministic canvas probes. */
+  private readonly visualProbeEnabled: boolean;
+  /** `?deterministicPerf=1` lets perfGuard own the render clock through advanceTime(). */
+  private readonly deterministicPerf: boolean;
+  private readonly savePersistenceEnabled: boolean;
+  private readonly localSaveRuntime = createLocalSaveRuntime();
+  private lastSavePersistenceRevision = -1;
+  private readonly coopStress: CoopStressSimulator | null;
+  private latestCoopStressSnapshot: CoopStressSnapshot | null = null;
   private cameraDebugPanel: HTMLDivElement | null = null;
   private perfDebugPanel: HTMLDivElement | null = null;
   private perfDebugVisible = true;
+  private perfDebugWorldPrewarmed = false;
+  private lastPerfFrameProfile: Record<string, number> | null = null;
   private perfPanelLastUpdatedAt = 0;
   private perfFrameSamples: number[] = [];
   private perfFrameSampleIndex = 0;
-  private perfCaptureLatest: { capturedAt: string; route: string; performance: ReturnType<GameApp["getPerformanceSnapshot"]> } | null = null;
+  private perfCaptureLatest: PerfCapture | null = null;
   private perfCaptureFlashUntil = 0;
+  private cachedWorldPerfStats: WorldPerfStats | null = null;
+  private cachedWorldPerfStatsAt = -Infinity;
   private waterDepthDebugEnabled = false;
   private idleControlSeconds = 0;
   private faunaRegroupReady = true;
   private firstKaruEncounterSeen = false;
+  private summitCompletionSeen = false;
   private mapFocusedRouteIndex = -1;
-  private mapDragPointerId: number | null = null;
-  private mapDragX = 0;
-  private mapDragY = 0;
-  private postProcessingInitStarted = false;
-  private postProcessingSuppressedUntil = 0;
-  private activeRenderPath: RenderPath = "direct";
-  private lastLoggedRenderPath: RenderPath = "direct";
+  private readonly mapDrag = new MapDragController();
+  private readonly postProcessing = createPostProcessingRuntime();
   private webGlContextLostCount = 0;
   private webGlContextRestoredCount = 0;
   private disposed = false;
@@ -355,21 +201,36 @@ export class GameApp {
   ) {
     const debugSpiritCloseup = params.has("spiritCloseup");
     this.cameraDebugEnabled = params.has("cameraDebug");
-    this.perfDebugEnabled = params.has("perfDebug") || params.has("perfHud");
-    this.perfHudCompact = params.has("perfHud");
+    this.perfHudEnabled = params.has("perfHud");
+    this.perfDebugEnabled = params.has("perfDebug") || this.perfHudEnabled;
+    this.perfHudCompact = this.perfHudEnabled;
     this.qaDebugEnabled = params.has("qaDebug");
-    this.e2eMinimal = params.has("e2e");
+    this.retroRenderEnabled = params.get("retro") !== "0" && !params.has("noRetro");
+    this.e2eMinimal = params.has("e2e") && !params.has("perfDebug") && !params.has("perfHud");
+    this.visualProbeEnabled = params.has("visualProbe");
+    this.deterministicPerf = params.has("deterministicPerf");
+    this.savePersistenceEnabled = shouldUsePersistentSave(params);
+    const coopStressRemoteCount = getCoopStressRemoteCount(params);
+    this.coopStress = coopStressRemoteCount > 0 ? new CoopStressSimulator(coopStressRemoteCount) : null;
     this.waterDepthDebugEnabled = params.has("waterDebugDepth") || params.get("waterDebug") === "depth";
-    this.qualityLow = isLowQuality(params);
-    const pixelCap = this.qualityLow ? 0.85 : 1.1;
-    this.maxPixelRatio = Math.min(window.devicePixelRatio, pixelCap);
-    this.minPixelRatio = Math.min(this.maxPixelRatio, this.qualityLow ? 0.5 : 0.85);
-    this.activePixelRatio = Math.min(this.maxPixelRatio, 1);
+    this.qualityLow = isLowQuality(params) || coopStressRemoteCount > 0;
+    this.renderResolutionPolicy = createRenderResolutionPolicy({
+      qualityLow: this.qualityLow,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio,
+    });
+    this.maxPixelRatio = this.renderResolutionPolicy.maxPixelRatio;
+    this.minPixelRatio = this.renderResolutionPolicy.minPixelRatio;
+    this.activePixelRatio = this.coopStress || this.deterministicPerf
+      ? this.minPixelRatio
+      : this.renderResolutionPolicy.initialPixelRatio;
     this.renderer = rendererBundle.renderer;
     this.requestedRendererBackend = rendererBundle.requestedBackend;
     this.activeRendererBackend = rendererBundle.activeBackend;
     this.webGpuAvailable = rendererBundle.webGpuAvailable;
     this.rendererFallbackReason = rendererBundle.fallbackReason;
+    this.restoreLocalSaveState();
     this.renderer.setPixelRatio(this.activePixelRatio);
     setSafeRendererClearColor(this.renderer);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -390,10 +251,11 @@ export class GameApp {
     this.hud = new HudShell(this.characterPreview.element);
     this.container.appendChild(this.hud.element);
     this.hud.element.classList.add("hud--title-hidden");
+    this.hud.element.classList.toggle("hud--coop-stress", this.coopStress !== null);
 
-    this.titleScreen = this.createTitleScreen();
+    this.titleScreen = createTitleScreen(this.startFromTitle);
     this.container.appendChild(this.titleScreen);
-    this.openingSequenceOverlay = this.createOpeningSequenceOverlay();
+    this.openingSequenceOverlay = createOpeningSequenceOverlay();
     this.container.appendChild(this.openingSequenceOverlay);
 
     if (this.cameraDebugEnabled) {
@@ -402,7 +264,7 @@ export class GameApp {
       this.container.appendChild(this.cameraDebugPanel);
     }
 
-    if (this.perfDebugEnabled) {
+    if (this.perfHudEnabled) {
       this.perfDebugPanel = document.createElement("div");
       this.perfDebugPanel.className = "perf-debug";
       this.perfDebugPanel.classList.toggle("perf-debug--compact", this.perfHudCompact);
@@ -434,9 +296,12 @@ export class GameApp {
     if (this.e2eMinimal) {
       return;
     }
+    this.prewarmShaders();
+    if (this.deterministicPerf) {
+      return;
+    }
 
     this.schedulePostProcessingInit();
-    this.prewarmShaders();
     const loop = () => {
       const rawDt = Math.min(0.1, this.clock.getDelta());
       const dt = Math.min(0.033, rawDt);
@@ -495,15 +360,10 @@ export class GameApp {
   }
 
   private schedulePostProcessingInit() {
-    if (
-      this.postProcessingInitStarted ||
-      this.qualityLow ||
-      !isWebGlRenderer(this.renderer)
-    ) {
+    if (!markPostProcessingScheduled(this.postProcessing, this.qualityLow, this.renderer)) {
       return;
     }
 
-    this.postProcessingInitStarted = true;
     const start = () => {
       void this.initializePostProcessing();
     };
@@ -559,13 +419,14 @@ export class GameApp {
     this.logRenderPathEvent("postprocessing-ready");
   }
 
-  advanceTime(ms: number) {
+  advanceTime(ms: number, renderFrame = true) {
     const dt = 1 / 60;
+    const shouldRender = renderFrame && (!this.e2eMinimal || this.visualProbeEnabled);
     const steps = Math.max(1, Math.round(ms / (dt * 1000)));
     for (let i = 0; i < steps; i += 1) {
       this.trackFrameTiming(dt);
       this.elapsed += dt;
-      this.tick(dt, this.elapsed, !this.e2eMinimal);
+      this.tick(dt, this.elapsed, shouldRender);
       this.updateRenderQuality(dt);
     }
   }
@@ -578,17 +439,11 @@ export class GameApp {
   }
 
   debugTeleportPlayerTo(x: number, z: number) {
-    if (!Number.isFinite(x) || !Number.isFinite(z)) {
+    const player = this.state.frame.player;
+    if (!teleportDebugPlayerTo(player, x, z)) {
       return;
     }
 
-    const player = this.state.frame.player;
-    player.position.set(x, sampleTerrainHeight(x, z) + 2.2, z);
-    player.velocity.set(0, 0, 0);
-    player.grounded = true;
-    player.swimming = false;
-    player.waterMode = "onLand";
-    player.fallingToVoid = false;
     this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
     this.syncHud();
   }
@@ -604,41 +459,51 @@ export class GameApp {
 
   debugApplySaveState(payload: DebugSaveStatePayload) {
     const player = this.state.frame.player;
-    const x = payload.player?.x;
-    const z = payload.player?.z;
-    if (typeof x === "number" && Number.isFinite(x) && typeof z === "number" && Number.isFinite(z)) {
-      const y =
-        typeof payload.player?.y === "number" && Number.isFinite(payload.player.y)
-          ? payload.player.y
-          : sampleTerrainHeight(x, z) + 2.2;
-      player.position.set(x, y, z);
+    const debugHeading = applyDebugPlayerSnapshot(player, payload.player);
+    if (debugHeading !== null) {
+      this.followCamera.debugSnapToPlayerHeading(player, debugHeading);
     }
-    if (typeof payload.player?.heading === "number" && Number.isFinite(payload.player.heading)) {
-      player.heading = payload.player.heading;
-      this.followCamera.debugSnapToPlayerHeading(player, payload.player.heading);
-    }
-    player.velocity.set(0, 0, 0);
-    player.grounded = true;
-    player.swimming = false;
-    player.waterMode = "onLand";
-    player.fallingToVoid = false;
-    player.floating = false;
-    player.justLanded = false;
-    player.justRespawned = false;
+    resetDebugPlayerMovement(player);
 
-    const save = payload.save;
-    if (save?.unlockedAbilities) {
-      this.state.frame.save.unlockedAbilities = new Set(save.unlockedAbilities as AbilityId[]);
+    if (this.perfDebugEnabled) {
+      if (!this.perfDebugWorldPrewarmed) {
+        this.world.flushDeferredWorldSlices();
+        this.cachedWorldPerfStats = null;
+        this.prewarmShaders();
+        this.perfDebugWorldPrewarmed = true;
+      }
     }
-    if (save?.catalogedLandmarkIds) {
-      this.state.frame.save.catalogedLandmarkIds = new Set(save.catalogedLandmarkIds);
-    }
-    if (save?.gatheredForageableIds) {
-      this.state.frame.save.gatheredForageableIds = new Set(save.gatheredForageableIds);
-    }
+
+    applyDebugSaveSnapshot(this.state.frame.save, payload.save);
+    this.state.markSaveDirty();
 
     this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
+    this.persistLocalSaveState();
     this.syncHud();
+  }
+
+  private restoreLocalSaveState() {
+    if (!this.savePersistenceEnabled) {
+      return;
+    }
+
+    if (restoreStoredSaveState(this.state.frame.save, this.localSaveRuntime)) {
+      this.state.update(0, PAUSED_INPUT, 0);
+    }
+  }
+
+  private persistLocalSaveState() {
+    if (!this.savePersistenceEnabled) {
+      return;
+    }
+
+    const saveRevision = this.state.getSaveRevision();
+    if (saveRevision === this.lastSavePersistenceRevision) {
+      return;
+    }
+
+    persistStoredSaveState(this.state.frame.save, this.localSaveRuntime);
+    this.lastSavePersistenceRevision = saveRevision;
   }
 
   debugSetWaterDepthDebug(enabled: boolean) {
@@ -646,140 +511,79 @@ export class GameApp {
     this.world.setWaterDepthDebugEnabled(enabled);
   }
 
+  debugSetLayerVisibility(layer: string, visible: boolean) {
+    this.world.debugSetLayerVisibility(layer, visible);
+  }
+
+  debugGetLastFrameProfile() {
+    return this.lastPerfFrameProfile;
+  }
+
   renderGameToText() {
+    const openingSequence = {
+      active: this.openingSequenceActive,
+      progress: Number(this.getOpeningSequenceProgress().toFixed(3)),
+    };
+
     if (this.e2eMinimal) {
-      const frame = this.state.frame;
-      return JSON.stringify({
-        e2e: true,
-        titleScreenOpen: this.titleScreenOpen,
+      return serializeE2eGameTextState({
+        frame: this.state.frame,
         viewMode: this.viewMode,
-        openingSequence: {
-          active: this.openingSequenceActive,
-          progress: Number(this.getOpeningSequenceProgress().toFixed(3)),
-        },
+        titleScreenOpen: this.titleScreenOpen,
+        openingSequence,
         pauseMenuOpen: this.pauseMenuOpen,
         characterScreenOpen: this.characterScreenOpen,
-        player: {
-          x: Number(frame.player.position.x.toFixed(1)),
-          y: Number(frame.player.position.y.toFixed(1)),
-          z: Number(frame.player.position.z.toFixed(1)),
-          heading: Number(frame.player.heading.toFixed(3)),
-          swimming: frame.player.swimming,
-          waterMode: frame.player.waterMode,
-        },
+        coopStressSnapshot: this.latestCoopStressSnapshot,
         camera: this.followCamera.getDebugState(),
-        zone: frame.currentZone,
-        landmark: frame.currentLandmark,
       });
     }
-    const frame = this.state.frame;
-    const characterData = this.state.getCharacterScreenData();
-    const faunaStats = this.world.getFaunaStats();
-    const focusedCollection = characterData.collections.find(
-      (entry) => entry.landmarkId === (characterData.latestCollectionId ?? this.focusedCollectionId),
-    );
-    const latestGatheredGood = characterData.gatheredGoods.find(
-      (entry) => entry.forageableId === characterData.latestGatheredGoodId,
-    );
-    const pouchCounts = characterData.gatheredGoods.reduce<Record<string, number>>((counts, entry) => {
-      if (entry.gathered) {
-        counts[entry.kind] = (counts[entry.kind] ?? 0) + 1;
-      }
-      return counts;
-    }, {});
-    return JSON.stringify({
-      coordinateSystem: "x right, y up, z forward across the island",
-      mode: this.viewMode,
+
+    return serializeGameTextState({
+      frame: this.state.frame,
+      viewMode: this.viewMode,
       titleScreenOpen: this.titleScreenOpen,
-      openingSequence: {
-        active: this.openingSequenceActive,
-        progress: Number(this.getOpeningSequenceProgress().toFixed(3)),
-      },
+      openingSequence,
       pauseMenuOpen: this.pauseMenuOpen,
       characterScreenOpen: this.characterScreenOpen,
-      player: {
-        x: Number(frame.player.position.x.toFixed(1)),
-        y: Number(frame.player.position.y.toFixed(1)),
-        z: Number(frame.player.position.z.toFixed(1)),
-        stamina: Number(frame.player.stamina.toFixed(1)),
-        staminaMax: Number(frame.player.staminaMax.toFixed(1)),
-        rolling: frame.player.rolling,
-        rollHoldSeconds: Number(frame.player.rollHoldSeconds.toFixed(2)),
-        rollModeReady: frame.player.rollModeReady,
-        floating: frame.player.floating,
-        grounded: frame.player.grounded,
-        swimming: frame.player.swimming,
-        waterMode: frame.player.waterMode,
-        waterDepth: Number(frame.player.waterDepth.toFixed(1)),
-        heading: Number(frame.player.heading.toFixed(3)),
-        velocity: {
-          x: Number(frame.player.velocity.x.toFixed(2)),
-          y: Number(frame.player.velocity.y.toFixed(2)),
-          z: Number(frame.player.velocity.z.toFixed(2)),
-        },
-      },
-      zone: frame.currentZone,
-      landmark: frame.currentLandmark,
-      save: {
-        unlockedAbilities: [...frame.save.unlockedAbilities],
-        catalogedLandmarkIds: [...frame.save.catalogedLandmarkIds],
-        gatheredForageableIds: [...frame.save.gatheredForageableIds],
-      },
-      characterScreen: {
-        stats: characterData.stats.map((stat) => ({ label: stat.label, value: stat.value })),
-        upgrades: {
-          unlocked: characterData.upgrades.unlocked.map((upgrade) => upgrade.label),
-          locked: characterData.upgrades.locked.map((upgrade) => upgrade.label),
-        },
-        collections: {
-          discovered: characterData.totals.discovered,
-          total: characterData.totals.total,
-          focusedEntry: focusedCollection?.keepsakeTitle ?? null,
-        },
-        gatheredGoods: {
-          gathered: characterData.gatheredTotals.gathered,
-          total: characterData.gatheredTotals.total,
-          latestEntry: latestGatheredGood?.title ?? null,
-          pouchCounts,
-          nearby: frame.forageableTarget
-            ? {
-              title: frame.forageableTarget.title,
-              kind: frame.forageableTarget.kind,
-              distance: Number(frame.forageableTarget.distance.toFixed(1)),
-            }
-            : null,
-        },
-      },
-      fauna: {
-        name: faunaStats.speciesName,
-        recruited: faunaStats.recruitedCount,
-        nearestRecruitableDistance:
-          faunaStats.nearestRecruitableDistance === null
-            ? null
-            : Number(faunaStats.nearestRecruitableDistance.toFixed(1)),
-        recruitedThisFrame: faunaStats.recruitedThisFrame,
-        firstEncounterActive: faunaStats.firstEncounterActive,
-        rollingCount: faunaStats.rollingCount,
-        mossuCollisionCount: faunaStats.mossuCollisionCount,
-        dominantMood: faunaStats.dominantMood,
-        regroupActive: faunaStats.regroupActive,
-        callHeardActive: faunaStats.callHeardActive,
-      },
-      audio: {
-        ...this.movementAudio.getState(),
-        waterAmbience: this.waterAudio.getState(),
-      },
+      characterData: this.state.getCharacterScreenData(),
+      focusedCollectionId: this.focusedCollectionId,
+      faunaStats: this.world.getFaunaStats(),
+      savePersistenceEnabled: this.savePersistenceEnabled,
+      coopStressSnapshot: this.latestCoopStressSnapshot,
+      movementAudio: this.movementAudio.getState(),
+      waterAudio: this.waterAudio.getState(),
       camera: this.followCamera.getDebugState(),
       performance: this.getPerformanceSnapshot(),
-      waterDebug: {
-        depthView: this.waterDepthDebugEnabled,
-        underwaterIntensity: Number(this.underwaterEffect.getIntensity().toFixed(3)),
-      },
+      waterDepthDebugEnabled: this.waterDepthDebugEnabled,
+      underwaterIntensity: this.underwaterEffect.getIntensity(),
       qa: this.world.getQaStats(),
     });
   }
 
   private tick(dt: number, elapsed: number, renderFrame = true) {
+    const profile = this.perfDebugEnabled
+      ? {
+          stateMs: 0,
+          cameraMs: 0,
+          underwaterMs: 0,
+          worldMs: 0,
+          hudMs: 0,
+          renderMs: 0,
+          debugMs: 0,
+          totalMs: 0,
+        }
+      : null;
+    const profileStart = profile ? performance.now() : 0;
+    let profileMark = profileStart;
+    const markProfile = (key: Exclude<keyof NonNullable<typeof profile>, "totalMs">) => {
+      if (!profile) {
+        return;
+      }
+      const now = performance.now();
+      profile[key] = Number((now - profileMark).toFixed(2));
+      profileMark = now;
+    };
+
     const input = this.input.sample();
     let faunaRecruitPressed = false;
     let faunaRegroupPressed = false;
@@ -847,6 +651,8 @@ export class GameApp {
       }
     }
 
+    this.latestCoopStressSnapshot = this.updateCoopStress(elapsed, dt);
+
     if (preZoneForFeedback !== null && preSwimForFeedback !== null) {
       const frame = this.state.frame;
       if (preZoneForFeedback !== frame.currentZone) {
@@ -868,11 +674,17 @@ export class GameApp {
         this.gameplayFeedback.playInteract();
         this.followCamera.kickCinematic({ polar: 0.018, distance: 0.48, shoulder: -0.05 });
       }
+      if (frame.lastCatalogedLandmarkId === "peak-shrine" && !this.summitCompletionSeen) {
+        this.summitCompletionSeen = true;
+        this.followCamera.kickCinematic({ polar: -0.045, distance: 3.2, shoulder: 0.22 });
+        this.hud.showFlavorPing("Moss Crown reached. Summit Circuit unlocked in the field guide.");
+      }
     }
 
     this.updateIdleCameraOrbit(input, dt);
     this.updateMovementAudio(dt);
     this.updateWaterAudio(dt);
+    markProfile("stateMs");
 
     if (this.state.frame.lastCatalogedLandmarkId) {
       this.focusedCollectionId = this.state.frame.lastCatalogedLandmarkId;
@@ -881,7 +693,9 @@ export class GameApp {
     }
 
     this.followCamera.update(this.state.frame.player, dt);
+    markProfile("cameraMs");
     this.updateUnderwaterEffect(dt, elapsed);
+    markProfile("underwaterMs");
     this.world.update(
       this.state.frame,
       elapsed,
@@ -890,7 +704,9 @@ export class GameApp {
       faunaRecruitPressed,
       faunaRegroupPressed,
       this.followCamera.camera,
+      this.titleScreenOpen || this.openingSequenceActive,
     );
+    markProfile("worldMs");
     const faunaStats = this.world.getFaunaStats();
     if (
       faunaStats.firstEncounterActive &&
@@ -907,11 +723,36 @@ export class GameApp {
       this.syncHud();
     }
     this.characterPreview.update(dt, this.characterScreenOpen);
+    this.persistLocalSaveState();
     this.syncHudForFrame(dt);
+    markProfile("hudMs");
     if (renderFrame) {
       this.renderScene();
+      markProfile("renderMs");
       this.updateDebugPanels();
+      markProfile("debugMs");
     }
+    if (profile) {
+      profile.totalMs = Number((performance.now() - profileStart).toFixed(2));
+      this.lastPerfFrameProfile = profile;
+    }
+  }
+
+  private updateCoopStress(elapsed: number, dt: number) {
+    if (!this.coopStress) {
+      return null;
+    }
+
+    if (this.titleScreenOpen || this.openingSequenceActive) {
+      if (this.latestCoopStressSnapshot !== null) {
+        this.world.setRemoteMossus([]);
+      }
+      return null;
+    }
+
+    const snapshot = this.coopStress.update(this.state.frame, elapsed, dt);
+    this.world.setRemoteMossus(snapshot.remotePlayers);
+    return snapshot;
   }
 
   private updateMovementAudio(dt: number) {
@@ -946,53 +787,32 @@ export class GameApp {
   }
 
   private updateUnderwaterEffect(dt: number, elapsed: number) {
-    const camera = this.followCamera.camera;
-    const player = this.state.frame.player;
-    const cameraWater = sampleWaterState(camera.position.x, camera.position.z);
-    const depthBelowSurface = cameraWater ? cameraWater.surfaceY - camera.position.y : 0;
-    const cameraIntensity = cameraWater && depthBelowSurface > 0.08
-      ? MathUtils.clamp(0.22 + depthBelowSurface / 8.5, 0, 1)
-      : 0;
-    const playerIntensity = player.waterMode === "underwater"
-      ? MathUtils.clamp(0.38 + player.waterDepth / 10, 0.38, 0.82)
-      : 0;
-    const targetIntensity = Math.max(cameraIntensity, playerIntensity);
+    const targetIntensity = getUnderwaterEffectTargetIntensity(
+      this.followCamera.camera,
+      this.state.frame.player,
+    );
     this.underwaterEffect.update({ dt, elapsed, targetIntensity });
   }
 
   private renderScene() {
     const postProcessingEnabled = this.shouldUsePostProcessing();
-    const renderPath: RenderPath = postProcessingEnabled && this.composer ? "composer" : "direct";
-    this.activeRenderPath = renderPath;
-    if (renderPath !== this.lastLoggedRenderPath) {
-      this.lastLoggedRenderPath = renderPath;
+    const renderPath = getRenderPath(postProcessingEnabled, this.composer);
+    if (updateRenderPath(this.postProcessing, renderPath)) {
       this.logRenderPathEvent(`render-path-${renderPath}`);
     }
     if (this.bloomPass) {
       this.bloomPass.enabled = postProcessingEnabled;
     }
     if (this.retroTexturePass) {
-      this.retroTexturePass.enabled = postProcessingEnabled;
+      this.retroTexturePass.enabled = this.shouldUseRetroTexture();
     }
     if (postProcessingEnabled && this.composer) {
-      this.updateRetroTexturePass();
+      updateRetroTexturePass(this.retroTexturePass, this.elapsed, this.activePixelRatio);
       this.composer.render();
       return;
     }
 
     this.renderer.render(this.scene, this.followCamera.camera);
-  }
-
-  private updateRetroTexturePass() {
-    if (!this.retroTexturePass) {
-      return;
-    }
-
-    this.retroTexturePass.uniforms.uTime.value = this.elapsed;
-    this.retroTexturePass.uniforms.uResolution.value.set(
-      window.innerWidth * this.activePixelRatio,
-      window.innerHeight * this.activePixelRatio,
-    );
   }
 
   private shouldUsePostProcessing() {
@@ -1002,16 +822,22 @@ export class GameApp {
       this.pauseMenuOpen ||
       this.characterScreenOpen ||
       this.viewMode === "map_lookdown";
-    return (
-      this.composer !== null &&
-      !overlayBlocksPostProcessing &&
-      this.elapsed >= this.postProcessingSuppressedUntil &&
-      this.activePixelRatio >= BLOOM_MIN_PIXEL_RATIO
-    );
+    return shouldUsePostProcessingRuntime({
+      composer: this.composer,
+      overlayBlocksPostProcessing,
+      elapsed: this.elapsed,
+      runtime: this.postProcessing,
+      activePixelRatio: this.activePixelRatio,
+      minPixelRatio: BLOOM_MIN_PIXEL_RATIO,
+    });
   }
 
   private shouldUseBloom() {
     return this.shouldUsePostProcessing();
+  }
+
+  private shouldUseRetroTexture() {
+    return shouldUseRetroTextureRuntime(this.retroRenderEnabled, this.shouldUsePostProcessing());
   }
 
   private syncHudForFrame(dt: number) {
@@ -1029,6 +855,7 @@ export class GameApp {
       frame.player.rollHoldSeconds > 0 ||
       frame.player.rollModeReady ||
       frame.player.floating ||
+      frame.player.waterMode !== "onLand" ||
       frame.forageableTarget !== null ||
       frame.interactionTarget !== null ||
       frame.lastCatalogedLandmarkId !== null ||
@@ -1067,26 +894,14 @@ export class GameApp {
   }
 
   private updateRenderQuality(rawDt: number) {
-    this.frameTimeAccumulator += rawDt;
-    this.frameSampleAccumulator += 1;
-
-    if (this.frameTimeAccumulator < QUALITY_SAMPLE_SECONDS || this.frameSampleAccumulator < QUALITY_MIN_SAMPLE_FRAMES) {
-      return;
-    }
-
-    const averageFrameSeconds = this.frameTimeAccumulator / this.frameSampleAccumulator;
-    this.qualitySampleFrameMs = averageFrameSeconds * 1000;
-    this.frameTimeAccumulator = 0;
-    this.frameSampleAccumulator = 0;
-
-    const nextPixelRatio =
-      averageFrameSeconds > PIXEL_RATIO_DOWNSHIFT_FRAME_SECONDS
-        ? Math.max(this.minPixelRatio, this.activePixelRatio - PIXEL_RATIO_STEP_DOWN)
-        : averageFrameSeconds < PIXEL_RATIO_UPSHIFT_FRAME_SECONDS
-          ? Math.min(this.maxPixelRatio, this.activePixelRatio + PIXEL_RATIO_STEP_UP)
-          : this.activePixelRatio;
-
-    if (Math.abs(nextPixelRatio - this.activePixelRatio) < 0.01) {
+    const nextPixelRatio = sampleAdaptivePixelRatio(
+      this.renderQuality,
+      rawDt,
+      this.activePixelRatio,
+      this.minPixelRatio,
+      this.maxPixelRatio,
+    );
+    if (nextPixelRatio === null) {
       return;
     }
 
@@ -1099,7 +914,11 @@ export class GameApp {
   private trackFrameTiming(rawDt: number) {
     this.latestFrameMs = Math.max(0.1, rawDt * 1000);
     this.smoothedFrameMs += (this.latestFrameMs - this.smoothedFrameMs) * 0.1;
-    this.recordPerfFrameSample(this.latestFrameMs);
+    this.perfFrameSampleIndex = recordPerfFrameSample(
+      this.perfFrameSamples,
+      this.perfFrameSampleIndex,
+      this.latestFrameMs,
+    );
   }
 
   private updateDebugPanels() {
@@ -1126,46 +945,59 @@ export class GameApp {
     ].join("\n");
   }
 
-  private getPerformanceSnapshot() {
+  private getPerformanceSnapshot(): MossuPerformanceSnapshot {
     const rendererInfo = this.renderer.info;
-    const world = this.world.getPerfStats();
-    return {
-      fps: Number((1000 / Math.max(0.1, this.smoothedFrameMs)).toFixed(1)),
-      frameMs: Number(this.smoothedFrameMs.toFixed(2)),
-      latestFrameMs: Number(this.latestFrameMs.toFixed(2)),
-      rollingP95FrameMs: Number(this.getPerfFramePercentile(0.95).toFixed(2)),
+    const world = this.getCachedWorldPerfStats();
+    return createPerformanceSnapshot({
+      rendererInfo,
+      world,
+      smoothedFrameMs: this.smoothedFrameMs,
+      latestFrameMs: this.latestFrameMs,
+      rollingP95FrameMs: getPerfFramePercentile(this.perfFrameSamples, this.latestFrameMs, 0.95),
       rollingSampleCount: this.perfFrameSamples.length,
-      qualitySampleFrameMs: Number(this.qualitySampleFrameMs.toFixed(2)),
-      pixelRatio: Number(this.activePixelRatio.toFixed(2)),
-      maxPixelRatio: Number(this.maxPixelRatio.toFixed(2)),
-      minPixelRatio: Number(this.minPixelRatio.toFixed(2)),
+      qualitySampleFrameMs: this.renderQuality.qualitySampleFrameMs,
+      activePixelRatio: this.activePixelRatio,
+      maxPixelRatio: this.maxPixelRatio,
+      minPixelRatio: this.minPixelRatio,
+      renderResolution: getRenderResolutionSnapshot(
+        this.renderResolutionPolicy,
+        window.innerWidth,
+        window.innerHeight,
+        this.activePixelRatio,
+      ),
       bloomEnabled: this.shouldUseBloom(),
-      retroTextureEnabled: this.retroTexturePass !== null && this.shouldUsePostProcessing(),
-      renderPath: this.activeRenderPath,
+      retroTextureEnabled: this.retroTexturePass !== null && this.shouldUseRetroTexture(),
+      renderPath: this.postProcessing.activeRenderPath,
       postProcessingReady: this.composer !== null,
-      postProcessingSuppressedMs: Math.max(0, Math.round((this.postProcessingSuppressedUntil - this.elapsed) * 1000)),
+      postProcessingSuppressedMs: getPostProcessingSuppressedMs(this.postProcessing, this.elapsed),
       waterDepthDebug: this.waterDepthDebugEnabled,
-      underwaterIntensity: Number(this.underwaterEffect.getIntensity().toFixed(3)),
+      underwaterIntensity: this.underwaterEffect.getIntensity(),
       webGlContextLostCount: this.webGlContextLostCount,
       webGlContextRestoredCount: this.webGlContextRestoredCount,
+      coopStress: {
+        enabled: this.latestCoopStressSnapshot !== null,
+        remoteCount: this.latestCoopStressSnapshot?.remoteCount ?? 0,
+        sharedEvents: this.latestCoopStressSnapshot?.shared.recentEvents.length ?? 0,
+      },
       qualityLow: this.qualityLow,
       requestedBackend: this.requestedRendererBackend,
       activeBackend: this.activeRendererBackend,
       webGpuAvailable: this.webGpuAvailable,
       rendererFallbackReason: this.rendererFallbackReason,
       mapZoom: this.followCamera.getMapZoomFactor(),
-      renderer: {
-        calls: rendererInfo.render.calls,
-        triangles: rendererInfo.render.triangles,
-        lines: rendererInfo.render.lines,
-        points: rendererInfo.render.points,
-      },
-      memory: {
-        geometries: rendererInfo.memory.geometries,
-        textures: rendererInfo.memory.textures,
-      },
-      world,
-    };
+    });
+  }
+
+  private getCachedWorldPerfStats() {
+    const now = performance.now();
+    if (
+      this.cachedWorldPerfStats === null ||
+      now - this.cachedWorldPerfStatsAt >= WORLD_PERF_STATS_UPDATE_MS
+    ) {
+      this.cachedWorldPerfStats = this.world.getPerfStats();
+      this.cachedWorldPerfStatsAt = now;
+    }
+    return this.cachedWorldPerfStats;
   }
 
   private updatePerfDebug() {
@@ -1190,52 +1022,11 @@ export class GameApp {
         this.perfCaptureLatest && now < this.perfCaptureFlashUntil
           ? `capture ${new Date(this.perfCaptureLatest.capturedAt).toLocaleTimeString()}`
           : "capture idle";
-      this.perfDebugPanel.textContent = [
-        "Mossu perf",
-        `${perf.fps}fps  avg ${perf.frameMs}ms  p95 ${perf.rollingP95FrameMs}ms  last ${perf.latestFrameMs}ms`,
-        `pixel ${perf.pixelRatio}  ${perf.renderPath}  bloom ${perf.bloomEnabled ? "on" : "off"}  texture ${perf.retroTextureEnabled ? "on" : "off"}  water debug ${perf.waterDepthDebug ? "on" : "off"}  ${perf.activeBackend}`,
-        `draw ${formatPerfNumber(perf.renderer.calls)} calls  ${formatPerfNumber(perf.renderer.triangles)} tris`,
-        `grass ${formatPerfNumber(perf.world.grassInstances)} inst  lod ${perf.world.grassLodVisitedCells}/${perf.world.grassLodCells} cells`,
-        `water ${perf.world.waterSurfaces} surfaces  shaders ${perf.world.animatedShaderMeshes}`,
-        captureState,
-      ].join("\n");
+      this.perfDebugPanel.textContent = buildCompactPerfDebugText(perf, captureState);
       return;
     }
 
-    this.perfDebugPanel.textContent = [
-      `perf ${perf.fps}fps  avg ${perf.frameMs}ms  p95 ${perf.rollingP95FrameMs}ms  raw ${perf.latestFrameMs}ms`,
-      `quality avg ${perf.qualitySampleFrameMs}ms  pixelRatio ${perf.pixelRatio} (${perf.minPixelRatio}-${perf.maxPixelRatio})  path ${perf.renderPath}  post ${perf.postProcessingReady ? "ready" : "pending"} ${perf.postProcessingSuppressedMs}ms  bloom ${perf.bloomEnabled ? "on" : "off"}  texture ${perf.retroTextureEnabled ? "on" : "off"}  waterDebug ${perf.waterDepthDebug ? "on" : "off"}  lowQuality ${this.qualityLow ? "yes" : "no"}  mapZoom ${perf.mapZoom.toFixed(2)}`,
-      `backend ${perf.activeBackend}  requested ${perf.requestedBackend}  webgpu ${perf.webGpuAvailable ? "available" : "unavailable"}${perf.rendererFallbackReason ? `  fallback ${perf.rendererFallbackReason}` : ""}`,
-      `context lost ${perf.webGlContextLostCount}  restored ${perf.webGlContextRestoredCount}`,
-      `renderer calls ${perf.renderer.calls}  tris ${perf.renderer.triangles}  lines ${perf.renderer.lines}  points ${perf.renderer.points}`,
-      `memory geometries ${perf.memory.geometries}  textures ${perf.memory.textures}`,
-      `terrain ${perf.world.terrainVertices}v / ${perf.world.terrainTriangles}t`,
-      `grass ${perf.world.grassMeshes} meshes / ${perf.world.grassInstances} inst / est ${perf.world.grassEstimatedTriangles}t`,
-      `grass impostors ${perf.world.grassImpostorMeshes} meshes / ${perf.world.grassImpostorInstances} patches / est ${perf.world.grassImpostorEstimatedTriangles}t`,
-      `grass lod ${perf.world.grassLodVisitedCells}/${perf.world.grassLodCells} cells / ${perf.world.grassLodVisitedSources}/${perf.world.grassLodSourceInstances} src`,
-      `forest ${perf.world.forestMeshes} meshes / ${perf.world.forestInstances} inst / est ${perf.world.forestEstimatedTriangles}t`,
-      `small props ${perf.world.smallPropMeshes} meshes / ${perf.world.smallPropInstances} inst / est ${perf.world.smallPropEstimatedTriangles}t`,
-      `water ${perf.world.waterSurfaces} surfaces / ${perf.world.waterVertices}v / ${perf.world.waterTriangles}t`,
-      `animated shaders ${perf.world.animatedShaderMeshes}  grass ${perf.world.grassShaderMeshes}  trees ${perf.world.treeShaderMeshes}  water ${perf.world.waterShaderSurfaces}`,
-    ].join("\n");
-  }
-
-  private recordPerfFrameSample(frameMs: number) {
-    if (this.perfFrameSamples.length < PERF_HUD_SAMPLE_LIMIT) {
-      this.perfFrameSamples.push(frameMs);
-      return;
-    }
-    this.perfFrameSamples[this.perfFrameSampleIndex] = frameMs;
-    this.perfFrameSampleIndex = (this.perfFrameSampleIndex + 1) % PERF_HUD_SAMPLE_LIMIT;
-  }
-
-  private getPerfFramePercentile(percentile: number) {
-    if (this.perfFrameSamples.length === 0) {
-      return this.latestFrameMs;
-    }
-    const sorted = [...this.perfFrameSamples].sort((a, b) => a - b);
-    const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentile) - 1));
-    return sorted[index];
+    this.perfDebugPanel.textContent = buildFullPerfDebugText(perf);
   }
 
   private updateIdleCameraOrbit(input: InputSnapshot, dt: number) {
@@ -1265,11 +1056,8 @@ export class GameApp {
       return;
     }
 
-    const capture = {
-      capturedAt: new Date().toISOString(),
-      route: `${window.location.pathname}${window.location.search}`,
-      performance: this.getPerformanceSnapshot(),
-    };
+    const route = `${window.location.pathname}${window.location.search}`;
+    const capture = createPerfCapture(route, this.getPerformanceSnapshot());
     this.perfCaptureLatest = capture;
     this.perfCaptureFlashUntil = performance.now() + PERF_CAPTURE_FLASH_MS;
     this.perfPanelLastUpdatedAt = 0;
@@ -1279,11 +1067,34 @@ export class GameApp {
   }
 
   private handleResize = () => {
+    this.updateRenderResolutionPolicy();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.composer?.setSize(window.innerWidth, window.innerHeight);
     this.underwaterEffect.resize(window.innerWidth, window.innerHeight, this.activePixelRatio);
     this.followCamera.resize(window.innerWidth, window.innerHeight);
   };
+
+  private updateRenderResolutionPolicy() {
+    this.renderResolutionPolicy = createRenderResolutionPolicy({
+      qualityLow: this.qualityLow,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio,
+    });
+    this.maxPixelRatio = this.renderResolutionPolicy.maxPixelRatio;
+    this.minPixelRatio = this.renderResolutionPolicy.minPixelRatio;
+    const nextPixelRatio = Math.min(
+      this.maxPixelRatio,
+      Math.max(this.minPixelRatio, this.activePixelRatio),
+    );
+    if (Math.abs(nextPixelRatio - this.activePixelRatio) < 0.01) {
+      return;
+    }
+
+    this.activePixelRatio = nextPixelRatio;
+    this.renderer.setPixelRatio(this.activePixelRatio);
+    this.composer?.setPixelRatio(this.activePixelRatio);
+  }
 
   private handlePerfHotkeys = (event: KeyboardEvent) => {
     if (event.repeat || !event.shiftKey) {
@@ -1326,34 +1137,20 @@ export class GameApp {
     if (event.button !== 0 || this.viewMode !== "map_lookdown" || this.titleScreenOpen) {
       return;
     }
-    event.preventDefault();
-    this.mapDragPointerId = event.pointerId;
-    this.mapDragX = event.clientX;
-    this.mapDragY = event.clientY;
-    this.renderer.domElement.setPointerCapture?.(event.pointerId);
+    this.mapDrag.begin(event, this.renderer.domElement);
   };
 
   private handleMapPointerMove = (event: PointerEvent) => {
-    if (this.mapDragPointerId !== event.pointerId || this.viewMode !== "map_lookdown") {
+    if (this.viewMode !== "map_lookdown") {
       return;
     }
-    const deltaX = event.clientX - this.mapDragX;
-    const deltaY = event.clientY - this.mapDragY;
-    this.mapDragX = event.clientX;
-    this.mapDragY = event.clientY;
-    this.followCamera.panMapViewFromDrag(deltaX, deltaY);
+    this.mapDrag.move(event, (deltaX, deltaY) => {
+      this.followCamera.panMapViewFromDrag(deltaX, deltaY);
+    });
   };
 
   private handleMapPointerUp = (event: PointerEvent) => {
-    if (this.mapDragPointerId !== event.pointerId) {
-      return;
-    }
-    this.mapDragPointerId = null;
-    try {
-      this.renderer.domElement.releasePointerCapture?.(event.pointerId);
-    } catch {
-      // Pointer capture can already be released if the browser cancels a drag.
-    }
+    this.mapDrag.end(event, this.renderer.domElement);
   };
 
   private handleUiPointerDown = (event: PointerEvent) => {
@@ -1457,7 +1254,7 @@ export class GameApp {
   }
 
   private closeMap() {
-    this.mapDragPointerId = null;
+    this.mapDrag.cancel();
     if (this.viewMode !== "third_person") {
       this.setViewMode("third_person");
       this.followCamera.kickCinematic({ polar: 0.012, distance: 1.1, shoulder: -0.08 });
@@ -1509,63 +1306,6 @@ export class GameApp {
   private suppressNextPointerUnlockPause() {
     this.suppressPauseOnPointerUnlock = true;
     this.suppressPointerUnlockPauseUntil = this.elapsed + 0.65;
-  }
-
-  private createTitleScreen() {
-    const titleScreen = document.createElement("div");
-    titleScreen.className = "title-screen";
-    titleScreen.setAttribute("role", "dialog");
-    titleScreen.setAttribute("aria-label", "Mossu title screen");
-    titleScreen.innerHTML = `
-      <div class="title-screen__sky" aria-hidden="true"></div>
-      <div class="title-screen__shade" aria-hidden="true"></div>
-      <div class="title-screen__bloom" aria-hidden="true"></div>
-      <div class="title-screen__bokeh" aria-hidden="true">
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-      <div class="title-screen__menu">
-        <span class="title-screen__glint title-screen__glint--one"></span>
-        <span class="title-screen__glint title-screen__glint--two"></span>
-        <div class="title-screen__crest" aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <h1 class="title-screen__logo">Mossu</h1>
-        <button class="title-screen__button" type="button" aria-label="Begin Mossu"></button>
-      </div>
-    `;
-    titleScreen
-      .querySelectorAll<HTMLButtonElement>(".title-screen__button")
-      .forEach((button) => {
-        button.addEventListener("click", this.startFromTitle);
-      });
-    return titleScreen;
-  }
-
-  private createOpeningSequenceOverlay() {
-    const overlay = document.createElement("div");
-    overlay.className = "opening-sequence";
-    overlay.setAttribute("aria-hidden", "true");
-    overlay.innerHTML = `
-      <div class="opening-sequence__panel">
-        <p class="opening-sequence__kicker">Morning Trail</p>
-        <strong>Burrow Hollow opens to the water</strong>
-        <span>the grass wakes around Mossu; a first Karu pauses near the lake path</span>
-        <div class="opening-sequence__beats" aria-hidden="true">
-          <i>meadow</i>
-          <i>water</i>
-          <i>Karu</i>
-        </div>
-      </div>
-      <p class="opening-sequence__skip">Move to take over</p>
-    `;
-    return overlay;
   }
 
   private startFromTitle = () => {
@@ -1640,7 +1380,7 @@ export class GameApp {
   }
 
   private suppressPostProcessing(seconds: number) {
-    this.postProcessingSuppressedUntil = Math.max(this.postProcessingSuppressedUntil, this.elapsed + seconds);
+    suppressPostProcessingRuntime(this.postProcessing, this.elapsed, seconds);
   }
 
   private logRenderPathEvent(event: string) {
@@ -1650,14 +1390,14 @@ export class GameApp {
     console.info("Mossu render path", {
       event,
       elapsed: Number(this.elapsed.toFixed(3)),
-      path: this.activeRenderPath,
+      path: this.postProcessing.activeRenderPath,
       title: this.titleScreenOpen,
       opening: this.openingSequenceActive,
       pause: this.pauseMenuOpen,
       character: this.characterScreenOpen,
       viewMode: this.viewMode,
       postReady: this.composer !== null,
-      suppressedMs: Math.max(0, Math.round((this.postProcessingSuppressedUntil - this.elapsed) * 1000)),
+      suppressedMs: getPostProcessingSuppressedMs(this.postProcessing, this.elapsed),
       pixelRatio: Number(this.activePixelRatio.toFixed(2)),
       contextLost: this.webGlContextLostCount,
     });

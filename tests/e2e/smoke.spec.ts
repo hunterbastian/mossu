@@ -47,6 +47,53 @@ test.describe("Mossu smoke", () => {
     expect(fatal, `unexpected console errors: ${fatal.join(" | ")}`).toEqual([]);
   });
 
+  test("opens binder and map without trapping controls", async ({ page }) => {
+    await page.goto("/?e2e=1&qaDebug=1", { waitUntil: "domcontentloaded", timeout: 60_000 });
+
+    await page.waitForFunction(
+      () => window.__MOSSU_E2E__?.ready === true && typeof window.render_game_to_text === "function",
+      { timeout: 120_000 },
+    );
+
+    const readState = async () =>
+      JSON.parse(await page.evaluate(() => window.render_game_to_text?.() ?? "{}")) as {
+        titleScreenOpen?: boolean;
+        openingSequence?: { active?: boolean };
+        pauseMenuOpen?: boolean;
+        characterScreenOpen?: boolean;
+        viewMode?: string;
+      };
+    const step = async (ms = 160) => {
+      await page.evaluate((duration) => window.advanceTime?.(duration), ms);
+    };
+
+    await page.keyboard.press("Enter");
+    await step(400);
+    await page.evaluate(() => window.mossuDebug?.completeOpeningSequence?.());
+    await step();
+
+    await page.keyboard.press("Tab");
+    await step();
+    let state = await readState();
+    expect(state.titleScreenOpen).toBe(false);
+    expect(state.openingSequence?.active).toBe(false);
+    expect(state.characterScreenOpen).toBe(true);
+    expect(state.viewMode).toBe("third_person");
+
+    await page.keyboard.press("KeyM");
+    await step();
+    state = await readState();
+    expect(state.characterScreenOpen).toBe(false);
+    expect(state.viewMode).toBe("map_lookdown");
+
+    await page.keyboard.press("Escape");
+    await step();
+    state = await readState();
+    expect(state.pauseMenuOpen).toBe(false);
+    expect(state.characterScreenOpen).toBe(false);
+    expect(state.viewMode).toBe("third_person");
+  });
+
   test("model viewer route loads", async ({ page }) => {
     await page.goto("/?modelViewer=1&e2e=1", { waitUntil: "domcontentloaded", timeout: 60_000 });
     await expect(page.locator("#app")).toBeVisible();

@@ -216,6 +216,13 @@ export function runWaterContracts() {
   assert(cloudbackCreek.kind === "creek", "highland creek resolves as creek ambience");
   assert(cloudbackCreek.proximity > 0.95, "highland creek has strong ambience");
 
+  const highlandRunoffPocket = sampleWaterState(10, 154);
+  assert(highlandRunoffPocket !== null, "highland waterfall route has gameplay water at the runoff pocket");
+  assert(highlandRunoffPocket.kind === "creek", "highland waterfall route resolves as creek water");
+  assert(highlandRunoffPocket.swimAllowed, "highland waterfall runoff pocket is deep enough to swim");
+  assert(highlandRunoffPocket.depth >= 1.65, "highland waterfall runoff pocket has readable swim depth");
+  assertFlowVector(highlandRunoffPocket.flowDirection, "highland waterfall runoff pocket");
+
   const farDryAmbience = sampleWaterAmbience(170, -190);
   assert(farDryAmbience.proximity < 0.05, "far dry meadow has no water ambience");
   assert(farDryAmbience.kind === null, "far dry meadow has no water ambience source");

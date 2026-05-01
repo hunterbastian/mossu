@@ -109,6 +109,7 @@ export class GameState {
   readonly frame: FrameState;
   private readonly movementScratch = createMovementScratch();
   private readonly simulationRuntime = createPlayerSimulationRuntime();
+  private saveRevision = 0;
 
   constructor() {
     this.frame = {
@@ -219,6 +220,14 @@ export class GameState {
     return buildCharacterScreenData(this.frame.save, this.frame);
   }
 
+  getSaveRevision() {
+    return this.saveRevision;
+  }
+
+  markSaveDirty() {
+    this.saveRevision += 1;
+  }
+
   private updateProgress(gatherPressed = false) {
     const player = this.frame.player.position;
     const height = sampleTerrainHeight(player.x, player.z);
@@ -231,5 +240,8 @@ export class GameState {
     this.frame.forageableTarget = forageableProgress.forageableTarget;
     this.frame.lastCatalogedLandmarkId = landmarkProgress.lastCatalogedLandmarkId;
     this.frame.lastGatheredForageableId = forageableProgress.lastGatheredForageableId;
+    if (landmarkProgress.lastCatalogedLandmarkId || forageableProgress.lastGatheredForageableId) {
+      this.markSaveDirty();
+    }
   }
 }

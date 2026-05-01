@@ -9,6 +9,7 @@ import {
   SWIM_CURRENT_SCALE,
   SWIM_DIVE_ACCELERATION,
   SWIM_DIVE_BUOYANCY,
+  SWIM_ENTRY_SURFACE_LIFT,
   SWIM_FLOAT_HEIGHT,
   SWIM_GRAVITY,
   SWIM_SPEED,
@@ -81,6 +82,7 @@ export function resolveWaterContact(
 ) {
   applyWaterState(player, waterState);
 
+  const wasSwimming = player.swimming;
   if (shouldSwim(player, waterState)) {
     player.swimming = true;
     player.grounded = false;
@@ -90,6 +92,14 @@ export function resolveWaterContact(
       player.velocity.y = Math.max(0, player.velocity.y);
     }
     const surfaceClamp = player.waterSurfaceY + PLAYER_RADIUS * 0.62;
+    if (!wasSwimming) {
+      const surfaceFloatY = MathUtils.clamp(player.waterSurfaceY + SWIM_FLOAT_HEIGHT, minimumSwimY, surfaceClamp);
+      if (player.position.y < surfaceFloatY) {
+        player.position.y = MathUtils.lerp(player.position.y, surfaceFloatY, wasGrounded ? SWIM_ENTRY_SURFACE_LIFT : 0.42);
+        player.velocity.y = Math.max(player.velocity.y, wasGrounded ? 1.2 : 0.35);
+      }
+      player.velocity.y = Math.max(player.velocity.y, -5.8);
+    }
     if (player.position.y > surfaceClamp) {
       player.position.y = surfaceClamp;
       player.velocity.y = Math.min(player.velocity.y, 1.5);

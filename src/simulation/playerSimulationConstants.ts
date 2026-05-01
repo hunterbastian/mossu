@@ -48,6 +48,7 @@ export const SWIM_ACCELERATION = 40;
 export const SWIM_DECELERATION = 24;
 export const SWIM_GRAVITY = 10;
 export const SWIM_BUOYANCY = 34;
+export const SWIM_ENTRY_SURFACE_LIFT = 0.72;
 export const SWIM_STROKE_ACCELERATION = 26;
 export const SWIM_DIVE_ACCELERATION = 18;
 export const SWIM_DIVE_BUOYANCY = 12;

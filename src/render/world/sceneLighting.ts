@@ -9,30 +9,52 @@ import {
 } from "three";
 import type { GrassShader } from "./grassSystem";
 
+const SUN_ORBIT_TARGET = new Vector3(54, 12, 102);
+const SUN_ORBIT_RADIUS_X = 370;
+const SUN_ORBIT_RADIUS_Z = 438;
+const SUN_ORBIT_BASE_LIFT = 52;
+const SUN_ORBIT_ARC_LIFT = 70;
+const SUN_ORBIT_SECONDS = 540;
+const SUN_ORBIT_INITIAL_PHASE = 0.846;
+const LOW_SUN_WARM = new Color("#ffc76a");
+
 /**
- * Single source of truth for sun position and target. Editing these two
- * vectors changes the lighting direction across the entire game.
- *
- * Picked to give Mossu a low side-back morning light: warm fill on the
- * camera-facing side, soft shadows on the far side. Moving the sun overhead
- * flattens shading and breaks the silhouette read.
+ * Single source of truth for sun orbit and target. The visible sky sun,
+ * DirectionalLight, sky shader, cloud lighting, grass, and water all read from
+ * this moving rig, so it behaves like a classic open-world RPG sky body instead
+ * of a painted backdrop.
  */
 export const SUN_WORLD_RIG = {
-  position: new Vector3(-244, 84, -46),
-  target: new Vector3(58, 12, 98),
+  position: new Vector3(300, 120, 430),
+  target: SUN_ORBIT_TARGET,
 } as const;
 
 export function applySunRig(sun: DirectionalLight) {
-  sun.position.copy(SUN_WORLD_RIG.position);
-  sun.target.position.copy(SUN_WORLD_RIG.target);
+  updateSunOrbitRig(sun, 0, 0);
+}
+
+export function updateSunOrbitRig(sun: DirectionalLight, timeSeconds: number, elevationMood: number) {
+  const mood = MathUtils.clamp(elevationMood, 0, 1);
+  const phase = SUN_ORBIT_INITIAL_PHASE + (timeSeconds / SUN_ORBIT_SECONDS) * Math.PI * 2;
+  const orbitHeight = Math.sin(phase - 0.18) * 0.5 + 0.5;
+  const lowAngleWarmth = 1 - MathUtils.smoothstep(orbitHeight, 0.16, 0.86);
+
+  sun.target.position.copy(SUN_ORBIT_TARGET);
+  sun.position.set(
+    SUN_ORBIT_TARGET.x + Math.cos(phase) * SUN_ORBIT_RADIUS_X,
+    SUN_ORBIT_TARGET.y + SUN_ORBIT_BASE_LIFT + orbitHeight * SUN_ORBIT_ARC_LIFT - mood * 10,
+    SUN_ORBIT_TARGET.z + Math.sin(phase) * SUN_ORBIT_RADIUS_Z,
+  );
+  sun.userData.orbitHeight = orbitHeight;
+  sun.userData.lowAngleWarmth = lowAngleWarmth;
 }
 
 /**
  * Per-frame lighting envelope. Mood lerps lowland → highland; cinematicLift
  * pulses on movement/landing; breath is a slow sine baked into the sun only.
  *
- * Numerically identical to the previous inline formulas — relocating it here
- * makes the lighting feel a 1-file lookup instead of a 5-file hunt.
+ * Kept intentionally biased toward directional sunlight so the visible sun has
+ * a real lighting consequence without crushing the soft ambient game read.
  */
 export interface SceneLightSet {
   sun: DirectionalLight;
@@ -51,18 +73,22 @@ export function applySceneLightingMood(
   breath: number,
 ) {
   const m = MathUtils.clamp(mood, 0, 1);
+  const orbitHeight = typeof lights.sun.userData.orbitHeight === "number"
+    ? MathUtils.clamp(lights.sun.userData.orbitHeight, 0, 1)
+    : 0.8;
+  const orbitKeyStrength = MathUtils.lerp(0.9, 1.07, orbitHeight);
   lights.sun.intensity =
-    MathUtils.lerp(3.28, 3.02, m) + cinematicLift * 0.16 + breath * 0.018;
+    (MathUtils.lerp(3.46, 3.18, m) + cinematicLift * 0.2 + breath * 0.024) * orbitKeyStrength;
   lights.ambient.intensity =
-    MathUtils.lerp(1.08, 0.98, m) + cinematicLift * 0.045;
+    MathUtils.lerp(1.04, 0.94, m) - orbitHeight * 0.035 + cinematicLift * 0.038;
   lights.hemi.intensity =
-    MathUtils.lerp(1.26, 1.12, m) + cinematicLift * 0.06;
+    MathUtils.lerp(1.2, 1.08, m) + cinematicLift * 0.055;
   lights.bounce.intensity =
-    MathUtils.lerp(0.56, 0.5, m) + cinematicLift * 0.05;
+    MathUtils.lerp(0.62, 0.54, m) + cinematicLift * 0.055;
   lights.meadowGlow.intensity =
-    MathUtils.lerp(0.72, 0.34, m) + cinematicLift * 0.22;
+    MathUtils.lerp(0.68, 0.3, m) + cinematicLift * 0.18;
   lights.alpineGlow.intensity =
-    MathUtils.lerp(0.58, 0.9, m) + cinematicLift * 0.16;
+    MathUtils.lerp(0.54, 0.82, m) + cinematicLift * 0.14;
   lights.fog.density =
     MathUtils.lerp(0.00048, 0.00068, m) - cinematicLift * 0.000035;
 }
@@ -97,7 +123,11 @@ export function applySceneLightingColors(
   mood: number,
 ) {
   const m = MathUtils.clamp(mood, 0, 1);
+  const lowAngleWarmth = typeof targets.sun.userData.lowAngleWarmth === "number"
+    ? MathUtils.clamp(targets.sun.userData.lowAngleWarmth, 0, 1)
+    : 0;
   targets.sun.color.copy(pairs.sun.lowland).lerp(pairs.sun.highland, m);
+  targets.sun.color.lerp(LOW_SUN_WARM, lowAngleWarmth * 0.22);
   targets.hemi.color.copy(pairs.skyFill.lowland).lerp(pairs.skyFill.highland, m);
   targets.hemi.groundColor.copy(pairs.skyGround.lowland).lerp(pairs.skyGround.highland, m);
   targets.fog.color.copy(pairs.fog.lowland).lerp(pairs.fog.highland, m);

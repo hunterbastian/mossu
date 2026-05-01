@@ -1,10 +1,8 @@
 import {
   BufferGeometry,
-  CircleGeometry,
   Color,
   ConeGeometry,
   CylinderGeometry,
-  DoubleSide,
   Float32BufferAttribute,
   Group,
   MathUtils,
@@ -145,39 +143,7 @@ function buildDistantTreeBelts() {
 }
 
 function buildCloudShadowPatches() {
-  const geometry = new CircleGeometry(1, 28);
-  geometry.rotateX(-Math.PI / 2);
-  const patches = [
-    [-72, -118, 34, 14, 0.07, -0.2],
-    [28, -54, 48, 18, 0.06, 0.12],
-    [-22, 28, 58, 21, 0.05, -0.08],
-    [36, 98, 52, 18, 0.048, 0.18],
-    [-34, 156, 62, 22, 0.044, -0.14],
-  ] as const;
-
-  return patches.flatMap(([x, z, sx, sz, opacity, yaw], index) => {
-    if (!canPlaceGroundAccent(x, z, 0.56)) {
-      return [];
-    }
-
-    const material = new MeshBasicMaterial({
-      color: index < 2 ? immersionArt.immersionShadowWarm : immersionArt.immersionShadow,
-      transparent: true,
-      opacity,
-      depthWrite: false,
-      side: DoubleSide,
-    });
-    const patch = new Mesh(geometry, material);
-    patch.name = `grassland-cloud-shadow-${index}`;
-    patch.position.set(x, sampleTerrainHeight(x, z) + 0.08, z);
-    patch.rotation.y = yaw;
-    patch.scale.set(sx, 1, sz);
-    patch.renderOrder = 1;
-    patch.userData.baseX = x;
-    patch.userData.baseZ = z;
-    patch.userData.baseOpacity = opacity;
-    return [patch];
-  });
+  return [];
 }
 
 function buildPollenMotes() {

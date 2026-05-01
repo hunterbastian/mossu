@@ -1,6 +1,5 @@
 import {
   AmbientLight,
-  BufferGeometry,
   Camera,
   CircleGeometry,
   Color,
@@ -9,7 +8,6 @@ import {
   DirectionalLight,
   DoubleSide,
   FogExp2,
-  Float32BufferAttribute,
   Group,
   HemisphereLight,
   InstancedMesh,
@@ -28,8 +26,8 @@ import {
   TorusGeometry,
   Vector3,
 } from "three";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { FrameState } from "../../simulation/gameState";
+import type { CoopRemoteMossuState } from "../../simulation/coopStress";
 import {
   ForageableKind,
   sampleBaseTerrainHeight,
@@ -39,7 +37,6 @@ import {
   sampleTerrainNormal,
   sampleWaterState,
   sampleWindField,
-  shadowPockets,
   STARTING_WATER_POOLS,
   startingLookTarget,
   startingPosition,
@@ -80,7 +77,6 @@ import {
   buildForestGroveAccents,
   buildGroundLayer,
   buildHighlandAccents,
-  buildLandmarkTrees,
   buildMidLayer,
   buildTreeClusters,
   buildWaterBankAccents,
@@ -103,6 +99,7 @@ import {
   getAtmosphereHorizonTints,
   getSunDirectionWorld,
   type SceneColorPairs,
+  updateSunOrbitRig,
   writePatchSceneLightingUniforms,
 } from "./sceneLighting";
 import { buildTerrainFormStrokes, makeTerrainMesh } from "./terrainMesh";
@@ -114,15 +111,21 @@ import {
   buildGrasslandImmersionSystem,
   updateGrasslandImmersionSystem,
 } from "./grasslandImmersion";
+import { buildMountainBackdrop } from "./mountainBackdrop";
 
 const grasslandsArt = OOT_PS2_GRASSLANDS_PALETTE;
 
 /** Instanced blade budgets — raise together when tuning meadow lushness vs GPU cost */
-const GRASS_COUNT = 11500;
-const FAR_GRASS_PATCH_COUNT = 1150;
-const ALPINE_GRASS_COUNT = 1850;
+const GRASS_COUNT = 11800;
+const FAR_GRASS_PATCH_COUNT = 1420;
+const ALPINE_GRASS_COUNT = 220;
 const LANDING_SPLASH_PARTICLES = 18;
 const SNOW_TRAIL_PARTICLES = 20;
+const DEFERRED_WORLD_SLICES_PER_COVERED_FRAME = 3;
+const TREE_LEAF_WIND_UPDATE_INTERVAL = 1 / 30;
+const SMALL_PROP_CULL_DISTANCE = 210;
+const FAR_DECOR_CULL_DISTANCE = 280;
+const WORLD_CULLING_UPDATE_INTERVAL = 10;
 
 interface LandingSplashParticle {
   mesh: Mesh;
@@ -162,6 +165,15 @@ interface ForageableVisual {
   spinDirection: number;
 }
 
+interface RemoteMossuVisual {
+  group: Group;
+  body: Mesh;
+  tuft: Mesh;
+  state: CoopRemoteMossuState;
+  baseScale: number;
+  bobOffset: number;
+}
+
 interface WorldRendererOptions {
   debugSpiritCloseup?: boolean;
   webGpuCompatibleMaterials?: boolean;
@@ -169,6 +181,7 @@ interface WorldRendererOptions {
 }
 
 export interface WorldPerfStats {
+  deferredWorldSlices: number;
   terrainVertices: number;
   terrainTriangles: number;
   grassMeshes: number;
@@ -419,31 +432,12 @@ function buildShrine() {
   cap.position.y = 3.6;
   moss.position.y = 2.2;
   shrine.add(base, cap, moss);
-  shrine.position.set(2, sampleTerrainHeight(2, 214), 214);
+  shrine.position.set(18, sampleTerrainHeight(18, 214), 214);
   return shrine;
 }
 
 function buildShadowPockets() {
-  const group = new Group();
-  shadowPockets.forEach((pocket) => {
-    const layers = new Group();
-    for (let i = 0; i < 4; i += 1) {
-      const radius = pocket.radius * (1 - i * 0.16);
-      const depth = pocket.depth * (1 - i * 0.18);
-      const material = new MeshBasicMaterial({
-        color: new Color().setHSL(pocket.hue, 0.1, 0.7 + i * 0.035),
-        transparent: true,
-        opacity: 0.012 - i * 0.002,
-        depthWrite: false,
-      });
-      const layer = new Mesh(new CylinderGeometry(radius, radius * 0.86, depth, 24), material);
-      layer.position.y = -i * 0.68;
-      layers.add(layer);
-    }
-    layers.position.copy(pocket.position);
-    group.add(layers);
-  });
-  return group;
+  return new Group();
 }
 
 function buildValleyMist() {
@@ -485,14 +479,14 @@ function buildFloatingIslandShell() {
 
   const upperMaterial = new MeshStandardMaterial({ color: "#d4cdb8", roughness: 0.98, side: DoubleSide });
   const lowerMaterial = new MeshStandardMaterial({ color: "#b9b7a2", roughness: 0.99, side: DoubleSide });
-  const lowerShadowMaterial = new MeshStandardMaterial({ color: "#9fa28d", roughness: 0.99, side: DoubleSide });
-  const underbellyMaterial = new MeshStandardMaterial({ color: "#788d77", roughness: 0.99, side: DoubleSide, metalness: 0.02 });
+  const lowerShadowMaterial = new MeshStandardMaterial({ color: "#b6baa5", roughness: 0.99, side: DoubleSide });
+  const underbellyMaterial = new MeshStandardMaterial({ color: "#98aa8f", roughness: 0.99, side: DoubleSide, metalness: 0.02 });
   const mossMaterial = new MeshStandardMaterial({
-    color: "#6f965d",
+    color: "#91b76d",
     roughness: 0.97,
     side: DoubleSide,
-    emissive: new Color("#1a2a16"),
-    emissiveIntensity: 0.22,
+    emissive: new Color("#2a351e"),
+    emissiveIntensity: 0.12,
   });
   const rimLipMaterial = new MeshStandardMaterial({ color: "#8a9f72", roughness: 0.9, side: DoubleSide });
   const hangMaterial = new MeshStandardMaterial({ color: "#727467", roughness: 0.97, side: DoubleSide });
@@ -619,6 +613,105 @@ function buildFloatingIslandShell() {
     group.add(cliffBulge);
   });
 
+  const waterfallMaterial = new MeshBasicMaterial({
+    color: "#dff8ff",
+    transparent: true,
+    opacity: 0.12,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const waterfallCoreMaterial = new MeshBasicMaterial({
+    color: "#fbfff4",
+    transparent: true,
+    opacity: 0.065,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  [0.06, 0.46, 0.88].forEach((turn, index) => {
+    const angle = turn * Math.PI * 2;
+    const point = sampleIslandBoundaryPoint(angle);
+    const rimY = sampleBaseTerrainHeight(point.x, point.z) - 34;
+    const width = 5.5 + (index % 2) * 2.2;
+    const height = 42 + (index % 3) * 9;
+    const veil = new Mesh(new PlaneGeometry(width, height, 1, 8), waterfallMaterial);
+    veil.name = `island-edge-waterfall-${index}`;
+    veil.rotation.y = Math.PI / 2 - angle;
+    veil.position.set(point.x, rimY - height * 0.48, point.z);
+    const core = new Mesh(new PlaneGeometry(width * 0.42, height * 0.92, 1, 8), waterfallCoreMaterial);
+    core.rotation.copy(veil.rotation);
+    core.position.copy(veil.position);
+    core.position.y += height * 0.02;
+    group.add(veil, core);
+  });
+
+  return group;
+}
+
+function buildDistantFloatingIslands() {
+  const group = new Group();
+  group.name = "distant-floating-islands";
+
+  const grassMaterial = new MeshBasicMaterial({ color: "#95ba6c", fog: true });
+  const cliffMaterial = new MeshBasicMaterial({ color: "#9a9078", fog: true });
+  const shadowMaterial = new MeshBasicMaterial({
+    color: "#9aa68c",
+    fog: true,
+    transparent: true,
+    opacity: 0.16,
+    depthWrite: false,
+  });
+  const treeMaterial = new MeshBasicMaterial({ color: "#477042", fog: true });
+  const mistMaterial = new MeshBasicMaterial({
+    color: "#d5ecf5",
+    fog: true,
+    transparent: true,
+    opacity: 0.24,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const placements = [
+    [-760, 140, 48, 18, 0.18],
+    [690, 70, 42, 15, -0.26],
+    [-540, -360, 34, 12, 0.42],
+    [560, -430, 30, 11, -0.44],
+    [220, 620, 52, 20, 0.08],
+  ] as const;
+
+  placements.forEach(([x, z, radius, lift, yaw], index) => {
+    const island = new Group();
+    island.name = `distant-floating-island-${index}`;
+    const y = 132 + lift + index * 8;
+    const top = new Mesh(new CylinderGeometry(1, 0.92, 8, 18, 1), grassMaterial);
+    top.scale.set(radius, 1, radius * (0.62 + (index % 2) * 0.16));
+    top.rotation.y = yaw;
+    top.position.y = y;
+    const cliff = new Mesh(new ConeGeometry(1, 44 + radius * 0.25, 18), cliffMaterial);
+    cliff.scale.set(radius * 0.82, 1, radius * 0.52);
+    cliff.rotation.y = yaw;
+    cliff.position.y = y - 24;
+    const shadow = new Mesh(new ConeGeometry(1, 54 + radius * 0.18, 18), shadowMaterial);
+    shadow.scale.set(radius * 0.56, 1, radius * 0.36);
+    shadow.rotation.y = yaw;
+    shadow.position.y = y - 52;
+    const mist = new Mesh(new CircleGeometry(radius * 1.18, 24), mistMaterial);
+    mist.rotation.x = -Math.PI / 2;
+    mist.position.y = y - 8;
+    island.add(top, cliff, shadow, mist);
+
+    for (let tree = 0; tree < 3; tree += 1) {
+      const angle = yaw + tree * 2.1 + index * 0.4;
+      const trunk = new Mesh(new CylinderGeometry(0.55, 0.78, 7, 6), cliffMaterial);
+      trunk.position.set(Math.cos(angle) * radius * 0.24, y + 5.4, Math.sin(angle) * radius * 0.18);
+      const crown = new Mesh(new ConeGeometry(4.4, 11, 8), treeMaterial);
+      crown.position.copy(trunk.position);
+      crown.position.y += 8.2;
+      island.add(trunk, crown);
+    }
+
+    island.position.set(x, 0, z);
+    group.add(island);
+  });
+
   return group;
 }
 
@@ -645,6 +738,56 @@ function createMapMarker(color: string, radius: number, height: number, opacity:
   cap.position.y = height + radius * 0.12;
   group.add(ring, core, cap);
   return group;
+}
+
+function createRemoteMossuVisual(index: number, state: CoopRemoteMossuState): RemoteMossuVisual {
+  const group = new Group();
+  group.name = `coop-stress-${state.id}`;
+  const palette = state.colors;
+  const bodyMaterial = new MeshLambertMaterial({
+    color: palette.body,
+    emissive: palette.emissive,
+    emissiveIntensity: 0.08,
+  });
+  const tuftMaterial = new MeshLambertMaterial({
+    color: palette.tuft,
+    emissive: palette.emissive,
+    emissiveIntensity: 0.05,
+  });
+  const eyeMaterial = new MeshBasicMaterial({ color: "#253a42" });
+  const glowMaterial = new MeshBasicMaterial({
+    color: palette.glow,
+    transparent: true,
+    opacity: 0.22,
+    depthWrite: false,
+  });
+
+  const glow = new Mesh(new CircleGeometry(1.35, 18), glowMaterial);
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = 0.04;
+
+  const body = new Mesh(new SphereGeometry(0.92, 14, 10), bodyMaterial);
+  body.position.y = 1.02;
+  body.scale.set(1.1, 0.86, 1);
+
+  const tuft = new Mesh(new SphereGeometry(0.34, 10, 8), tuftMaterial);
+  tuft.position.set(0, 1.78, -0.06);
+  tuft.scale.set(1.18, 0.66, 0.95);
+
+  const eyeLeft = new Mesh(new SphereGeometry(0.075, 8, 6), eyeMaterial);
+  eyeLeft.position.set(-0.28, 1.08, -0.78);
+  const eyeRight = eyeLeft.clone();
+  eyeRight.position.x = 0.28;
+
+  group.add(glow, body, tuft, eyeLeft, eyeRight);
+  return {
+    group,
+    body,
+    tuft,
+    state,
+    baseScale: Math.max(0.62, 0.82 - index * 0.04),
+    bobOffset: index * 1.73,
+  };
 }
 
 function createSeedPickup(seed: number) {
@@ -893,14 +1036,21 @@ export class WorldRenderer {
   private elevationMood = 0;
   private waterDepthDebug = false;
   private grassLodFrame = 0;
+  private grassLodMeshCursor = 0;
+  private worldCullingFrame = 0;
+  private lastMapLookdown = false;
+  private treeLeafWindUpdateCarry = 0;
   private heroGrassPulse = 0;
   private environmentPulse = 0;
+  private readonly debugHiddenLayers = new Set<string>();
+  private suppressHighlandVistaGrass = false;
 
   private readonly shrine = buildShrine();
   private readonly terrainFormStrokes = buildTerrainFormStrokes();
   private readonly openingNestVista = batchStaticDecorations(buildOpeningNestVista(), "opening-nest-vista-batch");
   private readonly openingWaterComposition = batchStaticDecorations(buildOpeningWaterComposition(), "opening-water-composition-batch");
   private readonly islandShell = buildFloatingIslandShell();
+  private readonly distantFloatingIslands = buildDistantFloatingIslands();
   private readonly groundLayer = new Group();
   private readonly midLayer = new Group();
   private readonly treeClusters = new Group();
@@ -928,6 +1078,15 @@ export class WorldRenderer {
       depthWrite: false,
     }),
   );
+
+  debugSetLayerVisibility(layer: string, visible: boolean) {
+    if (visible) {
+      this.debugHiddenLayers.delete(layer);
+    } else {
+      this.debugHiddenLayers.add(layer);
+    }
+    this.applyDebugLayerVisibility();
+  }
   private readonly meadowGlow = new PointLight(grasslandsArt.scene.meadowGlow, 1.48, 220, 1.4);
   private readonly alpineGlow = new PointLight(grasslandsArt.scene.alpineGlow, 0.74, 260, 1.1);
   private readonly landingSplash = new Group();
@@ -955,6 +1114,8 @@ export class WorldRenderer {
   private readonly landingNormal = new Vector3();
   private readonly trailVelocity = new Vector3();
   private readonly trailDirection = new Vector3();
+  private readonly remoteMossus = new Map<string, RemoteMossuVisual>();
+  private readonly remoteMossuScratch = new Vector3();
   private trailEmissionCarry = 0;
   private readonly mapMarkerGroup = new Group();
   private readonly forageableGroup = new Group();
@@ -1012,6 +1173,7 @@ export class WorldRenderer {
     this.mossuContactShadow.renderOrder = 1;
     scene.add(this.mossuContactShadow);
     scene.add(this.islandShell);
+    scene.add(this.distantFloatingIslands);
     scene.add(this.waterSystem.group);
     scene.add(this.groundLayer);
     scene.add(this.midLayer);
@@ -1051,8 +1213,8 @@ export class WorldRenderer {
         widthMultiplier: 1.06,
         fadeInStart: 5,
         fadeInEnd: 12,
-        fadeOutStart: 38,
-        fadeOutEnd: 76,
+        fadeOutStart: 44,
+        fadeOutEnd: 88,
         rootFillBoost: 0.05,
         selfShadowStrength: 0.72,
         distanceCompressionBoost: 0.04,
@@ -1065,7 +1227,7 @@ export class WorldRenderer {
         lod: {
           label: "near",
           innerRadius: 0,
-          outerRadius: 76,
+          outerRadius: 88,
           cellSize: 22,
           sampleStride: 1,
           updateEveryFrames: 4,
@@ -1087,8 +1249,8 @@ export class WorldRenderer {
         widthMultiplier: 1.12,
         fadeInStart: 24,
         fadeInEnd: 44,
-        fadeOutStart: 96,
-        fadeOutEnd: 144,
+        fadeOutStart: 118,
+        fadeOutEnd: 190,
         rootFillBoost: 0.18,
         selfShadowStrength: 0.58,
         distanceCompressionBoost: 0.14,
@@ -1101,7 +1263,7 @@ export class WorldRenderer {
         lod: {
           label: "mid",
           innerRadius: 48,
-          outerRadius: 168,
+          outerRadius: 226,
           cellSize: 34,
           sampleStride: 2,
           updateEveryFrames: 6,
@@ -1115,9 +1277,9 @@ export class WorldRenderer {
       new Color(grasslandsArt.grass.farBottom),
       new Color(grasslandsArt.grass.farTop),
       {
-        placementMultiplier: 1.28,
-        scaleMultiplier: 1.04,
-        opacity: 0.3,
+        placementMultiplier: 1.42,
+        scaleMultiplier: 1.12,
+        opacity: 0.32,
       },
     );
     const alpineGrass = createGrassMesh(
@@ -1127,10 +1289,16 @@ export class WorldRenderer {
       new Color(grasslandsArt.grass.alpineTop),
       {
         crossPlanes: 1,
-        bladeHeight: 2.48,
-        placementMultiplier: 1.12,
-        scaleMultiplier: 0.86,
-        selfShadowStrength: 0.42,
+        bladeWidth: 0.58,
+        bladeHeight: 1.82,
+        placementMultiplier: 0.76,
+        scaleMultiplier: 0.62,
+        widthMultiplier: 0.76,
+        fadeInStart: 16,
+        fadeInEnd: 32,
+        fadeOutStart: 96,
+        fadeOutEnd: 172,
+        selfShadowStrength: 0.24,
         distanceCompressionBoost: 0.24,
         playerPushRadius: 11.5,
         playerPushStrength: 1.08,
@@ -1141,9 +1309,9 @@ export class WorldRenderer {
         lod: {
           label: "alpine",
           innerRadius: 34,
-          outerRadius: 340,
+          outerRadius: 188,
           cellSize: 52,
-          sampleStride: 2,
+          sampleStride: 3,
           updateEveryFrames: 10,
           movementThreshold: 8,
         },
@@ -1303,9 +1471,40 @@ export class WorldRenderer {
     return this.createPerfStats();
   }
 
+  flushDeferredWorldSlices() {
+    let flushed = 0;
+    while (this.deferredWorldSlices.length > 0) {
+      this.deferredWorldSlices.shift()?.();
+      flushed += 1;
+    }
+    this.deferredWorldFrame = 0;
+    return flushed;
+  }
+
   setWaterDepthDebugEnabled(enabled: boolean) {
     this.waterDepthDebug = enabled;
     this.waterSystem.setDepthDebugEnabled(enabled);
+  }
+
+  setRemoteMossus(remotes: readonly CoopRemoteMossuState[]) {
+    const activeIds = new Set(remotes.map((remote) => remote.id));
+    this.remoteMossus.forEach((remote, id) => {
+      if (!activeIds.has(id)) {
+        this.scene.remove(remote.group);
+        this.remoteMossus.delete(id);
+        this.waterSystem.markActorDry(`coop-${id}`);
+      }
+    });
+
+    remotes.forEach((remote, index) => {
+      let visual = this.remoteMossus.get(remote.id);
+      if (!visual) {
+        visual = createRemoteMossuVisual(index, remote);
+        this.scene.add(visual.group);
+        this.remoteMossus.set(remote.id, visual);
+      }
+      visual.state = remote;
+    });
   }
 
   isWaterDepthDebugEnabled() {
@@ -1386,80 +1585,7 @@ export class WorldRenderer {
         });
       },
       () => {
-        // Build a cone-stack mountain silhouette with vertex-color snow caps.
-        // Vertex colors drive the codex-like grass -> rock -> snow read without adding a custom shader.
-        const buildMountainGeometry = (): BufferGeometry => {
-          const SEG = 20;
-          const lobes: BufferGeometry[] = [];
-
-          // [radiusBottom, radiusTop, height, yOffset, snowFraction]
-          const lobeSpec: [number, number, number, number, number][] = [
-            [1.12, 0.74, 0.34, 0.0, 0.0],
-            [0.82, 0.44, 0.44, 0.3, 0.08],
-            [0.48, 0.12, 0.5, 0.68, 0.54],
-            [0.24, 0.02, 0.34, 1.08, 0.86],
-          ];
-
-          const colorBase = new Color("#bdd89a");
-          const colorRock = new Color("#bec8b3");
-          const colorShade = new Color("#aebca8");
-          const colorSnow = new Color("#fff8df");
-
-          lobes.push(
-            ...lobeSpec.map(([rb, rt, h, yOff, snowFrac]) => {
-              const geo = new ConeGeometry(rb, h, SEG, 3, false);
-              geo.translate(0, yOff + h * 0.5, 0);
-
-              // Build per-vertex colors
-              const posArr = geo.attributes.position.array as Float32Array;
-              const vertCount = posArr.length / 3;
-              const colors = new Float32Array(vertCount * 3);
-              for (let v = 0; v < vertCount; v++) {
-                const vx = posArr[v * 3];
-                const vy = posArr[v * 3 + 1];
-                const t = Math.max(0, Math.min(1, (vy - yOff) / h));
-                const col = new Color();
-                if (t < 0.5) {
-                  col.lerpColors(colorBase, colorRock, t * 2);
-                } else {
-                  col.lerpColors(colorRock, colorSnow, (t - 0.5) * 2 * snowFrac);
-                }
-                col.lerp(colorShade, Math.max(0, -vx) * 0.035 + Math.max(0, 0.42 - t) * 0.035);
-                colors[v * 3]     = col.r;
-                colors[v * 3 + 1] = col.g;
-                colors[v * 3 + 2] = col.b;
-              }
-              geo.setAttribute("color", new Float32BufferAttribute(colors, 3));
-              return geo;
-            }),
-          );
-
-          const merged = mergeGeometries(lobes, false);
-          lobes.forEach((g) => g.dispose());
-          return merged;
-        };
-
-        const mountainMaterial = new MeshBasicMaterial({ vertexColors: true });
-        const sharedGeo = buildMountainGeometry();
-
-        // [worldX, worldZ, scaleX, scaleY, scaleZ, yaw, lift]
-        for (const [x, z, sx, sy, sz, yaw, lift] of [
-          [-174, 178, 82, 108, 96, -0.2, 8],
-          [-128, 226, 112, 152, 122, 0.08, 12],
-          [-58, 252, 126, 174, 128, -0.1, 15],
-          [8, 238, 146, 184, 132, -0.04, 12],
-          [82, 248, 122, 158, 116, 0.18, 14],
-          [124, 212, 116, 148, 120, 0.22, 10],
-          [166, 176, 72, 96, 82, 0.4, 7],
-          [-48, 172, 58, 78, 66, -0.52, 6],
-          [62, 162, 64, 84, 70, 0.34, 6],
-        ]) {
-          const mountain = new Mesh(sharedGeo, mountainMaterial);
-          mountain.scale.set(sx as number, sy as number, sz as number);
-          mountain.rotation.y = yaw as number;
-          mountain.position.set(x as number, lift as number, z as number);
-          this.mountainSilhouettes.add(mountain);
-        }
+        moveChildren(this.mountainSilhouettes, buildMountainBackdrop());
         freezeStaticHierarchy(this.mountainSilhouettes);
       },
       () => {
@@ -1473,12 +1599,20 @@ export class WorldRenderer {
     );
   }
 
-  private processDeferredWorldSlice() {
+  private processDeferredWorldSlice(coveredByTransition = false) {
     if (this.deferredWorldSlices.length === 0) {
       return;
     }
 
     this.deferredWorldFrame += 1;
+    if (coveredByTransition) {
+      const slicesThisFrame = Math.min(DEFERRED_WORLD_SLICES_PER_COVERED_FRAME, this.deferredWorldSlices.length);
+      for (let i = 0; i < slicesThisFrame; i += 1) {
+        this.deferredWorldSlices.shift()?.();
+      }
+      return;
+    }
+
     if (this.deferredWorldFrame < 3 || this.deferredWorldFrame % 2 !== 0) {
       return;
     }
@@ -1494,6 +1628,7 @@ export class WorldRenderer {
     recruitPressed = false,
     regroupPressed = false,
     viewCamera: Camera,
+    coveredByTransition = false,
   ) {
     if (regroupPressed) {
       this.mossu.triggerKaruCall();
@@ -1509,8 +1644,13 @@ export class WorldRenderer {
       regroupPressed,
     );
     this.mossu.update(frame.player, dt);
+    this.updateRemoteMossus(elapsed, mapLookdown);
     this.updateMossuContactShadow(frame, mapLookdown);
     this.skyDome.position.copy(frame.player.position);
+    this.suppressHighlandVistaGrass = !mapLookdown && (
+      frame.player.position.z > 122 ||
+      frame.player.position.y > 76
+    );
     this.updateSceneMood(frame, dt, viewCamera, elapsed);
     this.scene.fog = mapLookdown ? null : this.gameplayFog;
     if (!mapLookdown) {
@@ -1527,21 +1667,108 @@ export class WorldRenderer {
     this.updateSnowTrail(frame, dt);
     this.updateForageables(frame, elapsed, mapLookdown);
     this.updateMapMarkers(frame, elapsed, mapLookdown);
-    this.updateGrassLod(frame, mapLookdown);
+    this.updateGrassLod(frame, mapLookdown, coveredByTransition);
+    const mapLookdownChanged = this.lastMapLookdown !== mapLookdown;
+    this.updateWorldCulling(frame, viewCamera, mapLookdown, mapLookdownChanged);
+    this.syncMapLookdownVisibility(mapLookdown);
+    this.lastMapLookdown = mapLookdown;
+    this.processDeferredWorldSlice(coveredByTransition);
+  }
+
+  private syncMapLookdownVisibility(mapLookdown: boolean) {
+    const gameplayVisible = !mapLookdown;
+    const grassVisible = gameplayVisible && !this.suppressHighlandVistaGrass;
     this.windMeshes.forEach((mesh) => {
-      mesh.visible = !mapLookdown && mesh.count > 0;
+      mesh.visible = grassVisible && mesh.count > 0;
     });
-    this.skyDome.visible = !mapLookdown;
-    this.islandShell.visible = !mapLookdown;
-    this.clouds.visible = !mapLookdown;
-    this.mountainSilhouettes.visible = !mapLookdown;
-    this.mountainAtmosphere.visible = !mapLookdown;
-    this.valleyMist.visible = !mapLookdown;
-    this.ambientMotes.setVisible(!mapLookdown);
-    this.ocean.setVisible(!mapLookdown);
-    this.shadowVolumes.visible = !mapLookdown;
-    this.terrainFormStrokes.visible = !mapLookdown;
-    this.processDeferredWorldSlice();
+    this.treeWindMeshes.forEach((mesh) => {
+      mesh.visible = gameplayVisible && mesh.count > 0;
+    });
+    this.treeLeafWindMeshes.forEach((mesh) => {
+      mesh.visible = gameplayVisible;
+    });
+    this.smallPropMeshes.forEach((mesh) => {
+      if (mapLookdown) {
+        mesh.visible = false;
+      }
+    });
+    this.skyDome.visible = gameplayVisible;
+    this.skySun.visible = gameplayVisible;
+    this.islandShell.visible = gameplayVisible;
+    this.distantFloatingIslands.visible = gameplayVisible;
+    this.clouds.visible = gameplayVisible;
+    this.mountainSilhouettes.visible = gameplayVisible;
+    this.mountainAtmosphere.visible = gameplayVisible;
+    this.groundLayer.visible = gameplayVisible;
+    this.midLayer.visible = gameplayVisible;
+    this.treeClusters.visible = gameplayVisible;
+    this.forestGroveAccents.visible = gameplayVisible;
+    this.waterBankAccents.visible = gameplayVisible;
+    this.highlandAccents.visible = gameplayVisible;
+    this.valleyMist.visible = gameplayVisible;
+    this.ambientMotes.setVisible(gameplayVisible);
+    this.ocean.setVisible(gameplayVisible);
+    this.shadowVolumes.visible = gameplayVisible;
+    this.terrainFormStrokes.visible = gameplayVisible;
+    this.grassImpostorMeshes.forEach((mesh) => {
+      mesh.visible = grassVisible && mesh.count > 0;
+    });
+    this.applyDebugLayerVisibility();
+  }
+
+  private applyDebugLayerVisibility() {
+    if (this.debugHiddenLayers.size === 0) {
+      return;
+    }
+    if (this.debugHiddenLayers.has("clouds")) {
+      this.clouds.visible = false;
+    }
+    if (this.debugHiddenLayers.has("grass")) {
+      this.windMeshes.forEach((mesh) => {
+        mesh.visible = false;
+      });
+      this.grassImpostorMeshes.forEach((mesh) => {
+        mesh.visible = false;
+      });
+    }
+    if (this.debugHiddenLayers.has("mountains")) {
+      this.mountainSilhouettes.visible = false;
+    }
+    if (this.debugHiddenLayers.has("mountainAtmosphere")) {
+      this.mountainAtmosphere.visible = false;
+    }
+    if (this.debugHiddenLayers.has("sky")) {
+      this.skyDome.visible = false;
+    }
+    if (this.debugHiddenLayers.has("sun")) {
+      this.skySun.visible = false;
+    }
+    if (this.debugHiddenLayers.has("floatingIslands")) {
+      this.distantFloatingIslands.visible = false;
+    }
+    if (this.debugHiddenLayers.has("terrain")) {
+      this.terrain.visible = false;
+    }
+  }
+
+  private updateRemoteMossus(elapsed: number, mapLookdown: boolean) {
+    this.remoteMossus.forEach((remote) => {
+      const player = remote.state.player;
+      remote.group.visible = !mapLookdown;
+      if (!mapLookdown) {
+        const activityLift = remote.state.activity === "hop" || player.floating ? 0.12 : 0;
+        const pulse = 1 + remote.state.eventPulse * 0.12;
+        const rollSquash = player.rolling ? 0.88 : 1;
+        const swimFlatten = player.swimming ? 0.84 : 1;
+        remote.group.position.set(player.position.x, player.position.y - 1.15, player.position.z);
+        remote.group.rotation.y = player.heading;
+        remote.group.scale.setScalar(remote.baseScale * pulse);
+        remote.body.position.y = 0.98 + Math.sin(elapsed * 2.2 + remote.bobOffset) * 0.08 + activityLift;
+        remote.body.scale.set(1.1 + remote.state.eventPulse * 0.08, 0.86 * rollSquash * swimFlatten, 1.0);
+        remote.tuft.position.y = 1.7 + activityLift + Math.sin(elapsed * 2.6 + remote.bobOffset) * 0.06;
+        remote.tuft.rotation.z = Math.sin(elapsed * 2.1 + remote.bobOffset) * 0.18;
+      }
+    });
   }
 
   private updateForageables(frame: FrameState, elapsed: number, mapLookdown: boolean) {
@@ -1552,8 +1779,15 @@ export class WorldRenderer {
 
     this.forageableVisuals.forEach((visual, index) => {
       const gathered = frame.save.gatheredForageableIds.has(visual.id);
-      visual.group.visible = !gathered;
+      const distanceToPlayer = Math.hypot(
+        visual.group.position.x - frame.player.position.x,
+        visual.group.position.z - frame.player.position.z,
+      );
+      visual.group.visible = !gathered && distanceToPlayer < 148;
       if (gathered) {
+        return;
+      }
+      if (!visual.group.visible) {
         return;
       }
 
@@ -1607,6 +1841,7 @@ export class WorldRenderer {
     const smallPropInstances = this.smallPropMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
 
     return {
+      deferredWorldSlices: this.deferredWorldSlices.length,
       terrainVertices: countGeometryVertices(this.terrain.geometry),
       terrainTriangles: countGeometryTriangles(this.terrain.geometry),
       grassMeshes: this.windMeshes.length,
@@ -1676,14 +1911,51 @@ export class WorldRenderer {
     material.opacity = 0.12 * groundedFade * waterFade;
   }
 
-  private updateGrassLod(frame: FrameState, mapLookdown: boolean) {
-    if (mapLookdown) {
+  private updateGrassLod(frame: FrameState, mapLookdown: boolean, _coveredByTransition: boolean) {
+    if (mapLookdown || this.suppressHighlandVistaGrass) {
       return;
     }
 
     this.grassLodFrame += 1;
-    this.windMeshes.forEach((mesh) => {
-      updateGrassMeshLod(mesh, frame.player.position, this.grassLodFrame);
+    const meshCount = this.windMeshes.length;
+    if (meshCount === 0) {
+      return;
+    }
+
+    for (let offset = 0; offset < meshCount; offset += 1) {
+      const meshIndex = (this.grassLodMeshCursor + offset) % meshCount;
+      if (updateGrassMeshLod(this.windMeshes[meshIndex], frame.player.position, this.grassLodFrame)) {
+        this.grassLodMeshCursor = (meshIndex + 1) % meshCount;
+        return;
+      }
+    }
+  }
+
+  private updateWorldCulling(frame: FrameState, viewCamera: Camera, mapLookdown: boolean, force = false) {
+    this.worldCullingFrame += 1;
+    if (!force && this.worldCullingFrame % WORLD_CULLING_UPDATE_INTERVAL !== 0) {
+      return;
+    }
+
+    if (mapLookdown) {
+      this.smallPropMeshes.forEach((mesh) => {
+        mesh.visible = false;
+      });
+      return;
+    }
+
+    const player = frame.player.position;
+    const camera = viewCamera.position;
+    this.smallPropMeshes.forEach((mesh) => {
+      const centerX = (mesh.userData.smallPropCenterX as number | undefined) ?? 0;
+      const centerZ = (mesh.userData.smallPropCenterZ as number | undefined) ?? 0;
+      const radius = (mesh.userData.smallPropRadius as number | undefined) ?? 80;
+      const playerDistance = Math.hypot(centerX - player.x, centerZ - player.z);
+      const cameraDistance = Math.hypot(centerX - camera.x, centerZ - camera.z);
+      const cullDistance = mesh.count > 80 ? SMALL_PROP_CULL_DISTANCE : FAR_DECOR_CULL_DISTANCE;
+      mesh.visible =
+        playerDistance <= radius + cullDistance ||
+        cameraDistance <= radius + cullDistance * 0.82;
     });
   }
 
@@ -1700,21 +1972,45 @@ export class WorldRenderer {
       ? MathUtils.clamp(planarSpeed / 22, 0.18, 0.5)
       : 0;
     const karuWatchWake = this.faunaStats.firstEncounterActive ? 0.22 : 0;
+    let coopWake = 0;
+    let coopLandingWake = 0;
+    this.remoteMossus.forEach((remote) => {
+      const remotePlayer = remote.state.player;
+      const remoteSpeed = Math.hypot(remotePlayer.velocity.x, remotePlayer.velocity.z);
+      const distanceToMossu = this.remoteMossuScratch
+        .copy(remotePlayer.position)
+        .sub(frame.player.position)
+        .setY(0)
+        .length();
+      const proximity = 1 - MathUtils.smoothstep(distanceToMossu, 6, 24);
+      coopWake += proximity * MathUtils.clamp(remoteSpeed / 32, 0.04, 0.18);
+      if (remotePlayer.justLanded) {
+        coopLandingWake = Math.max(coopLandingWake, proximity * 0.18);
+      }
+    });
     const basePush = frame.player.fallingToVoid || !frame.player.grounded
       ? 0
       : frame.player.rolling
         ? MathUtils.clamp(planarSpeed / 24, 0.22, 1)
         : MathUtils.clamp(planarSpeed / 14, 0, 0.48);
-    const playerPush = MathUtils.clamp(basePush + landingPulse + rollingWake + karuWatchWake, 0, 1.35);
-    this.windMeshes.forEach((mesh) => {
-      const shader = mesh.userData.shader;
-      if (shader) {
-        shader.uniforms.uTime.value = elapsed;
-        (shader.uniforms.uPlayerPosition.value as Vector3).copy(frame.player.position);
-        (shader.uniforms.uPlayerVelocity.value as Vector3).set(frame.player.velocity.x, 0, frame.player.velocity.z);
-        shader.uniforms.uPlayerPush.value = playerPush;
-      }
-    });
+    const playerPush = MathUtils.clamp(basePush + landingPulse + rollingWake + karuWatchWake + coopWake + coopLandingWake, 0, 1.35);
+    if (!this.suppressHighlandVistaGrass) {
+      this.windMeshes.forEach((mesh) => {
+        const shader = mesh.userData.shader;
+        if (shader) {
+          shader.uniforms.uTime.value = elapsed;
+          (shader.uniforms.uPlayerPosition.value as Vector3).copy(frame.player.position);
+          (shader.uniforms.uPlayerVelocity.value as Vector3).set(frame.player.velocity.x, 0, frame.player.velocity.z);
+          shader.uniforms.uPlayerPush.value = playerPush;
+          if (this.remoteMossus.size > 0) {
+            shader.uniforms.uPlayerPushRadius.value = Math.max(
+              shader.uniforms.uPlayerPushRadius.value as number,
+              13.8,
+            );
+          }
+        }
+      });
+    }
     this.heroGrassPulse = MathUtils.damp(this.heroGrassPulse, 0, 3.2, dt);
     this.treeWindMeshes.forEach((mesh) => {
       const shader = mesh.userData.windShader;
@@ -1722,17 +2018,21 @@ export class WorldRenderer {
         shader.uniforms.uTime.value = elapsed;
       }
     });
-    this.treeLeafWindMeshes.forEach((mesh) => {
-      const material = mesh.material;
-      if (Array.isArray(material)) {
-        return;
-      }
+    this.treeLeafWindUpdateCarry += dt;
+    if (this.treeLeafWindUpdateCarry >= TREE_LEAF_WIND_UPDATE_INTERVAL) {
+      this.treeLeafWindUpdateCarry %= TREE_LEAF_WIND_UPDATE_INTERVAL;
+      this.treeLeafWindMeshes.forEach((mesh) => {
+        const material = mesh.material;
+        if (Array.isArray(material)) {
+          return;
+        }
 
-      const shader = material.userData.windShader;
-      if (shader?.uniforms.uTime) {
-        shader.uniforms.uTime.value = elapsed;
-      }
-    });
+        const shader = material.userData.windShader;
+        if (shader?.uniforms.uTime) {
+          shader.uniforms.uTime.value = elapsed;
+        }
+      });
+    }
   }
 
   private updateSceneMood(frame: FrameState, dt: number, viewCamera: Camera, elapsed: number) {
@@ -1747,6 +2047,11 @@ export class WorldRenderer {
     if (this.faunaStats.firstEncounterActive) {
       this.environmentPulse = Math.max(this.environmentPulse, 0.24);
     }
+    this.remoteMossus.forEach((remote) => {
+      if (remote.state.eventPulse > 0.05 || remote.state.player.justLanded) {
+        this.environmentPulse = Math.max(this.environmentPulse, 0.12 + remote.state.eventPulse * 0.08);
+      }
+    });
     const heightMood = MathUtils.smoothstep(playerHeight, 34, 128);
     const routeMood = MathUtils.smoothstep(frame.player.position.z, 64, 202);
     const targetMood = MathUtils.clamp(heightMood * 0.72 + routeMood * 0.4, 0, 1);
@@ -1759,6 +2064,7 @@ export class WorldRenderer {
     const cinematicLift = MathUtils.clamp(this.environmentPulse + movementWake, 0, 0.42);
     const breath = Math.sin(elapsed * 0.34 + this.elevationMood * 1.8) * 0.5 + 0.5;
 
+    updateSunOrbitRig(this.sun, elapsed, this.elevationMood);
     applySceneLightingColors(
       {
         sun: this.sun,
@@ -1785,7 +2091,7 @@ export class WorldRenderer {
     );
     this.environmentPulse = MathUtils.damp(this.environmentPulse, 0, 2.35, dt);
     syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera, elapsed);
-    syncStylizedSkySun(this.skySun, this.sun, viewCamera, this.elevationMood);
+    syncStylizedSkySun(this.skySun, this.sun, viewCamera, this.elevationMood, elapsed);
 
     getAtmosphereHorizonTints(
       this.elevationMood,
@@ -1845,6 +2151,19 @@ export class WorldRenderer {
       frame.player.justLanded,
     );
 
+    this.remoteMossus.forEach((remote) => {
+      const remotePlayer = remote.state.player;
+      const remoteSpeed = Math.hypot(remotePlayer.velocity.x, remotePlayer.velocity.z);
+      this.waterSystem.emitRippleForActor(
+        `coop-${remote.state.id}`,
+        remotePlayer.position,
+        remoteSpeed,
+        elapsed,
+        remotePlayer.swimming ? 0.76 : remotePlayer.rolling ? 0.68 : 0.52,
+        remotePlayer.justLanded,
+      );
+    });
+
     this.ambientBlobs.forEach((blob) => {
       if (!blob.recruited || (blob.waterReaction !== "splash" && blob.waterReaction !== "float")) {
         this.waterSystem.markActorDry(`karu-${blob.id}`);
@@ -1900,12 +2219,17 @@ export class WorldRenderer {
 
   private updateClouds(elapsed: number) {
     this.clouds.children.forEach((cloud: Object3D, index: number) => {
-      const baseX = [-88, 42, -12, 98, -122][index] ?? 0;
-      cloud.position.x = baseX + Math.sin(elapsed * 0.04 + index) * (6 + index * 1.4);
-      cloud.position.z += 0.006 * (index + 1);
-      if (cloud.position.z > 260) {
-        cloud.position.z = -160;
-      }
+      const baseX = (cloud.userData.baseX as number | undefined) ?? cloud.position.x;
+      const baseY = (cloud.userData.baseY as number | undefined) ?? cloud.position.y;
+      const baseZ = (cloud.userData.baseZ as number | undefined) ?? cloud.position.z;
+      const driftSpeed = (cloud.userData.driftSpeed as number | undefined) ?? 0.018;
+      const driftRangeX = (cloud.userData.driftRangeX as number | undefined) ?? 10;
+      const driftRangeZ = (cloud.userData.driftRangeZ as number | undefined) ?? 4;
+      const bobRange = (cloud.userData.bobRange as number | undefined) ?? 1.2;
+      cloud.position.x = baseX + Math.sin(elapsed * driftSpeed + index * 1.31) * driftRangeX;
+      cloud.position.y = baseY + Math.sin(elapsed * driftSpeed * 0.72 + index * 0.9) * bobRange;
+      cloud.position.z = baseZ + Math.cos(elapsed * driftSpeed * 0.84 + index * 1.07) * driftRangeZ;
+      cloud.rotation.y += Math.sin(elapsed * 0.014 + index) * 0.00025;
     });
 
     this.mountainAtmosphere.children.forEach((cluster: Object3D, index: number) => {
@@ -2071,7 +2395,7 @@ export class WorldRenderer {
     const player = frame.player.position;
     const playerGround = sampleTerrainHeight(player.x, player.z);
     this.playerMapMarker.group.position.set(player.x, playerGround + 0.2, player.z);
-    this.shrineMapMarker.group.position.set(2, sampleTerrainHeight(2, 214) + 0.2, 214);
+    this.shrineMapMarker.group.position.set(18, sampleTerrainHeight(18, 214) + 0.2, 214);
 
     [this.playerMapMarker, this.shrineMapMarker, ...this.landmarkMapMarkers, ...this.atlasMapMarkers].forEach((marker, index) => {
       const pulse = 1 + Math.sin(elapsed * marker.pulseSpeed + index * 0.9) * 0.08;

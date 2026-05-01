@@ -11,7 +11,6 @@ import {
   BufferGeometry,
   Camera,
   Color,
-  Float32BufferAttribute,
   Group,
   InstancedBufferAttribute,
   InstancedMesh,

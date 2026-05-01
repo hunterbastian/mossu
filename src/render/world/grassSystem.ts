@@ -390,6 +390,7 @@ export function createGrassMesh(
         varying float vHeroField;
         varying float vElevationMood;
         varying float vSceneDepthMood;
+        varying float vCameraHighlandFade;
         varying float vGustSignal;
         varying float vIslandEdge;
         varying vec3 vTint;
@@ -425,8 +426,8 @@ export function createGrassMesh(
         vTint = instanceTint;
         vPatchLight = sin(instanceRoot.x * 0.018 - instanceRoot.z * 0.014 + 1.2) * 0.5 + 0.5;
         vStrokeSeed = fract(sin(instancePhase * 2.7 + instanceRoot.x * 0.037 + instanceRoot.z * 0.051) * 43758.5453123);
-        float isleNx = abs((instanceRoot.x - (-6.0)) / 226.0);
-        float isleNz = abs((instanceRoot.z - 30.0) / 248.0);
+        float isleNx = abs((instanceRoot.x - (-6.0)) / 620.0);
+        float isleNz = abs((instanceRoot.z - 30.0) / 760.0);
         float isleCont = pow(pow(isleNx, 3.4) + pow(isleNz, 3.4), 0.294117647);
         vIslandEdge = smoothstep(0.7, 0.985, isleCont);
         vElevationMood = clamp(
@@ -452,6 +453,7 @@ export function createGrassMesh(
         vec2 pushDirection = normalize(playerAway * 1.35 + wakeDirection * smoothstep(1.0, 17.0, playerSpeed) * 0.6 + vec2(0.001, 0.0));
         float cameraDistance = length(cameraPosition.xz - instanceRoot.xz);
         vDistanceBlend = smoothstep(20.0, 146.0, cameraDistance);
+        vCameraHighlandFade = 1.0 - smoothstep(70.0, 122.0, cameraPosition.y);
         vSceneDepthMood = clamp(max(vDistanceBlend * 0.78, vElevationMood * 0.88), 0.0, 1.0);
         float fadeIn = uFadeInEnd <= uFadeInStart ? 1.0 : smoothstep(uFadeInStart, uFadeInEnd, cameraDistance);
         float fadeOut = uFadeOutEnd <= uFadeOutStart ? 0.0 : smoothstep(uFadeOutStart, uFadeOutEnd, cameraDistance);
@@ -521,6 +523,7 @@ export function createGrassMesh(
         varying float vHeroField;
         varying float vElevationMood;
         varying float vSceneDepthMood;
+        varying float vCameraHighlandFade;
         varying float vGustSignal;
         varying float vIslandEdge;
         varying vec3 vTint;
@@ -589,13 +592,19 @@ export function createGrassMesh(
         float bodyShadow = (1.0 - sunStripe) * smoothstep(0.24, 0.94, vBladeMix) * (0.08 + uSelfShadowStrength * 0.18);
         float coreShadow = (1.0 - smoothstep(0.0, 0.72, vSoftEdge)) * smoothstep(0.12, 0.92, vBladeMix) * (0.04 + uSelfShadowStrength * 0.08);
         float selfShadow = clamp(rootShadow + bodyShadow + coreShadow, 0.0, 0.62);
+        selfShadow *= mix(1.0, 0.54, vElevationMood * smoothstep(0.24, 0.96, vDistanceBlend));
         meadowColor *= 1.0 - selfShadow;
         meadowColor = mix(rooted * vec3(1.08, 1.04, 0.96), meadowColor, 1.0 - rootFill * 0.22);
         alphaShape = max(alphaShape, rootFill * vDistanceBand);
-        alphaShape = mix(alphaShape, 0.985, vDistanceBlend * 0.48);
+        float farMassLift = vDistanceBlend * mix(0.42, 0.1, vElevationMood);
+        alphaShape = mix(alphaShape, 0.86, farMassLift);
+        alphaShape *= mix(1.0, 0.46, vElevationMood * smoothstep(0.22, 0.92, vDistanceBlend));
+        alphaShape *= mix(0.06, 1.0, vCameraHighlandFade);
         float sceneLow = 1.0 - uSceneElevationMood;
         meadowColor = mix(meadowColor, meadowColor * uSceneSunColor, 0.1 + 0.06 * sceneLow);
         meadowColor = mix(meadowColor, meadowColor * uSceneHorizon, 0.07 * (0.45 + 0.55 * sceneLow));
+        meadowColor = mix(meadowColor, uSceneHorizon * vec3(0.86, 0.96, 0.82), vElevationMood * vDistanceBlend * 0.38);
+        meadowColor = mix(meadowColor, uSceneHorizon * vec3(0.9, 0.98, 0.86), (1.0 - vCameraHighlandFade) * 0.5);
         meadowColor = mix(meadowColor, meadowColor * uSceneAmbient, 0.09);
         vec4 diffuseColor = vec4(meadowColor, opacity * alphaShape * vPlayerFade);`,
       )
@@ -737,7 +746,7 @@ export function createGrassPatchImpostorMesh(
 export function updateGrassMeshLod(mesh: InstancedMesh, origin: Vector3, frameIndex: number) {
   const lod = mesh.userData.grassLod as GrassLodSource | undefined;
   if (!lod) {
-    return;
+    return false;
   }
 
   const dx = origin.x - lod.lastOriginX;
@@ -746,7 +755,7 @@ export function updateGrassMeshLod(mesh: InstancedMesh, origin: Vector3, frameIn
   const frameDue = frameIndex - lod.lastFrame >= lod.options.updateEveryFrames;
   const initialized = lod.lastFrame >= 0;
   if (initialized && (!movedEnough || !frameDue)) {
-    return;
+    return false;
   }
 
   const innerRadiusSq = lod.options.innerRadius ** 2;
@@ -813,6 +822,7 @@ export function updateGrassMeshLod(mesh: InstancedMesh, origin: Vector3, frameIn
   lod.lastOriginZ = origin.z;
   lod.lastVisitedCells = visitedCells;
   lod.lastVisitedSources = visitedSources;
+  return true;
 }
 
 export function getGrassMeshLodStats(mesh: InstancedMesh): GrassLodPerfStats | null {

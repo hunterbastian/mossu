@@ -215,7 +215,7 @@ export class MossuAvatar {
       new Vector3(0.72, -1.88, 0.64),
     ];
 
-    legOffsets.forEach((offset, index) => {
+    legOffsets.forEach((offset) => {
       const leg = new Mesh(legGeometry, legMaterial);
       leg.position.copy(offset);
       leg.scale.set(1.16, 1.1, 1.02);

@@ -1,17 +1,16 @@
 import {
   BufferAttribute,
-  CircleGeometry,
   Color,
   Float32BufferAttribute,
-  InstancedMesh,
   MathUtils,
   Mesh,
   MeshBasicMaterial,
-  MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
 } from "three";
 import {
+  MOSSU_PLAYFIELD_EXTENT,
+  sampleBiomeTransitionOpen,
   sampleBiomeZone,
   sampleHabitatLayer,
   sampleIslandEdgeFactor,
@@ -24,13 +23,14 @@ import {
   sampleTerrainHeight,
   sampleTerrainNormal,
   sampleWaterBankShape,
+  sampleWorldRegion,
 } from "../../simulation/world";
 import { OOT_PS2_GRASSLANDS_PALETTE } from "../visualPalette";
+import { getPainterlyTextureSet } from "./painterlyTextures";
 import { sampleOpeningMeadowMask } from "./worldMasks";
 
-const WORLD_SIZE = 560;
-const TERRAIN_SEGMENTS = 160;
-const TERRAIN_FORM_STROKE_COUNT = 128;
+const WORLD_SIZE = MOSSU_PLAYFIELD_EXTENT;
+const TERRAIN_SEGMENTS = 192;
 const terrainArt = OOT_PS2_GRASSLANDS_PALETTE.terrain;
 
 function ovalMask(x: number, z: number, centerX: number, centerZ: number, radiusX: number, radiusZ: number) {
@@ -40,6 +40,7 @@ function ovalMask(x: number, z: number, centerX: number, centerZ: number, radius
 function colorForTerrain(x: number, y: number, z: number) {
   const zone = sampleBiomeZone(x, z, y);
   const habitat = sampleHabitatLayer(x, z, y);
+  const worldRegion = sampleWorldRegion(x, z, y);
   const islandEdge = sampleIslandEdgeFactor(x, z);
   const normal = sampleTerrainNormal(x, z);
   const slope = 1 - normal.y;
@@ -64,6 +65,7 @@ function colorForTerrain(x: number, y: number, z: number) {
   const paintedGround = samplePaintedGroundMask(x, z) * (1 - waterShoreMask * 0.42);
   const routeDirt = sampleRouteDirtPathMask(x, z);
   const routeClearing = sampleRouteReadabilityClearing(x, z);
+  const biomeTransitionOpen = sampleBiomeTransitionOpen(x, z, y);
   const sunWash = Math.sin(x * 0.018 - z * 0.014 + 1.2) * 0.5 + 0.5;
   const fieldBands = Math.sin(x * 0.022 + z * 0.006 - 1.2) * 0.5 + 0.5;
   const pathBands = Math.sin(x * 0.052 + z * 0.018 + 0.8) * 0.5 + 0.5;
@@ -71,9 +73,34 @@ function colorForTerrain(x: number, y: number, z: number) {
   const heightGrass = MathUtils.clamp(MathUtils.smoothstep(y, 8, 82), 0, 1);
   const foothillTint = MathUtils.clamp(MathUtils.smoothstep(y, 38, 98), 0, 1);
   const alpineTint = MathUtils.clamp(MathUtils.smoothstep(y, 84, 148), 0, 1);
-  const foothillTravelBand = Math.exp(-(((x - 18) / 112) ** 2) - (((z - 106) / 92) ** 2));
-  const ridgeTravelBand = Math.exp(-(((x + 2) / 118) ** 2) - (((z - 178) / 92) ** 2));
-  const scenicTravelBand = MathUtils.clamp(Math.max(foothillTravelBand, ridgeTravelBand) + routeClearing * 0.34, 0, 1);
+  const foothillTravelBand = Math.exp(-(((x - 18) / 134) ** 2) - (((z - 106) / 108) ** 2));
+  const ridgeTravelBand = Math.exp(-(((x + 2) / 144) ** 2) - (((z - 178) / 118) ** 2));
+  const scenicTravelBand = MathUtils.clamp(
+    Math.max(foothillTravelBand, ridgeTravelBand) + routeClearing * 0.38 + biomeTransitionOpen * 0.28,
+    0,
+    1,
+  );
+  // Reads as soft painted terrace bands on hills: it is terrain-height/slope based, not a texture lookup.
+  const highlandSlopeBands = MathUtils.clamp(
+    (Math.sin(x * 0.034 + z * 0.018 + y * 0.006) * 0.5 + 0.5) *
+      MathUtils.clamp(slope * 1.7 + foothillTint * 0.36 + alpineTint * 0.24, 0, 1) *
+      (1 - routeDirt * 0.5),
+    0,
+    1,
+  );
+  const routeShoulderBloom = MathUtils.clamp(
+    routeClearing * (1 - routeDirt) * MathUtils.smoothstep(y, 20, 118) * (0.42 + fieldBands * 0.36),
+    0,
+    1,
+  );
+  const meadowFlowerBand = MathUtils.clamp(
+    (Math.sin(x * 0.048 - z * 0.033 + 1.6) * 0.5 + 0.5) *
+      habitat.meadow *
+      MathUtils.clamp(1 - slope * 2.4, 0, 1) *
+      (0.34 + openingMask * 0.62 + scenicTravelBand * 0.12),
+    0,
+    1,
+  );
   const codexDeepWoods = Math.max(
     ovalMask(x, z, -122, -66, 52, 58),
     ovalMask(x, z, 94, 22, 56, 64),
@@ -119,7 +146,13 @@ function colorForTerrain(x: number, y: number, z: number) {
   const snowMask = MathUtils.clamp(snowBase * rockSnowDampen * (1 - routeClearing * 0.22), 0, 0.92);
   const grasslandsArtDirection = MathUtils.clamp(
     (1 - journeyNorth * 0.48) *
-      (habitat.meadow * 0.54 + openingMask * 0.5 + scenicTravelBand * 0.28 + (zone === "plains" || zone === "hills" ? 0.24 : 0)),
+      (
+        habitat.meadow * 0.54 +
+        openingMask * 0.5 +
+        scenicTravelBand * 0.3 +
+        biomeTransitionOpen * 0.16 +
+        (zone === "plains" || zone === "hills" ? 0.24 : 0)
+      ),
     0,
     1,
   );
@@ -135,10 +168,16 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color(terrainArt.forestDappleWarm), canopyDapple * 0.08 * (1 - codexDeepWoods * 0.38))
     .lerp(new Color(terrainArt.foothillGreen), foothillTint * 0.2)
     .lerp(new Color(terrainArt.alpineSage), alpineTint * 0.22)
-    .lerp(new Color(terrainArt.microDark), microBreakup * 0.08)
+    .lerp(new Color(terrainArt.formSlope), highlandSlopeBands * 0.07)
+    .lerp(new Color(terrainArt.formWarm), routeShoulderBloom * 0.06)
+    .lerp(new Color(terrainArt.microDark), microBreakup * 0.045)
     .lerp(new Color(terrainArt.microLight), (1 - microFine) * 0.08 * (1 - northSilhouette * 0.5))
     .lerp(new Color(terrainArt.northernGrey), journeyNorth * 0.1 + northSilhouette * 0.08);
-  const wildflowerPunch = MathUtils.clamp(habitat.meadow * (1 - rockMask) * microWafer * (0.72 + grasslandsArtDirection * 0.6), 0, 0.2);
+  const wildflowerPunch = MathUtils.clamp(
+    habitat.meadow * (1 - rockMask) * microWafer * (0.32 + grasslandsArtDirection * 0.32 + meadowFlowerBand * 0.34),
+    0,
+    0.13,
+  );
   grass.lerp(new Color(terrainArt.wildflower), wildflowerPunch);
   const zoneGreenRead =
     zone === "plains" ? { lerp: new Color(terrainArt.zonePlains), w: 0.2 } :
@@ -149,14 +188,14 @@ function colorForTerrain(x: number, y: number, z: number) {
     zone === "peak_shrine" ? { lerp: new Color(terrainArt.zonePeakShrine), w: 0.22 } :
     { lerp: grass, w: 0 };
   if (zoneGreenRead.w > 0) {
-    grass.lerp(zoneGreenRead.lerp, zoneGreenRead.w);
+    grass.lerp(zoneGreenRead.lerp, zoneGreenRead.w * (1 - biomeTransitionOpen * 0.42));
   }
   const zoneSplatB = MathUtils.clamp(
     Math.sin(x * 0.026 - z * 0.034) * Math.cos(x * 0.019 + z * 0.027) * 0.5 + 0.5,
     0,
     1,
   );
-  grass.lerp(new Color(terrainArt.zoneSplatDark), zoneSplatB * 0.08);
+  grass.lerp(new Color(terrainArt.zoneSplatDark), zoneSplatB * 0.035);
   grass.lerp(new Color(terrainArt.zoneBreakupLight), (1 - zoneSplatB) * microBreakup * (0.06 + grasslandsArtDirection * 0.04));
   const rock = new Color(terrainArt.rockBase)
     .lerp(new Color(terrainArt.rockLight), 0.18 + mixValue * 0.22)
@@ -178,24 +217,29 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color(terrainArt.meadowTerrain), habitat.meadow * (0.24 + openingMask * 0.16))
     .lerp(new Color(terrainArt.forestTerrain), habitat.forest * 0.17)
     .lerp(new Color(terrainArt.shoreTerrain), habitat.shore * 0.14)
-    .lerp(paintedEarth, paintedGround * (0.34 + (1 - slopeRock) * 0.22))
+    .lerp(paintedEarth, paintedGround * (0.42 + (1 - slopeRock) * 0.24))
     .lerp(
       wornDirt,
-      routeDirt * (0.66 + MathUtils.clamp(journeyNorth * 0.14 + scenicTravelBand * 0.12, 0, 0.22)) * (1 - rockMask * 0.86),
+      routeDirt * (0.42 + MathUtils.clamp(journeyNorth * 0.08 + scenicTravelBand * 0.1, 0, 0.14)) * (1 - rockMask * 0.86),
     )
     .lerp(sandbar, sandbarLine * 0.34)
-    .lerp(new Color(terrainArt.wetBank), wetBankLine * 0.24)
-    .lerp(new Color(terrainArt.coveShade), coveShade * 0.13)
-    .lerp(new Color(terrainArt.shorelineRead), waterShoreMask * 0.16)
-    .lerp(new Color(terrainArt.dryLipTerrain), dryLipLine * 0.28)
+    .lerp(new Color(terrainArt.wetBank), wetBankLine * 0.16)
+    .lerp(new Color(terrainArt.coveShade), coveShade * 0.06)
+    .lerp(new Color(terrainArt.shorelineRead), waterShoreMask * 0.1)
+    .lerp(new Color(terrainArt.dryLipTerrain), dryLipLine * 0.15)
     .lerp(new Color(terrainArt.forestDeepFloor), codexDeepWoods * habitat.forest * 0.16)
     .lerp(new Color(terrainArt.groveSunlitFloor), codexPeacefulGroves * habitat.clearing * 0.14)
     .lerp(new Color(terrainArt.ancientMossFloor), codexAncientGrounds * 0.14)
     .lerp(new Color(terrainArt.meadowBloom), meadowBloom * (0.44 + openingMask * 0.26))
-    .lerp(new Color(terrainArt.scenicTravel), scenicTravelBand * 0.14 * (1 - rockMask))
-    .lerp(new Color(terrainArt.artDirectionLift), grasslandsArtDirection * 0.18 * (1 - rockMask))
-    .lerp(rock, rockMask * (1 - snowMask * 0.46))
-    .lerp(snow, snowMask);
+    .lerp(new Color(terrainArt.scenicTravel), scenicTravelBand * 0.18 * (1 - rockMask))
+    .lerp(new Color(terrainArt.artDirectionLift), grasslandsArtDirection * 0.12 * (1 - rockMask))
+    .lerp(rock, rockMask * (0.74 + alpineTint * 0.18) * (1 - snowMask * 0.46))
+    .lerp(snow, snowMask)
+    .lerp(new Color("#ead098"), worldRegion.shore * 0.22 * (1 - snowMask))
+    .lerp(new Color("#2f6c43"), worldRegion.forest * 0.12 * (1 - routeClearing * 0.28))
+    .lerp(new Color("#8da34d"), worldRegion.highland * 0.13 * (1 - rockMask * 0.28))
+    .lerp(new Color("#8d8067"), worldRegion.ridge * 0.18 * (1 - snowMask * 0.4))
+    .lerp(new Color("#a9c86e"), worldRegion.shrine * 0.16);
   const islandHeart = (1 - MathUtils.clamp(islandEdge, 0, 1)) ** 1.2;
   let out = new Color(terrainColor).lerp(
     new Color(terrainArt.islandHeart),
@@ -204,6 +248,11 @@ function colorForTerrain(x: number, y: number, z: number) {
   const islandRimMask = MathUtils.clamp((islandEdge - 0.36) * 1.05, 0, 1)
     * (1 - MathUtils.smoothstep(0.88, 0.99, islandEdge));
   out = out.lerp(new Color(terrainArt.islandRim), islandRimMask * 0.12 * (1 - snowMask * 0.55));
+  out = out.lerp(new Color("#f0df94"), MathUtils.clamp(grasslandsArtDirection * 0.06 + meadowBloom * 0.12, 0, 0.1));
+  out.offsetHSL(0, -0.025, 0.035 * (1 - snowMask * 0.7));
+  const luma = out.r * 0.2126 + out.g * 0.7152 + out.b * 0.0722;
+  const lumaFloor = MathUtils.clamp(0.48 + grasslandsArtDirection * 0.08 + worldRegion.meadow * 0.04 - snowMask * 0.08, 0.42, 0.58);
+  out = out.lerp(new Color("#cedb86"), MathUtils.clamp((lumaFloor - luma) * 2.7, 0, 0.58));
   return out.lerp(new Color(terrainArt.islandEdgeMist), MathUtils.smoothstep(islandEdge, 0.74, 1) * 0.74);
 }
 
@@ -243,74 +292,22 @@ export function makeTerrainMesh() {
   geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
   geometry.computeVertexNormals();
 
-  const material = new MeshStandardMaterial({
+  const painterlyTextures = getPainterlyTextureSet();
+  const material = new MeshBasicMaterial({
+    map: painterlyTextures.terrainDetail,
     vertexColors: true,
-    roughness: 1,
-    metalness: 0,
     dithering: true,
+    fog: true,
   });
+  material.userData.painterlyTextureSet = "runtime-generated";
 
   const mesh = new Mesh(geometry, material);
   mesh.receiveShadow = true;
   return mesh;
 }
 
-function terrainFormHash(seed: number) {
-  return MathUtils.euclideanModulo(Math.sin(seed * 127.1 + 17.7) * 43758.5453123, 1);
-}
-
 export function buildTerrainFormStrokes() {
-  const geometry = new CircleGeometry(1, 20);
-  geometry.rotateX(-Math.PI / 2);
-  const material = new MeshBasicMaterial({
-    color: terrainArt.formStroke,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.0035,
-    depthWrite: false,
-  });
-  const mesh = new InstancedMesh(geometry, material, TERRAIN_FORM_STROKE_COUNT);
-  const dummy = new Object3D();
-  const color = new Color();
-  const routeBands = [
-    { x: -42, z: -116, radiusX: 66, radiusZ: 44, yaw: -0.28, warmth: 0.72 },
-    { x: -6, z: -42, radiusX: 82, radiusZ: 56, yaw: 0.18, warmth: 0.66 },
-    { x: 18, z: 38, radiusX: 84, radiusZ: 52, yaw: 0.46, warmth: 0.52 },
-    { x: 34, z: 118, radiusX: 78, radiusZ: 58, yaw: 0.7, warmth: 0.36 },
-    { x: 2, z: 198, radiusX: 74, radiusZ: 50, yaw: 0.2, warmth: 0.28 },
-  ];
-
-  for (let i = 0; i < TERRAIN_FORM_STROKE_COUNT; i += 1) {
-    const band = routeBands[i % routeBands.length];
-    const ring = Math.floor(i / routeBands.length);
-    const a = ring * 1.618 + terrainFormHash(i + 3) * Math.PI * 2;
-    const r = Math.sqrt(terrainFormHash(i + 31));
-    const localX = Math.cos(a) * band.radiusX * r;
-    const localZ = Math.sin(a) * band.radiusZ * r;
-    const c = Math.cos(band.yaw);
-    const s = Math.sin(band.yaw);
-    const x = band.x + localX * c - localZ * s;
-    const z = band.z + localX * s + localZ * c;
-    const y = sampleTerrainHeight(x, z);
-    const slope = 1 - sampleTerrainNormal(x, z).y;
-    const routeClear = sampleRouteReadabilityClearing(x, z);
-    const size = MathUtils.lerp(4.2, 12.2, terrainFormHash(i + 71)) * MathUtils.lerp(1.08, 1.48, slope) * (1 + routeClear * 0.12);
-    const flatten = MathUtils.lerp(0.16, 0.38, terrainFormHash(i + 97));
-    dummy.position.set(x, y + 0.052 + slope * 0.05, z);
-    dummy.rotation.set(0, band.yaw + MathUtils.lerp(-0.55, 0.55, terrainFormHash(i + 113)), 0);
-    dummy.scale.set(size * MathUtils.lerp(1.2, 2.2, terrainFormHash(i + 151)), 1, size * flatten);
-    dummy.updateMatrix();
-    mesh.setMatrixAt(i, dummy.matrix);
-    color
-      .set(terrainArt.formBase)
-      .lerp(new Color(terrainArt.formWarm), band.warmth * 0.5)
-      .lerp(new Color(terrainArt.formRoute), routeClear * 0.1)
-      .lerp(new Color(terrainArt.formCool), MathUtils.smoothstep(y, 72, 146) * 0.08)
-      .lerp(new Color(terrainArt.formSlope), slope * 0.02);
-    mesh.setColorAt(i, color);
-  }
-
-  mesh.name = "terrain-form-strokes";
-  mesh.renderOrder = 1;
-  return mesh;
+  const disabled = new Object3D();
+  disabled.name = "terrain-form-strokes";
+  return disabled;
 }

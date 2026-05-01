@@ -117,6 +117,7 @@ export class HudShell {
   private readonly binderTabs = new Map<BinderSectionId, HTMLButtonElement>();
   private readonly binderSections = new Map<BinderSectionId, HTMLElement>();
   private characterScreenSignature = "";
+  private liveHudSignature = "";
   private activeBinderSection: BinderSectionId = "cards";
   private latestPouchGatheredId: string | null = null;
   private pouchRevealUntil = 0;
@@ -220,6 +221,7 @@ export class HudShell {
     fauna,
     windStrength,
   }: HudShellUpdate) {
+    const now = performance.now();
     const isMapMode = viewMode === "map_lookdown";
     const latestCollection = characterData.collections.find(
       (entry) => entry.landmarkId === characterData.latestCollectionId,
@@ -234,7 +236,7 @@ export class HudShell {
     const faunaName = fauna.speciesName;
     const nearbyRecruitableFauna =
       fauna.nearestRecruitableDistance !== null &&
-      fauna.nearestRecruitableDistance <= 14.5;
+      fauna.nearestRecruitableDistance <= 18.5;
     const shouldShowControlsPanel = pauseMenuOpen || characterScreenOpen;
     const overlayOpen = isMapMode || pauseMenuOpen || characterScreenOpen;
     const cinematicFocus =
@@ -247,6 +249,54 @@ export class HudShell {
         fauna.recruitedThisFrame > 0 ||
         fauna.firstEncounterActive
       );
+    const staminaRatio = frame.player.staminaMax <= 0
+      ? 0
+      : MathUtils.clamp(frame.player.stamina / frame.player.staminaMax, 0, 1);
+    const currentLandmarkId = worldLandmarks.find((landmark) => landmark.title === frame.currentLandmark)?.id ?? "";
+    const liveSignature = [
+      viewMode,
+      pauseMenuOpen ? 1 : 0,
+      characterScreenOpen ? 1 : 0,
+      pointerLocked ? 1 : 0,
+      cinematicFocus ? 1 : 0,
+      frame.currentZone,
+      frame.currentLandmark,
+      currentLandmarkId,
+      frame.objective.title,
+      frame.objective.body,
+      frame.player.waterMode,
+      frame.player.swimming ? 1 : 0,
+      frame.player.floating ? 1 : 0,
+      frame.player.rolling ? 1 : 0,
+      frame.player.rollModeReady ? 1 : 0,
+      Math.round(frame.player.rollHoldSeconds * 4),
+      Math.round(staminaRatio * 100),
+      frame.player.staminaVisible ? 1 : 0,
+      latestCollection?.landmarkId ?? "",
+      nearbyCollection?.landmarkId ?? "",
+      latestGatheredGood?.forageableId ?? "",
+      nearbyForageable?.forageableId ?? "",
+      nearbyForageable?.kind ?? "",
+      fauna.dominantMood,
+      fauna.recruitedThisFrame,
+      fauna.rollingCount,
+      fauna.recruitedCount,
+      fauna.firstEncounterActive ? 1 : 0,
+      fauna.callHeardActive ? 1 : 0,
+      fauna.regroupActive ? 1 : 0,
+      characterData.totals.discovered,
+      characterData.totals.total,
+      characterData.gatheredTotals.gathered,
+      characterData.gatheredTotals.total,
+      Math.round(windStrength * 100),
+      this.selectedPouchKind ?? "",
+      now < this.pickupCardHideAt ? 1 : 0,
+      now < this.pouchRevealUntil ? 1 : 0,
+    ].join("|");
+    if (liveSignature === this.liveHudSignature) {
+      return;
+    }
+    this.liveHudSignature = liveSignature;
 
     this.statusValues.zone.textContent = this.prettyZone(frame.currentZone);
     this.statusValues.landmark.textContent = frame.currentLandmark;
@@ -258,6 +308,9 @@ export class HudShell {
     this.element.classList.toggle("hud--pause", pauseMenuOpen);
     this.element.classList.toggle("hud--character-screen", characterScreenOpen);
     this.element.classList.toggle("hud--cinematic-focus", cinematicFocus);
+    this.element.classList.toggle("hud--summit-complete", frame.save.catalogedLandmarkIds.has("peak-shrine"));
+    this.element.classList.toggle("hud--predator-alert", false);
+    this.statusValues.prompt.classList.toggle("prompt-chip--danger", false);
     this.pauseMenu.classList.toggle("pause-menu--open", pauseMenuOpen);
     this.characterScreen.classList.toggle("character-screen--open", characterScreenOpen);
     this.controlsPanel.classList.toggle("controls-panel--visible", shouldShowControlsPanel);
@@ -268,28 +321,28 @@ export class HudShell {
     this.updatePickupCard(latestGatheredGood ?? null, overlayOpen);
 
     if (pauseMenuOpen) {
-      this.statusValues.objectiveTitle.textContent = "Pause Menu";
-      this.statusValues.objectiveBody.textContent = "Movement is paused. Pick a surface and jump back in when you're ready.";
-      this.statusValues.ability.textContent = "Paused.";
-      this.statusValues.prompt.innerHTML = "<strong>Trail Break</strong> Resume, check the inventory, or swing out to the map.";
+      this.statusValues.objectiveTitle.textContent = "Care paused";
+      this.statusValues.objectiveBody.textContent = "Movement is paused. Check Mossu's field guide, review the habitat route, or jump back in.";
+      this.statusValues.ability.textContent = "Care paused.";
+      this.statusValues.prompt.innerHTML = "<strong>Care pause</strong> Resume, open the field guide, or swing out to the habitat map.";
       this.controlsPanelStatus.innerHTML = "Everything is paused while the menu is open.";
       this.statusValues.hint.innerHTML = this.renderQuickActions([
         ["Esc", "resume"],
-        ["Tab", "inventory"],
+        ["Tab", "guide"],
         ["M", "map"],
       ]);
       return;
     }
 
     if (isMapMode) {
-      this.statusValues.objectiveTitle.textContent = "World View";
-      this.statusValues.objectiveBody.textContent = "The camera is pulled high above the island so the full route can breathe on screen.";
-      this.statusValues.ability.textContent = "Map view.";
-      this.statusValues.prompt.innerHTML = "<strong>World View</strong>";
+      this.statusValues.objectiveTitle.textContent = "Habitat view";
+      this.statusValues.objectiveBody.textContent = "The camera is pulled high above the island so the full route and water pockets glow on screen.";
+      this.statusValues.ability.textContent = "Habitat map.";
+      this.statusValues.prompt.innerHTML = "<strong>Habitat view</strong>";
       this.controlsPanelStatus.innerHTML =
         "Scroll to zoom the island view. Press <strong>R</strong> or <strong>Home</strong> to reset zoom. <strong>M</strong> or <strong>Esc</strong> returns to the trail.";
       this.statusValues.hint.innerHTML = this.renderQuickActions([
-        ["Tab", "inventory"],
+        ["Tab", "guide"],
         ["R / Home", "reset zoom"],
         ["M", "close"],
         ["Esc", "close"],
@@ -299,11 +352,17 @@ export class HudShell {
 
     this.statusValues.objectiveTitle.textContent = frame.objective.title;
     this.statusValues.objectiveBody.textContent = frame.objective.body;
-    this.statusValues.ability.textContent = frame.player.floating
+    this.statusValues.ability.textContent = frame.player.waterMode === "underwater"
+      ? "Underwater pocket: hold Space to stroke up, release Q to surface."
+      : frame.player.swimming
+      ? "Deep water pocket: Space strokes, Q dips below the surface."
+      : frame.player.waterMode === "wading"
+      ? "Shallow shelf: darker water ahead is deep enough to swim."
+      : frame.player.floating
       ? "Breeze Float active: Mossu is riding the wind."
       : frame.player.rollModeReady
-      ? "Roll mode active: jump, then hold Q or Space to Breeze Float."
-      : "Ability ready: hold Q in the air, or keep Space held after jumping.";
+      ? "Roll ready. Jump, then hold Q or Space to float."
+      : "Q in air or hold Space after jumping to Breeze Float.";
 
     const faunaMoodIcon = this.renderFaunaMoodIcon(fauna.dominantMood);
     const faunaMoodLabel = `${fauna.dominantMood[0].toUpperCase()}${fauna.dominantMood.slice(1)}`;
@@ -318,44 +377,58 @@ export class HudShell {
       fauna.rollingCount > 0 ||
       (fauna.callHeardActive && fauna.recruitedCount > 0) ||
       (fauna.regroupActive && fauna.recruitedCount > 0) ||
+      frame.player.waterMode !== "onLand" ||
       nearbyRecruitableFauna ||
       fauna.recruitedCount > 0 ||
       nearbyCollection !== undefined;
 
     this.statusValues.prompt.classList.toggle("prompt-chip--ambient", !hasContextPrompt);
+    this.statusValues.prompt.classList.toggle(
+      "prompt-chip--actionable",
+      nearbyForageable !== null || nearbyRecruitableFauna || latestGatheredGood !== undefined || latestCollection !== undefined,
+    );
+    this.statusValues.prompt.classList.toggle("prompt-chip--danger", false);
     this.statusValues.hint.classList.toggle("hint-chip--ambient", pointerLocked && !hasContextPrompt);
     this.statusValues.ability.classList.toggle("ability-pill--quiet", !frame.player.staminaVisible);
 
     if (characterScreenOpen) {
-      this.statusValues.prompt.innerHTML = "<strong>Inventory</strong> Tab or Esc closes Mossu's holo binder.";
+      this.statusValues.prompt.innerHTML = "<strong>Field guide</strong> Tab or Esc closes Mossu's notes.";
     } else if (latestGatheredGood) {
-      this.statusValues.prompt.innerHTML = `<strong>Foraged</strong> ${latestGatheredGood.title} was tucked into Mossu's gather pouch.`;
+      this.statusValues.prompt.innerHTML = `<strong>Sample gathered</strong> ${latestGatheredGood.title} is in Mossu's pouch.`;
+    } else if (latestCollection?.landmarkId === "peak-shrine") {
+      this.statusValues.prompt.innerHTML = "<strong>Summit reached</strong> Moss Crown is stamped. The return circuit is open.";
     } else if (latestCollection) {
-      this.statusValues.prompt.innerHTML = `<strong>New Entry</strong> ${latestCollection.keepsakeTitle} was registered in Mossu's field log.`;
+      this.statusValues.prompt.innerHTML = `<strong>Field note stamped</strong> ${latestCollection.keepsakeTitle} joined the guide.`;
     } else if (nearbyForageable) {
-      this.statusValues.prompt.innerHTML = `<strong>Forage</strong> Press E to tuck ${nearbyForageable.title} into Mossu's pouch.`;
+      this.statusValues.prompt.innerHTML = `<strong>E Forage</strong> Pick up ${nearbyForageable.title}.`;
     } else if (fauna.recruitedThisFrame > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.recruitedThisFrame} ${faunaName} joined Mossu's trail.</span>`;
     } else if (fauna.firstEncounterActive) {
-      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> A Karu is watching from the grass. Ease closer, then press E.</span>`;
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>Karu nearby</strong> Ease closer until the prompt brightens, then press E.</span>`;
     } else if (fauna.rollingCount > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.rollingCount} rolling with Mossu.</span>`;
     } else if (fauna.callHeardActive && fauna.recruitedCount > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> heard Mossu.</span>`;
     } else if (fauna.regroupActive && fauna.recruitedCount > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> hopping back in a little wave.</span>`;
+    } else if (frame.player.waterMode === "underwater") {
+      this.statusValues.prompt.innerHTML = "<strong>Underwater</strong> Hold Space to bob up toward the blue surface.";
+    } else if (frame.player.swimming) {
+      this.statusValues.prompt.innerHTML = "<strong>Deep water</strong> Mossu can swim here. Pale rims mark the easiest banks out.";
+    } else if (frame.player.waterMode === "wading") {
+      this.statusValues.prompt.innerHTML = "<strong>Shallow shelf</strong> Mossu can wade here; deeper blue pockets switch to swimming.";
     } else if (nearbyRecruitableFauna) {
-      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> Press E to have them follow Mossu.</span>`;
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>E Invite Karu</strong> They are close enough to join Mossu.</span>`;
     } else if (fauna.recruitedCount > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.recruitedCount} following. ${faunaMoodLabel} mood. Hold E to call them in.</span>`;
     } else if (nearbyCollection) {
-      this.statusValues.prompt.innerHTML = `<strong>Nearby Landmark</strong> ${nearbyCollection.landmarkTitle} will register automatically when Mossu reaches it.`;
+      this.statusValues.prompt.innerHTML = `<strong>Landmark ahead</strong> Walk into ${nearbyCollection.landmarkTitle} to stamp it.`;
     } else {
-      this.statusValues.prompt.innerHTML = "<strong>Trail</strong> Tab handbook · M map · Esc rest";
+      this.statusValues.prompt.innerHTML = "<strong>Route pulse</strong> Follow the warm trail. Tab guide · M map · Esc rest";
     }
 
     if (characterScreenOpen) {
-      this.controlsPanelStatus.innerHTML = "Movement pauses while the inventory is open. Press <strong>Tab</strong> or <strong>Esc</strong> to get back outside.";
+      this.controlsPanelStatus.innerHTML = "Movement pauses while the field guide is open. Press <strong>Tab</strong> or <strong>Esc</strong> to get back outside.";
     } else if (pointerLocked) {
       this.controlsPanelStatus.innerHTML = `${MOVEMENT_CONTROL_SUMMARY}. Mouse look is active, the wheel zooms, and <strong>Esc</strong> pauses.`;
     } else {
@@ -365,7 +438,7 @@ export class HudShell {
     this.statusValues.hint.innerHTML = this.renderQuickActions(
       pointerLocked
         ? [
-            ["Tab", "inventory"],
+            ["Tab", "guide"],
             ["M", "map"],
             ["Esc", "pause"],
           ]
@@ -374,7 +447,7 @@ export class HudShell {
             ["W/A/S/D", "move"],
             ["Space", "jump"],
             ["E", "interact"],
-            ["Tab", "inventory"],
+            ["Tab", "guide"],
           ],
     );
   }
@@ -391,9 +464,9 @@ export class HudShell {
       this.pickupCardTitle.textContent = latestGatheredGood.title;
       this.pickupCardKind.textContent = this.formatForageableKind(latestGatheredGood.kind);
       this.pickupCardMeta.textContent = `${this.prettyZone(latestGatheredGood.zone)} field card`;
-      this.pickupCardSummary.textContent = `${latestGatheredGood.title} logged to Mossu's holo binder.`;
+      this.pickupCardSummary.textContent = `${latestGatheredGood.title} logged to Mossu's field notes.`;
       this.pickupCardSymbol.textContent = this.formatForageableSymbol(latestGatheredGood.kind);
-      this.pickupCard.setAttribute("aria-label", `${latestGatheredGood.title} logged to Mossu's holo binder`);
+      this.pickupCard.setAttribute("aria-label", `${latestGatheredGood.title} logged to Mossu's field notes`);
 
       if (this.pickupCardKindClass) {
         this.pickupCardArt.classList.remove(this.pickupCardKindClass);
@@ -561,11 +634,11 @@ export class HudShell {
 
     this.characterSummary.textContent =
       totalCollected === 0
-        ? "Mossu's holo binder starts empty, but every landmark and tiny trail find has a proper sleeve waiting for it."
+        ? "Mossu's field guide starts empty, but every landmark and tiny trail find has a glossy sleeve waiting for it."
         : totalCollected === totalCollectibles
-          ? "The binder is full. Every stamped keepsake and pouch good now reads like a finished island set."
-          : `The binder is filling in: ${totalCollected} of ${totalCollectibles} field cards are sleeved, with the next blank spaces still visible on the page.`;
-    this.characterStamp.textContent = `${Math.round(totalRatio * 100)}% sleeved`;
+          ? "The guide is full. Every stamped keepsake and pouch good now reads like a finished habitat set."
+          : `The guide is filling in: ${totalCollected} of ${totalCollectibles} field cards are logged, with the next empty bubbles still visible on the page.`;
+    this.characterStamp.textContent = `${Math.round(totalRatio * 100)}% logged`;
     this.characterProgress.style.setProperty("--keepsake-progress", keepsakeRatio.toFixed(3));
     this.characterProgress.style.setProperty("--goods-progress", goodsRatio.toFixed(3));
     this.keepsakeProgressLabel.textContent = `${characterData.totals.discovered}/${characterData.totals.total} keepsakes`;
@@ -827,10 +900,10 @@ export class HudShell {
     const status = document.createElement("section");
     status.className = "status-strip";
     status.append(
-      this.buildMetric("Area", this.statusValues.zone, "area"),
+      this.buildMetric("Habitat", this.statusValues.zone, "area"),
       this.buildMetric("Landmark", this.statusValues.landmark, "landmark"),
       this.buildMetric("Breeze", this.statusValues.wind, "breeze"),
-      this.buildMetric("Log", this.statusValues.collections, "cards"),
+      this.buildMetric("Notes", this.statusValues.collections, "cards"),
     );
 
     const bottom = document.createElement("div");
@@ -913,7 +986,7 @@ export class HudShell {
 
     const eyebrow = document.createElement("p");
     eyebrow.className = "pickup-card__eyebrow";
-    eyebrow.textContent = "Field Log";
+    eyebrow.textContent = "Field notes";
 
     this.pickupCardTitle.className = "pickup-card__title";
     this.pickupCardKind.className = "pickup-card__kind";
@@ -942,7 +1015,7 @@ export class HudShell {
       ["Shift", "roll"],
       ["E", "interact"],
       ["Hold E", "call Karu"],
-      ["Tab", "inventory"],
+      ["Tab", "guide"],
       ["M", "map"],
       ["Esc", "pause"],
     ].forEach(([key, label]) => {
@@ -973,7 +1046,7 @@ export class HudShell {
     header.className = "pouch-hud__header";
     const title = document.createElement("p");
     title.className = "pouch-hud__title";
-    title.textContent = "Field Pack";
+    title.textContent = "Sample pouch";
     const hint = document.createElement("p");
     hint.className = "pouch-hud__hint";
     hint.textContent = "stored";
@@ -993,7 +1066,7 @@ export class HudShell {
 
     const label = document.createElement("p");
     label.className = "stamina-hud__label";
-    label.textContent = "Stamina";
+    label.textContent = "Care charge";
 
     this.staminaRing.className = "stamina-hud__ring";
     const core = document.createElement("div");
@@ -1018,7 +1091,7 @@ export class HudShell {
     body.className = "roll-mode-hud__body";
     const label = document.createElement("p");
     label.className = "roll-mode-hud__label";
-    label.textContent = "Roll Mode";
+    label.textContent = "Sprint roll";
     this.rollModeMeter.className = "roll-mode-hud__meter";
     this.rollModeValue.className = "roll-mode-hud__value";
     this.rollModeValue.textContent = "hold";
@@ -1059,16 +1132,16 @@ export class HudShell {
     aside.className = "character-screen__aside";
     const eyebrow = document.createElement("p");
     eyebrow.className = "character-screen__eyebrow";
-    eyebrow.textContent = "Resident Field Guide";
+    eyebrow.textContent = "Creature care";
     const title = document.createElement("h2");
     title.className = "character-screen__title";
-    title.textContent = "Mossu Handbook";
+    title.textContent = "Mossu field guide";
     this.characterSummary.className = "character-screen__summary";
     this.characterStamp.className = "character-screen__stamp";
     this.characterProgress.className = "character-screen__progress";
     this.characterProgress.append(
-      this.buildCharacterProgressRow("Keepsakes", "keepsake", this.keepsakeProgressLabel, this.keepsakeProgressFill),
-      this.buildCharacterProgressRow("Pouch", "goods", this.goodsProgressLabel, this.goodsProgressFill),
+      this.buildCharacterProgressRow("Notes", "keepsake", this.keepsakeProgressLabel, this.keepsakeProgressFill),
+      this.buildCharacterProgressRow("Samples", "goods", this.goodsProgressLabel, this.goodsProgressFill),
     );
     const previewCard = document.createElement("div");
     previewCard.className = "character-screen__preview-card";
@@ -1083,20 +1156,20 @@ export class HudShell {
     const collectionsColumn = document.createElement("div");
     collectionsColumn.className = "character-screen__column character-screen__column--collections";
 
-    const statsSection = this.buildCharacterSection("Profile", "Trail condition");
+    const statsSection = this.buildCharacterSection("Care stats", "Trail condition");
     statsSection.classList.add("character-section--stats");
     this.binderSections.set("profile", statsSection);
     this.statsGrid.className = "character-stat-grid";
     statsSection.append(this.statsGrid);
 
-    const upgradesSection = this.buildCharacterSection("Moves", "Known techniques");
+    const upgradesSection = this.buildCharacterSection("Traits", "Known techniques");
     upgradesSection.classList.add("character-section--abilities");
     this.upgradesGrid.className = "upgrade-grid";
     upgradesSection.append(this.upgradesGrid);
 
     const collectionsSection = this.buildCharacterSection(
-      "Keepsake Cards",
-      "Route landmarks — stamp by visiting",
+      "Route traits",
+      "Habitat landmarks - stamp by visiting",
       this.collectionsSectionBadge,
     );
     collectionsSection.classList.add("character-section--binder", "character-section--dex");
@@ -1105,8 +1178,8 @@ export class HudShell {
     collectionsSection.append(this.collectionsList);
 
     const gatheredGoodsSection = this.buildCharacterSection(
-      "Pouch Goods",
-      "Forage along the path — hold E when the pouch sparkles",
+      "Pouch samples",
+      "Forage along the route - press E when the pouch glows",
       this.gatheredGoodsSectionBadge,
     );
     gatheredGoodsSection.classList.add("character-section--binder", "character-section--goods");
@@ -1129,8 +1202,8 @@ export class HudShell {
     tabs.setAttribute("aria-label", "Binder sections");
 
     [
-      ["profile", "Profile", "trail data"],
-      ["cards", "Cards", "keepsakes"],
+      ["profile", "Care", "trail data"],
+      ["cards", "Habitat", "keepsakes"],
       ["pouch", "Pouch", "forage"],
     ].forEach(([sectionId, label, descriptor]) => {
       const tab = document.createElement("button");
@@ -1199,11 +1272,11 @@ export class HudShell {
 
     const eyebrow = document.createElement("p");
     eyebrow.className = "pause-menu__eyebrow";
-    eyebrow.textContent = "Trail Break";
+    eyebrow.textContent = "Care pause";
 
     const title = document.createElement("h2");
     title.className = "pause-menu__title";
-    title.textContent = "Take a Breather";
+    title.textContent = "Habitat paused";
 
     this.pauseSummary.className = "pause-menu__summary";
     header.append(eyebrow, title, this.pauseSummary);
@@ -1211,22 +1284,37 @@ export class HudShell {
     const actions = document.createElement("div");
     actions.className = "pause-menu__actions";
     actions.append(
-      this.buildPauseAction("resume", "Esc", "Resume Trail", "Return to the meadow exactly where Mossu paused."),
-      this.buildPauseAction("handbook", "Tab", "Open Handbook", "Check profile notes, keepsake cards, trail moves, and pouch goods."),
-      this.buildPauseAction("map", "M", "World View", "Pull the camera above the island with no extra map panel covering the scenery."),
+      this.buildPauseAction("resume", "Esc", "Resume care", "Return to the meadow exactly where Mossu paused."),
+      this.buildPauseAction("handbook", "Tab", "Field guide", "Check habitat notes, route traits, trail moves, and pouch samples."),
+      this.buildPauseAction("map", "M", "Habitat view", "Pull the camera above the island with no extra map panel covering the scenery."),
     );
+
+    const settings = document.createElement("section");
+    settings.className = "pause-menu__settings";
+    const settingsTitle = document.createElement("h3");
+    settingsTitle.className = "pause-menu__settings-title";
+    settingsTitle.textContent = "Settings";
+    const settingsGrid = document.createElement("div");
+    settingsGrid.className = "pause-menu__settings-grid";
+    settingsGrid.append(
+      this.buildPauseSetting("Camera", "Cinematic", "shoulder"),
+      this.buildPauseSetting("HUD", "Soft focus", "hud"),
+      this.buildPauseSetting("Render", "60fps", "perf"),
+      this.buildPauseSetting("Audio", "Ambient", "audio"),
+    );
+    settings.append(settingsTitle, settingsGrid);
 
     const status = document.createElement("div");
     status.className = "pause-menu__status-grid";
     status.append(
-      this.buildPauseStat("Area", this.pauseStatusValues.area),
+      this.buildPauseStat("Habitat", this.pauseStatusValues.area),
       this.buildPauseStat("Landmark", this.pauseStatusValues.landmark),
       this.buildPauseStat("Breeze", this.pauseStatusValues.breeze),
-      this.buildPauseStat("Field Dex", this.pauseStatusValues.collections),
-      this.buildPauseStat("Gathered", this.pauseStatusValues.goods),
+      this.buildPauseStat("Notes", this.pauseStatusValues.collections),
+      this.buildPauseStat("Samples", this.pauseStatusValues.goods),
     );
 
-    shell.append(header, actions, status);
+    shell.append(header, actions, settings, status);
     this.pauseMenu.append(shell);
     return this.pauseMenu;
   }
@@ -1251,6 +1339,26 @@ export class HudShell {
 
     article.append(key, title, body);
     return article;
+  }
+
+  private buildPauseSetting(labelText: string, valueText: string, kind: "shoulder" | "hud" | "perf" | "audio") {
+    const row = document.createElement("article");
+    row.className = `pause-setting pause-setting--${kind}`;
+
+    const orb = document.createElement("span");
+    orb.className = "pause-setting__orb";
+    orb.setAttribute("aria-hidden", "true");
+
+    const label = document.createElement("p");
+    label.className = "pause-setting__label";
+    label.textContent = labelText;
+
+    const value = document.createElement("strong");
+    value.className = "pause-setting__value";
+    value.textContent = valueText;
+
+    row.append(orb, label, value);
+    return row;
   }
 
   private buildPauseStat(labelText: string, valueNode: HTMLElement) {
@@ -1294,7 +1402,7 @@ export class HudShell {
 
     const subtitle = document.createElement("p");
     subtitle.className = "world-map__subtitle";
-    subtitle.textContent = "Current Area";
+    subtitle.textContent = "Current habitat";
 
     this.mapCurrentTitle.className = "world-map__title";
     header.append(this.mapCurrentTitle, subtitle);
@@ -1316,9 +1424,9 @@ export class HudShell {
     const legend = document.createElement("div");
     legend.className = "world-map__legend";
     legend.append(
-      this.buildLegendRow("world-map__row-icon world-map__row-icon--poi", "Points of Interest"),
+      this.buildLegendRow("world-map__row-icon world-map__row-icon--poi", "Field Notes"),
       this.buildLegendRow("world-map__row-icon world-map__row-icon--bridge", "Bridges"),
-      this.buildLegendRow("world-map__row-icon world-map__row-icon--special", "Special Spots"),
+      this.buildLegendRow("world-map__row-icon world-map__row-icon--special", "Rare Finds"),
     );
 
     this.mapNextStop.className = "world-map__route-note";
@@ -1360,10 +1468,10 @@ export class HudShell {
     footerRow.append(leafLeft, closeLine, leafRight);
     const scrollHint = document.createElement("div");
     scrollHint.className = "world-map__footer-hint";
-    scrollHint.textContent = "Scroll to zoom the island view";
+    scrollHint.textContent = "Scroll to inspect the habitat";
     const resetHint = document.createElement("div");
     resetHint.className = "world-map__footer-hint";
-    resetHint.textContent = "Drag or WASD to pan; F to focus stops; R/Home to reset";
+    resetHint.textContent = "Drag or WASD to pan; F to focus nodes; R/Home to reset";
     footer.append(this.mapStamp, footerRow, scrollHint, resetHint);
 
     panel.append(badge, header, topDivider, body, bottomDivider, filters, footer);
@@ -1843,7 +1951,7 @@ export class HudShell {
       : null;
     const nextRouteLandmark = routeLandmarks.find((landmark) => !frame.save.catalogedLandmarkIds.has(landmark.id)) ?? null;
 
-    this.mapCurrentTitle.textContent = "Mossu Isles";
+    this.mapCurrentTitle.textContent = "Mossu habitat map";
     this.mapCurrentBody.textContent = frame.currentLandmark;
     const completedRouteCount = routeLandmarks.filter((landmark) => frame.save.catalogedLandmarkIds.has(landmark.id)).length;
     const isSkywardStop = currentRouteLandmark?.id === "skyward-ledge" || nextRouteLandmark?.id === "skyward-ledge";
@@ -1854,9 +1962,9 @@ export class HudShell {
       ? `Current stop: ${currentRouteLandmark.title}. Route progress ${completedRouteCount}/${routeLandmarks.length}. Drift through it to stamp the climb, then ${routeCopy}`
       : nextRouteLandmark
         ? `Next stop: ${nextRouteLandmark.title}. Route progress ${completedRouteCount}/${routeLandmarks.length}. ${routeCopy.charAt(0).toUpperCase() + routeCopy.slice(1)}`
-        : `Route complete. Mossu has already mapped the whole climb to the shrine with ${characterData.gatheredTotals.gathered} goods tucked away.`;
-    this.mapCollectionsSummary.textContent = `${characterData.totals.discovered}/${characterData.totals.total} field notes logged and ${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total} goods gathered so far.`;
-    this.mapStamp.textContent = `${characterData.totals.discovered} notes · ${characterData.gatheredTotals.gathered} goods`;
+        : `Route complete. Mossu has already mapped the whole climb to the shrine with ${characterData.gatheredTotals.gathered} samples tucked away.`;
+    this.mapCollectionsSummary.textContent = `${characterData.totals.discovered}/${characterData.totals.total} field notes logged and ${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total} samples gathered so far.`;
+    this.mapStamp.textContent = `${characterData.totals.discovered} notes · ${characterData.gatheredTotals.gathered} samples`;
 
     this.mapRouteSteps.forEach((step, landmarkId) => {
       step.classList.toggle("world-map__route-step--complete", frame.save.catalogedLandmarkIds.has(landmarkId));

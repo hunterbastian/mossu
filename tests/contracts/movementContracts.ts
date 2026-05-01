@@ -22,7 +22,7 @@ import {
   WALK_SPEED,
 } from "../../src/simulation/playerSimulationConstants";
 import { updateStaminaAndAbilityState } from "../../src/simulation/staminaAbilities";
-import { applySwimForces, clampSwimVelocity, wantsUnderwaterDive } from "../../src/simulation/waterTraversal";
+import { applySwimForces, clampSwimVelocity, resolveWaterContact, wantsUnderwaterDive } from "../../src/simulation/waterTraversal";
 import type { WaterState } from "../../src/simulation/world";
 import { startingPosition } from "../../src/simulation/world";
 import { assert } from "./testHarness";
@@ -247,4 +247,13 @@ export function runMovementContracts() {
   assert(planarSpeed(underwaterPlayer) <= SWIM_UNDERWATER_SPEED + 1.81, "underwater swimming uses a slower speed cap");
   updateStaminaAndAbilityState(underwaterPlayer, 1, underwaterRuntime, false);
   assert(underwaterPlayer.stamina < underwaterPlayer.staminaMax, "underwater swimming drains stamina while submerged");
+
+  const enteringSwimPlayer = makePlayer();
+  const entryRuntime = createPlayerSimulationRuntime();
+  enteringSwimPlayer.position.set(0, deepWater.surfaceY - deepWater.depth + 2.2, 0);
+  enteringSwimPlayer.velocity.set(0, -7.5, 0);
+  resolveWaterContact(enteringSwimPlayer, deepWater.surfaceY - deepWater.depth, deepWater, true, 7.5, entryRuntime);
+  assert(enteringSwimPlayer.swimming, "deep water contact starts swimming");
+  assert(enteringSwimPlayer.position.y > deepWater.surfaceY - 1, "entering deep water lifts Mossu toward the swim surface");
+  assert(enteringSwimPlayer.velocity.y > -6, "entering deep water softens downward velocity");
 }

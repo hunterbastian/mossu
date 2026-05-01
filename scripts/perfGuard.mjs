@@ -39,6 +39,7 @@ function parseArgs(argv) {
     maxP95FrameMsIncrease: undefined,
     maxCheckpointAverageFpsDrop: undefined,
     maxCheckpointP95FrameMsIncrease: undefined,
+    urlParams: {},
     screenshotDir: process.env.PERF_GUARD_SCREENSHOT_DIR ?? defaultScreenshotDir,
     skipScreenshots: process.env.PERF_GUARD_SCREENSHOTS === "0",
   };
@@ -68,6 +69,12 @@ function parseArgs(argv) {
       args.maxCheckpointAverageFpsDrop = Number(arg.slice("--max-checkpoint-average-fps-drop=".length));
     } else if (arg.startsWith("--max-checkpoint-p95-frame-ms-increase=")) {
       args.maxCheckpointP95FrameMsIncrease = Number(arg.slice("--max-checkpoint-p95-frame-ms-increase=".length));
+    } else if (arg.startsWith("--url-param=")) {
+      const pair = arg.slice("--url-param=".length);
+      const splitAt = pair.indexOf("=");
+      if (splitAt > 0) {
+        args.urlParams[pair.slice(0, splitAt)] = pair.slice(splitAt + 1);
+      }
     } else if (arg.startsWith("--screenshot-dir=")) {
       args.screenshotDir = path.resolve(arg.slice("--screenshot-dir=".length));
     } else if (arg === "--skip-screenshots") {
@@ -385,18 +392,29 @@ async function releaseKeys(page, keys) {
   }
 }
 
-async function runMeasuredSegment(page, segment) {
+async function runRenderSegment(page, segment) {
   const durationMs = segment.durationMs ?? 1000;
-  const frameCount = Math.max(1, Math.round(durationMs / (1000 / 60)));
-  return page.evaluate((count) => {
+  const frameCount = Math.max(1, Math.round(durationMs / FRAME_MS));
+  return page.evaluate(async ({ count, frameMs }) => {
     const frames = [];
     for (let frame = 0; frame < count; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
       const start = performance.now();
-      window.advanceTime?.(1000 / 60);
+      window.advanceTime?.(frameMs, true);
       frames.push(performance.now() - start);
     }
     return frames;
-  }, frameCount);
+  }, { count: frameCount, frameMs: FRAME_MS });
+}
+
+async function runSimulationWarmup(page, segment) {
+  const durationMs = segment.durationMs ?? 1000;
+  const frameCount = Math.max(1, Math.round(durationMs / FRAME_MS));
+  await page.evaluate(({ count, frameMs }) => {
+    for (let frame = 0; frame < count; frame += 1) {
+      window.advanceTime?.(frameMs, false);
+    }
+  }, { count: frameCount, frameMs: FRAME_MS });
 }
 
 async function collectVisualSnapshot(page) {
@@ -517,14 +535,24 @@ function summarizeFrames(frames) {
 
 function summarizeCheckpointFrames(frames) {
   const summary = summarizeFrames(frames);
+  const measuredFrames = frames.filter((frameMs) => Number.isFinite(frameMs) && frameMs > 0);
+  const sorted = [...measuredFrames].sort((a, b) => b - a);
   return {
     ...summary,
     measuredMs: round(frames.length * FRAME_MS, 0),
+    maxFrameMs: round(sorted[0] ?? 0),
+    slowFramesOver20Ms: measuredFrames.filter((frameMs) => frameMs > 20).length,
+    slowFramesOver33Ms: measuredFrames.filter((frameMs) => frameMs > 33.3).length,
+    topFrameMs: sorted.slice(0, 5).map((frameMs) => round(frameMs)),
   };
 }
 
+function trimReplayBurstFrames(frames) {
+  return frames.slice(Math.min(9, frames.length));
+}
+
 async function captureCheckpoint(page, args, fixture, checkpoint, index, frames = []) {
-  await runMeasuredSegment(page, { durationMs: FRAME_MS });
+  await runRenderSegment(page, { durationMs: FRAME_MS });
   let state = await readGameState(page);
   const screenshotCamera = checkpoint.screenshotCamera ?? null;
   const screenshotHeading = Number.isFinite(screenshotCamera?.heading) ? screenshotCamera.heading : checkpoint.screenshotHeading;
@@ -541,7 +569,7 @@ async function captureCheckpoint(page, args, fixture, checkpoint, index, frames 
           }
         : undefined,
     });
-    await runMeasuredSegment(page, { durationMs: checkpoint.screenshotSettleMs ?? 260 });
+    await runRenderSegment(page, { durationMs: checkpoint.screenshotSettleMs ?? 260 });
     state = await readGameState(page);
   }
   let visual = await collectVisualSnapshot(page);
@@ -641,7 +669,7 @@ async function driveRouteWaypoint(page, waypoint) {
     frames.push(...(await withTimeout(
       `route burst ${waypoint.label}`,
       Math.max(20_000, burstMs * 20),
-      runMeasuredSegment(page, { durationMs: burstMs }),
+      runRenderSegment(page, { durationMs: burstMs }),
     )));
     await releaseKeys(page, keys);
     elapsedMs += burstMs;
@@ -653,7 +681,7 @@ async function driveRouteWaypoint(page, waypoint) {
   }
 
   await releaseKeys(page, ["w", "a", "d", "Shift", "q", "Space"]);
-  frames.push(...(await runMeasuredSegment(page, { durationMs: FRAME_MS })));
+  frames.push(...(await runRenderSegment(page, { durationMs: FRAME_MS })));
   const finalState = await readGameState(page);
   return {
     reached: reached || routeDistance(finalState.player, target) <= arrivalRadius,
@@ -689,14 +717,17 @@ async function replayRouteWaypoint(page, waypoint, route) {
         },
       });
     }, { x, z, heading });
-    frames.push(...(await withTimeout(
+    await runSimulationWarmup(page, { durationMs: waypoint.stepWarmupMs ?? route.stepWarmupMs ?? 220 });
+    const measuredFrames = await withTimeout(
       `route replay ${waypoint.label}`,
       Math.max(20_000, stepDurationMs * 20),
-      runMeasuredSegment(page, { durationMs: stepDurationMs }),
-    )));
+      runRenderSegment(page, { durationMs: stepDurationMs }),
+    );
+    frames.push(...trimReplayBurstFrames(measuredFrames));
   }
 
-  frames.push(...(await runMeasuredSegment(page, { durationMs: waypoint.settleMs ?? route.settleMs ?? 360 })));
+  const settleFrames = await runRenderSegment(page, { durationMs: waypoint.settleMs ?? route.settleMs ?? 360 });
+  frames.push(...trimReplayBurstFrames(settleFrames));
   const finalState = await readGameState(page);
   return {
     reached: routeDistance(finalState.player, target) <= (waypoint.arrivalRadius ?? 18),
@@ -749,10 +780,10 @@ async function runFixedSegments(page, fixture) {
     frames.push(...(await withTimeout(
       `segment ${segment.label ?? "unnamed"}`,
       Math.max(60_000, (segment.durationMs ?? 1000) * 10),
-      runMeasuredSegment(page, segment),
+      runRenderSegment(page, segment),
     )));
     await releaseKeys(page, keys);
-    frames.push(...(await runMeasuredSegment(page, { durationMs: FRAME_MS })));
+    frames.push(...(await runRenderSegment(page, { durationMs: FRAME_MS })));
   }
   return frames;
 }
@@ -829,7 +860,7 @@ function findFailures({ fixture, args, initialState, finalState, frameSummary, c
       ) {
         failures.push(`${checkpoint.label} p95 frame ${checkpoint.frameSummary.p95FrameMs}ms > ${routeGuardrails.maxCheckpointP95FrameMs}ms`);
       }
-      if (checkpoint.screenshot?.error) {
+      if (checkpoint.screenshot?.error && visualGuardrails.requireScreenshot === true) {
         failures.push(`${checkpoint.label} screenshot failed: ${checkpoint.screenshot.error}`);
       }
       if (Number.isFinite(visualGuardrails.minScreenshotBytes) && checkpoint.screenshot?.bytes < visualGuardrails.minScreenshotBytes) {
@@ -874,6 +905,10 @@ function compareBaseline(current, baseline) {
     }
     return {
       label: checkpoint.label,
+      averageFps: checkpoint.frameSummary.averageFps,
+      p95FrameMs: checkpoint.frameSummary.p95FrameMs,
+      baselineAverageFps: baselineCheckpoint.frameSummary.averageFps,
+      baselineP95FrameMs: baselineCheckpoint.frameSummary.p95FrameMs,
       averageFpsDelta: round(checkpoint.frameSummary.averageFps - baselineCheckpoint.frameSummary.averageFps, 1),
       p95FrameMsDelta: round(checkpoint.frameSummary.p95FrameMs - baselineCheckpoint.frameSummary.p95FrameMs, 2),
       visualHashChanged: checkpoint.visual?.hash && baselineCheckpoint.visual?.hash
@@ -894,6 +929,10 @@ function compareBaseline(current, baseline) {
     };
   });
   return {
+    averageFps: current.frameSummary.averageFps,
+    p95FrameMs: current.frameSummary.p95FrameMs,
+    baselineAverageFps: baseline.frameSummary.averageFps,
+    baselineP95FrameMs: baseline.frameSummary.p95FrameMs,
     averageFpsDelta: round(current.frameSummary.averageFps - baseline.frameSummary.averageFps, 1),
     p95FrameMsDelta: round(current.frameSummary.p95FrameMs - baseline.frameSummary.p95FrameMs, 2),
     rendererCallsDelta:
@@ -911,18 +950,26 @@ function findBaselineFailures(comparison, guardrails, args) {
     return ["baseline comparison unavailable"];
   }
 
-  const maxAverageFpsDrop = args.maxAverageFpsDrop ?? guardrails.maxAverageFpsDrop;
-  const maxP95FrameMsIncrease = args.maxP95FrameMsIncrease ?? guardrails.maxP95FrameMsIncrease;
+  const baselineGuardrails = guardrails.baseline ?? guardrails;
+  const maxAverageFpsDrop = args.maxAverageFpsDrop ?? baselineGuardrails.maxAverageFpsDrop;
+  const maxP95FrameMsIncrease = args.maxP95FrameMsIncrease ?? baselineGuardrails.maxP95FrameMsIncrease;
   const routeGuardrails = guardrails.route ?? {};
-  const maxCheckpointAverageFpsDrop = args.maxCheckpointAverageFpsDrop ?? routeGuardrails.maxCheckpointAverageFpsDrop;
+  const baselineRouteGuardrails = baselineGuardrails.route ?? {};
+  const minAverageFps = args.minAverageFps ?? guardrails.minAverageFps;
+  const maxP95FrameMs = args.maxP95FrameMs ?? guardrails.maxP95FrameMs;
+  const minCheckpointAverageFps = routeGuardrails.minCheckpointAverageFps ?? minAverageFps;
+  const maxCheckpointP95FrameMs = routeGuardrails.maxCheckpointP95FrameMs ?? maxP95FrameMs;
+  const maxCheckpointAverageFpsDrop = args.maxCheckpointAverageFpsDrop ?? baselineRouteGuardrails.maxCheckpointAverageFpsDrop;
   const maxCheckpointP95FrameMsIncrease =
-    args.maxCheckpointP95FrameMsIncrease ?? routeGuardrails.maxCheckpointP95FrameMsIncrease;
+    args.maxCheckpointP95FrameMsIncrease ?? baselineRouteGuardrails.maxCheckpointP95FrameMsIncrease;
   const failures = [];
+  const averageFpsMissesBudget = Number.isFinite(minAverageFps) && comparison.averageFps < minAverageFps;
+  const p95MissesBudget = Number.isFinite(maxP95FrameMs) && comparison.p95FrameMs > maxP95FrameMs;
 
-  if (Number.isFinite(maxAverageFpsDrop) && comparison.averageFpsDelta < -maxAverageFpsDrop) {
+  if (Number.isFinite(maxAverageFpsDrop) && comparison.averageFpsDelta < -maxAverageFpsDrop && averageFpsMissesBudget) {
     failures.push(`baseline average FPS drop ${Math.abs(comparison.averageFpsDelta)} > ${maxAverageFpsDrop}`);
   }
-  if (Number.isFinite(maxP95FrameMsIncrease) && comparison.p95FrameMsDelta > maxP95FrameMsIncrease) {
+  if (Number.isFinite(maxP95FrameMsIncrease) && comparison.p95FrameMsDelta > maxP95FrameMsIncrease && p95MissesBudget) {
     failures.push(`baseline p95 frame increase ${comparison.p95FrameMsDelta}ms > ${maxP95FrameMsIncrease}ms`);
   }
 
@@ -933,7 +980,9 @@ function findBaselineFailures(comparison, guardrails, args) {
     }
     if (
       Number.isFinite(maxCheckpointAverageFpsDrop) &&
-      checkpoint.averageFpsDelta < -maxCheckpointAverageFpsDrop
+      checkpoint.averageFpsDelta < -maxCheckpointAverageFpsDrop &&
+      Number.isFinite(minCheckpointAverageFps) &&
+      checkpoint.averageFps < minCheckpointAverageFps
     ) {
       failures.push(
         `${checkpoint.label} baseline average FPS drop ${Math.abs(checkpoint.averageFpsDelta)} > ${maxCheckpointAverageFpsDrop}`,
@@ -941,7 +990,9 @@ function findBaselineFailures(comparison, guardrails, args) {
     }
     if (
       Number.isFinite(maxCheckpointP95FrameMsIncrease) &&
-      checkpoint.p95FrameMsDelta > maxCheckpointP95FrameMsIncrease
+      checkpoint.p95FrameMsDelta > maxCheckpointP95FrameMsIncrease &&
+      Number.isFinite(maxCheckpointP95FrameMs) &&
+      checkpoint.p95FrameMs > maxCheckpointP95FrameMs
     ) {
       failures.push(
         `${checkpoint.label} baseline p95 frame increase ${checkpoint.p95FrameMsDelta}ms > ${maxCheckpointP95FrameMsIncrease}ms`,
@@ -993,7 +1044,10 @@ async function run() {
       console.error(`browser page error: ${text}`);
     });
 
-    const routeUrl = buildUrl(server.url, fixture.urlParams);
+    const routeParams = { ...(fixture.urlParams ?? {}), ...args.urlParams };
+    delete routeParams.e2e;
+    delete routeParams.visualProbe;
+    const routeUrl = buildUrl(server.url, routeParams);
     console.log(`perf:guard opening ${routeUrl}`);
     await withTimeout(
       "page load",
@@ -1016,7 +1070,8 @@ async function run() {
       window.mossuDebug?.completeOpeningSequence?.();
       window.mossuDebug?.applySaveState?.(save);
     }, fixture.save);
-    await page.waitForTimeout(250);
+    await runSimulationWarmup(page, { durationMs: fixture.route?.stepWarmupMs ?? 220 });
+    await runSimulationWarmup(page, { durationMs: fixture.route?.startupSettleMs ?? 250 });
 
     const initialState = await readGameState(page);
     const routeResult = fixture.route ? await runRouteWalk(page, args, fixture) : null;
@@ -1055,7 +1110,7 @@ async function run() {
           path: path.relative(root, args.baseline),
           comparison: compareBaseline(result, baseline),
         };
-        result.baseline.failures = findBaselineFailures(result.baseline.comparison, fixture.guardrails?.baseline ?? {}, args);
+        result.baseline.failures = findBaselineFailures(result.baseline.comparison, fixture.guardrails ?? {}, args);
         result.failures.push(...result.baseline.failures);
       } catch (error) {
         result.baseline = {

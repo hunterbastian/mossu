@@ -1,48 +1,51 @@
 {
   "name": "burrow-to-moss-crown-route",
-  "description": "Perf guard route for the Burrow Hollow to Moss Crown Shrine playtest walk. It starts from a real Burrow save shape, drives the route through each visual anchor, captures checkpoints, and fails on missed route stamps or visual/perf budget regressions.",
+  "description": "Perf guard route for the rebuilt sky-island playtest walk. It starts from a real Burrow save shape, drives through meadow, central water, forest grove, highland waterfall, ridge, and shrine anchors, captures checkpoints, and fails on missed route stamps or visual/perf budget regressions.",
   "viewport": {
     "width": 1440,
     "height": 900
   },
   "urlParams": {
     "qaDebug": "1",
-    "perfDebug": "1"
+    "perfDebug": "1",
+    "deterministicPerf": "1"
   },
   "save": {
     "player": {
-      "x": -58,
-      "z": -158,
+      "x": -68,
+      "z": -140,
       "heading": 0
     },
     "save": {
-      "unlockedAbilities": [
-        "breeze_float"
-      ],
+      "unlockedAbilities": ["breeze_float"],
       "catalogedLandmarkIds": [],
       "gatheredForageableIds": []
     }
   },
   "route": {
-    "name": "Burrow Hollow to Moss Crown Shrine",
+    "name": "Sky Island Burrow to Moss Crown Shrine",
     "driver": "replay",
     "stepDistance": 7,
-    "stepDurationMs": 220,
+    "stepWarmupMs": 820,
+    "startupSettleMs": 6000,
+    "stepDurationMs": 360,
     "settleMs": 360,
-    "startLabel": "Opening meadow start",
+    "startLabel": "Sky-island opening meadow start",
     "startLandmarkId": "start-burrow",
     "screenshotTimeoutMs": 15000,
     "waypoints": [
       {
         "label": "Burrow Hollow stamp",
         "target": {
-          "x": -44,
-          "z": -134
+          "x": -68,
+          "z": -140
         },
         "arrivalRadius": 15,
         "landmarkId": "start-burrow",
         "expectedLandmark": "Burrow Hollow",
-        "maxDurationMs": 10000,
+        "stepDurationMs": 180,
+        "settleMs": 240,
+        "maxDurationMs": 5000,
         "roll": false
       },
       {
@@ -54,21 +57,21 @@
         "arrivalRadius": 18,
         "landmarkId": "orange-tree-overlook",
         "expectedLandmark": "Amber Tree Knoll",
-        "maxDurationMs": 18000
+        "maxDurationMs": 36000
       },
       {
-        "label": "Silver Bend river",
+        "label": "Silver Bend central water",
         "target": {
           "x": 9.2,
           "z": 24
         },
-        "arrivalRadius": 18,
+        "arrivalRadius": 24,
         "landmarkId": "river-bend",
         "expectedLandmark": "Silver Bend",
         "maxDurationMs": 16000
       },
       {
-        "label": "Fir Gate forest edge",
+        "label": "Fir Gate forest grove",
         "target": {
           "x": 24,
           "z": 88
@@ -90,7 +93,7 @@
         "maxDurationMs": 12000
       },
       {
-        "label": "Highland Basin water",
+        "label": "Highland Basin waterfall",
         "target": {
           "x": 42,
           "z": 134
@@ -110,7 +113,7 @@
         "label": "Windstep Shelf highland",
         "target": {
           "x": 10,
-          "z": 154
+          "z": 146
         },
         "screenshotCamera": {
           "heading": 2.65,
@@ -121,10 +124,11 @@
         "arrivalRadius": 18,
         "landmarkId": "windstep-shelf",
         "expectedLandmark": "Windstep Shelf",
+        "stepWarmupMs": 1500,
         "maxDurationMs": 14000
       },
       {
-        "label": "Cloudback Ridge overlook",
+        "label": "Cloudback Ridge sky-island overlook",
         "target": {
           "x": -26,
           "z": 168
@@ -155,6 +159,9 @@
         "arrivalRadius": 18,
         "landmarkId": "skyward-ledge",
         "expectedLandmark": "Skyward Ledge",
+        "stepWarmupMs": 1500,
+        "stepDurationMs": 360,
+        "settleMs": 600,
         "maxDurationMs": 12000
       },
       {

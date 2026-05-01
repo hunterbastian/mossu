@@ -87,6 +87,7 @@ export class ModelViewerApp {
 
   constructor(private readonly container: HTMLElement) {
     this.root.className = "model-viewer";
+    this.selectedModel = this.getInitialModel();
     this.root.innerHTML = this.renderShell();
     this.canvasWrap.className = "model-viewer__stage";
 
@@ -254,6 +255,13 @@ export class ModelViewerApp {
     `;
   }
 
+  private getInitialModel(): ModelViewerModel {
+    const requestedModel = new URLSearchParams(window.location.search).get("model");
+    return requestedModel === "karu" || requestedModel === "mossu"
+      ? requestedModel
+      : "mossu";
+  }
+
   private installControls() {
     this.container.textContent = "";
     this.container.appendChild(this.root);
@@ -350,8 +358,14 @@ export class ModelViewerApp {
   private switchModel(model: ModelViewerModel) {
     this.selectedModel = model;
     this.clearActiveRig();
-    this.activeRig = model === "mossu" ? this.createMossuRig() : this.createKaruRig();
-    this.stageRoot.add(this.activeRig.group);
+    let rig: ViewerRig;
+    if (model === "mossu") {
+      rig = this.createMossuRig();
+    } else {
+      rig = this.createKaruRig();
+    }
+    this.activeRig = rig;
+    this.stageRoot.add(rig.group);
     this.updateUiState();
   }
 
@@ -581,11 +595,22 @@ export class ModelViewerApp {
 
   private updateCamera(dt: number) {
     const orbit = this.manualOrbit + (this.turntable ? this.time * 0.24 : 0);
-    const radius = this.selectedModel === "mossu" ? 11.3 : 8.6;
-    const height = this.selectedModel === "mossu" ? 5.7 : 4.2;
+    const radius =
+      this.selectedModel === "mossu" ? 11.3 : 8.6;
+    const height =
+      this.selectedModel === "mossu" ? 5.7 : 4.2;
     this.cameraPosition.set(Math.sin(orbit) * radius, height, Math.cos(orbit) * radius);
     this.camera.position.lerp(this.cameraPosition, 1 - Math.exp(-dt * 7));
-    this.camera.lookAt(CAMERA_TARGET);
+    this.camera.lookAt(this.getCameraTarget());
+  }
+
+  private getCameraTarget() {
+    if (this.selectedModel === "mossu") {
+      CAMERA_TARGET.set(0, 1.6, 0);
+    } else {
+      CAMERA_TARGET.set(0, 1.35, 0);
+    }
+    return CAMERA_TARGET;
   }
 
   private updateUiState() {
@@ -604,7 +629,9 @@ export class ModelViewerApp {
 
     const heading = this.root.querySelector<HTMLElement>("[data-viewer-heading]");
     if (heading) {
-      heading.textContent = this.selectedModel === "mossu" ? "Mossu" : "Karu Companion";
+      heading.textContent =
+        this.selectedModel === "mossu" ? "Mossu" :
+          "Karu Companion";
     }
 
     const playButton = this.root.querySelector<HTMLButtonElement>("[data-toggle-play]");

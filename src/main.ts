@@ -11,7 +11,7 @@ export type MossuE2eBridge = {
 
 declare global {
   interface Window {
-    advanceTime?: (ms: number) => void;
+    advanceTime?: (ms: number, renderFrame?: boolean) => void;
     /** Automation / Playwright: present once hooks are live; `ready` after one rAF post-`start()`. */
     __MOSSU_E2E__?: MossuE2eBridge;
     mossuDebug?: {
@@ -20,6 +20,8 @@ declare global {
       applySaveState?: (payload: MossuDebugSaveStatePayload) => void;
       faceRouteHeading?: (heading: number, cameraOptions?: { distance?: number; focusHeight?: number; lift?: number }) => void;
       setWaterDepthDebug?: (enabled: boolean) => void;
+      setLayerVisibility?: (layer: string, visible: boolean) => void;
+      getLastFrameProfile?: () => Record<string, number> | null;
     };
     render_game_to_text?: () => string;
     mossuReportError?: (details: MossuErrorDetail) => void;
@@ -27,12 +29,14 @@ declare global {
 }
 
 interface MossuAppRuntime {
-  advanceTime: (ms: number) => void;
+  advanceTime: (ms: number, renderFrame?: boolean) => void;
   debugCompleteOpeningSequence?: () => void;
   debugTeleportPlayerTo?: (x: number, z: number) => void;
   debugApplySaveState?: (payload: MossuDebugSaveStatePayload) => void;
   debugFaceRouteHeading?: (heading: number, cameraOptions?: { distance?: number; focusHeight?: number; lift?: number }) => void;
   debugSetWaterDepthDebug?: (enabled: boolean) => void;
+  debugSetLayerVisibility?: (layer: string, visible: boolean) => void;
+  debugGetLastFrameProfile?: () => Record<string, number> | null;
   renderGameToText: () => string;
   start: () => void;
 }
@@ -61,7 +65,11 @@ const appContainer = container;
 /** Prevents stacking fatal overlays / handler feedback loops after the first runtime fatal. */
 let runtimeFatalUiLocked = false;
 
-function setLoadingStatus(message: string) {
+function setLoadingStatus(message: string, progress = 16) {
+  const loader = appContainer.querySelector<HTMLElement>(".instant-title");
+  if (loader) {
+    loader.style.setProperty("--loading-progress", `${progress}%`);
+  }
   const status = appContainer.querySelector<HTMLElement>("[data-loading-status]");
   if (status) {
     status.textContent = message;
@@ -74,6 +82,7 @@ function finishLoading() {
     return;
   }
 
+  loader.style.setProperty("--loading-progress", "100%");
   loader.classList.add("instant-title--leaving");
   window.setTimeout(() => {
     loader.remove();
@@ -130,7 +139,7 @@ window.addEventListener("unhandledrejection", (event) => {
 
 function attachRuntime(app: MossuAppRuntime, mode: MossuE2eBridge["mode"]) {
   window.__MOSSU_E2E__ = { version: 1, ready: false, mode };
-  window.advanceTime = (ms) => app.advanceTime(ms);
+  window.advanceTime = (ms, renderFrame) => app.advanceTime(ms, renderFrame);
   window.render_game_to_text = () => app.renderGameToText();
   if (new URLSearchParams(window.location.search).has("qaDebug") && app.debugCompleteOpeningSequence) {
     window.mossuDebug = {
@@ -139,6 +148,8 @@ function attachRuntime(app: MossuAppRuntime, mode: MossuE2eBridge["mode"]) {
       applySaveState: (payload) => app.debugApplySaveState?.(payload),
       faceRouteHeading: (heading, cameraOptions) => app.debugFaceRouteHeading?.(heading, cameraOptions),
       setWaterDepthDebug: (enabled) => app.debugSetWaterDepthDebug?.(enabled),
+      setLayerVisibility: (layer, visible) => app.debugSetLayerVisibility?.(layer, visible),
+      getLastFrameProfile: () => app.debugGetLastFrameProfile?.() ?? null,
     };
   }
   app.start();
@@ -151,16 +162,16 @@ function attachRuntime(app: MossuAppRuntime, mode: MossuE2eBridge["mode"]) {
 }
 
 async function startGame() {
-  setLoadingStatus("Gathering the meadow");
+  setLoadingStatus("Unfolding the island atlas", 36);
   const { GameApp } = await import("./render/app/GameApp");
-  setLoadingStatus("Painting the island");
+  setLoadingStatus("Waking the habitat cells", 72);
   const game = await GameApp.create(appContainer);
   attachRuntime(game, "game");
   finishLoading();
 }
 
 async function startModelViewer() {
-  setLoadingStatus("Opening the model table");
+  setLoadingStatus("Lighting the creature workshop", 68);
   const { ModelViewerApp } = await import("./render/app/ModelViewerApp");
   const viewer = new ModelViewerApp(appContainer);
   attachRuntime(viewer, "model_viewer");

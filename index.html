@@ -8,7 +8,37 @@
     />
     <title>Mossu</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link
+      rel="preload"
+      href="/fonts/geist/Geist-Variable.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/geist/GeistMono-Variable.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <style>
+      @font-face {
+        font-family: "Geist";
+        src: url("/fonts/geist/Geist-Variable.woff2") format("woff2");
+        font-display: swap;
+        font-style: normal;
+        font-weight: 100 900;
+      }
+
+      @font-face {
+        font-family: "Geist Mono";
+        src: url("/fonts/geist/GeistMono-Variable.woff2") format("woff2");
+        font-display: swap;
+        font-style: normal;
+        font-weight: 100 900;
+      }
+
       html,
       body,
       #app {
@@ -24,7 +54,7 @@
           radial-gradient(circle at 52% 78%, rgba(124, 207, 111, 0.58), transparent 24rem),
           linear-gradient(135deg, #d8f8ee 0%, #b8eadf 34%, #d7e999 62%, #87c880 100%);
         color: #3d2a1a;
-        font-family: Georgia, "Palatino Linotype", "Avenir Next", ui-rounded, system-ui, sans-serif;
+        font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
       }
 
       .instant-title {
@@ -33,11 +63,32 @@
         z-index: 1000;
         display: grid;
         place-items: center;
+        padding: 1rem;
+        overflow: hidden;
         text-align: center;
+        --loading-progress: 16%;
         background:
-          radial-gradient(circle at 50% 44%, rgba(255, 243, 160, 0.5), transparent 20rem),
-          radial-gradient(circle at 54% 52%, rgba(139, 238, 211, 0.28), transparent 24rem),
-          linear-gradient(135deg, rgba(216, 248, 238, 0.92), rgba(135, 200, 128, 0.86));
+          radial-gradient(circle at 50% 18%, rgba(255, 246, 180, 0.7), transparent 14rem),
+          radial-gradient(circle at 16% 78%, rgba(62, 174, 112, 0.34) 0 5rem, transparent 14rem),
+          radial-gradient(circle at 84% 70%, rgba(55, 181, 172, 0.28) 0 4rem, transparent 13rem),
+          linear-gradient(180deg, #9fe5d8 0%, #d8f3d6 44%, #fff0b8 70%, #8fc56e 100%);
+      }
+
+      .instant-title::before {
+        content: "";
+        position: absolute;
+        inset: auto auto 7vh 50%;
+        width: min(44rem, 112vw);
+        height: min(18rem, 46vh);
+        transform: translateX(-50%);
+        border-radius: 58% 58% 0 0;
+        background:
+          radial-gradient(ellipse at 50% 10%, rgba(255, 247, 194, 0.92) 0 10%, transparent 11%),
+          radial-gradient(ellipse at 28% 58%, rgba(80, 152, 92, 0.64) 0 28%, transparent 29%),
+          radial-gradient(ellipse at 74% 64%, rgba(63, 142, 101, 0.58) 0 27%, transparent 28%),
+          linear-gradient(180deg, rgba(191, 224, 122, 0) 0 31%, #8fcf83 32% 67%, #57ad8e 68% 100%);
+        opacity: 0.88;
+        filter: blur(0.2px);
       }
 
       .instant-title::after {
@@ -46,43 +97,55 @@
         inset: 0;
         pointer-events: none;
         background:
-          repeating-linear-gradient(
-            180deg,
-            rgba(255, 255, 255, 0.055) 0,
-            rgba(255, 255, 255, 0.055) 1px,
-            rgba(21, 54, 45, 0.055) 2px,
-            transparent 4px
-          );
-        opacity: 0.34;
+          radial-gradient(circle at 17% 72%, rgba(255, 255, 224, 0.34) 0 0.38rem, transparent 0.42rem),
+          radial-gradient(circle at 83% 30%, rgba(177, 246, 164, 0.28) 0 0.46rem, transparent 0.5rem),
+          radial-gradient(circle at 72% 82%, rgba(255, 246, 170, 0.3) 0 0.32rem, transparent 0.36rem),
+          repeating-linear-gradient(172deg, rgba(255, 255, 255, 0.15) 0 1px, transparent 1px 7px),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(53, 112, 88, 0.1));
+        mix-blend-mode: soft-light;
+        opacity: 0.38;
       }
 
       .instant-title > div {
         position: relative;
         z-index: 1;
-        min-width: min(28rem, calc(100vw - 2rem));
-        padding: clamp(1.25rem, 4vw, 2.2rem) clamp(1.25rem, 5vw, 2.8rem);
-        border: 1px solid rgba(255, 255, 255, 0.72);
-        border-radius: 1.6rem;
+        display: grid;
+        justify-items: center;
+        box-sizing: border-box;
+        width: min(34rem, calc(100vw - 2rem));
+        padding: 1.05rem 1rem 1.25rem;
+        border: 2px solid rgba(105, 75, 34, 0.48);
+        border-radius: 1.2rem;
         background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.16) 46%, rgba(178, 234, 223, 0.34) 100%),
-          linear-gradient(135deg, rgba(143, 216, 219, 0.42), rgba(196, 234, 153, 0.38));
-        backdrop-filter: blur(28px) saturate(1.4);
-        -webkit-backdrop-filter: blur(28px) saturate(1.4);
+          linear-gradient(180deg, rgba(255, 249, 210, 0.94), rgba(248, 221, 133, 0.88)),
+          linear-gradient(135deg, rgba(124, 202, 170, 0.22), rgba(255, 255, 255, 0));
         box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.9),
-          inset 0 -1px 0 rgba(255, 255, 255, 0.22),
-          0 0 0 1px rgba(255, 255, 255, 0.12),
-          0 24px 60px -16px rgba(54, 110, 130, 0.42),
-          0 6px 18px -6px rgba(86, 156, 162, 0.28);
+          inset 0 1px 0 rgba(255, 255, 240, 0.9),
+          inset 0 -0.42rem 1rem rgba(138, 99, 37, 0.12),
+          0 0.44rem 0 rgba(77, 112, 62, 0.26),
+          0 1.6rem 4rem rgba(37, 93, 75, 0.24);
+      }
+
+      .instant-title > div::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.38) 0 0.2rem, rgba(255, 255, 255, 0) 0.2rem 70%, rgba(103, 69, 25, 0.1)),
+          repeating-linear-gradient(90deg, rgba(122, 91, 41, 0.1) 0 1px, transparent 1px 7px);
+        opacity: 0.66;
       }
 
       .instant-title strong {
         display: block;
-        font-size: clamp(3.4rem, 10vw, 7.8rem);
+        margin-top: -0.15rem;
+        font-size: clamp(3.5rem, 5.4rem, 5.4rem);
         font-weight: 950;
         letter-spacing: 0;
         line-height: 0.88;
-        color: #f5c85d;
+        color: #f7cf5b;
         -webkit-text-stroke: clamp(0.07rem, 0.28vw, 0.13rem) rgba(96, 56, 25, 0.92);
         text-shadow:
           0 0.04em 0 #fff5c4,
@@ -92,79 +155,1010 @@
       }
 
       .instant-title [data-loading-status] {
-        display: block;
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-        white-space: nowrap;
+        position: relative;
+        z-index: 1;
+        max-width: min(24rem, 82vw);
+        min-height: 1.35rem;
+        margin: 0.55rem 0 0;
+        color: rgba(47, 70, 39, 0.9);
+        font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.92rem;
+        font-weight: 800;
+        line-height: 1.35;
+        text-shadow: 0 1px 0 rgba(255, 255, 232, 0.82);
       }
 
       .instant-title__mark {
         position: relative;
-        width: 5.2rem;
-        height: 2.35rem;
-        margin: 0 auto 1.15rem;
+        width: 4.8rem;
+        height: 1.9rem;
+        margin: 0.65rem auto 0.45rem;
       }
 
       .instant-title__mark span {
         position: absolute;
         bottom: 0;
-        width: 1.55rem;
-        height: 1.55rem;
-        border: 1px solid rgba(255, 255, 255, 0.85);
-        border-radius: 999px;
+        width: 1.34rem;
+        height: 1.34rem;
+        border: 1px solid rgba(255, 255, 255, 0.86);
+        border-radius: 999px 999px 999px 0;
         background:
-          radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.05) 28%, transparent 42%),
-          linear-gradient(150deg, rgba(180, 240, 220, 0.85), rgba(122, 200, 180, 0.7) 60%, rgba(82, 160, 158, 0.6));
+          radial-gradient(circle at 34% 25%, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.18) 32%, transparent 44%),
+          linear-gradient(150deg, rgba(180, 240, 220, 0.86), rgba(92, 174, 150, 0.72));
         box-shadow:
-          inset 0 -2px 4px rgba(40, 100, 110, 0.28),
-          0 0 12px rgba(180, 240, 220, 0.5),
-          0 4px 10px -2px rgba(40, 100, 110, 0.32);
+          inset 0 -2px 4px rgba(38, 103, 88, 0.22),
+          0 0.32rem 0.64rem rgba(52, 110, 92, 0.24);
+        transform: rotate(-28deg);
       }
 
       .instant-title__mark span:nth-child(1) {
-        left: 0.15rem;
+        left: 0.35rem;
       }
 
       .instant-title__mark span:nth-child(2) {
-        left: 1.85rem;
+        left: 1.7rem;
+        width: 1.72rem;
+        height: 1.72rem;
         background:
-          radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.06) 30%, transparent 44%),
-          linear-gradient(150deg, rgba(195, 240, 200, 0.85), rgba(120, 200, 175, 0.72) 55%, rgba(70, 158, 152, 0.62));
+          radial-gradient(circle at 32% 25%, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.16) 32%, transparent 44%),
+          linear-gradient(150deg, rgba(209, 247, 196, 0.9), rgba(111, 194, 128, 0.74));
       }
 
       .instant-title__mark span:nth-child(3) {
-        left: 3.55rem;
+        left: 3.15rem;
         background:
-          radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.05) 28%, transparent 42%),
-          linear-gradient(150deg, rgba(220, 250, 195, 0.85), rgba(160, 220, 170, 0.7) 60%, rgba(118, 178, 130, 0.6));
+          radial-gradient(circle at 34% 25%, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.18) 32%, transparent 44%),
+          linear-gradient(150deg, rgba(234, 239, 171, 0.88), rgba(150, 190, 88, 0.72));
       }
 
-      .instant-title span {
+      .instant-title__scene {
+        position: relative;
+        box-sizing: border-box;
+        width: min(27rem, 78vw);
+        aspect-ratio: 2.18;
+        overflow: hidden;
+        border: 2px solid rgba(86, 67, 35, 0.34);
+        border-radius: 1rem;
+        background:
+          radial-gradient(circle at 18% 18%, rgba(255, 244, 164, 0.94) 0 8%, transparent 9%),
+          linear-gradient(180deg, #86dfe2 0 38%, #bce9c4 39% 61%, #4fb7ac 62% 74%, #e5c979 75% 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 240, 0.82),
+          inset 0 -0.55rem 1.1rem rgba(43, 93, 74, 0.18);
+      }
+
+      .instant-title__scene span {
+        position: absolute;
         display: block;
-        margin-top: 0.8rem;
-        font-size: clamp(0.78rem, 1.8vw, 1rem);
-        font-weight: 900;
-        letter-spacing: 0.14em;
+      }
+
+      .instant-title__hill {
+        bottom: 21%;
+        width: 58%;
+        height: 40%;
+        border-radius: 62% 62% 8% 8%;
+        background:
+          radial-gradient(ellipse at 50% 0%, rgba(255, 244, 169, 0.38), transparent 46%),
+          linear-gradient(180deg, #b9db72, #4f9f67);
+      }
+
+      .instant-title__hill--left {
+        left: -8%;
+      }
+
+      .instant-title__hill--right {
+        right: -12%;
+        bottom: 24%;
+        background:
+          radial-gradient(ellipse at 48% 0%, rgba(255, 250, 185, 0.34), transparent 44%),
+          linear-gradient(180deg, #9ccf70, #3f8f73);
+      }
+
+      .instant-title__water {
+        left: -4%;
+        right: -4%;
+        bottom: 19%;
+        height: 22%;
+        border-radius: 50% 50% 28% 28%;
+        background:
+          repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.24) 0 2px, transparent 2px 9px),
+          linear-gradient(90deg, #3da9b9, #85e4d7 45%, #2f91ad);
+        animation: instant-title-water 2.8s ease-in-out infinite;
+      }
+
+      .instant-title__path {
+        left: 38%;
+        bottom: -8%;
+        width: 25%;
+        height: 51%;
+        border-radius: 54% 54% 0 0;
+        background: linear-gradient(180deg, rgba(255, 229, 143, 0.95), rgba(181, 132, 62, 0.82));
+        transform: perspective(8rem) rotateX(50deg);
+      }
+
+      .instant-title__grass {
+        bottom: 0;
+        width: 34%;
+        height: 26%;
+        background:
+          repeating-linear-gradient(105deg, transparent 0 0.55rem, rgba(62, 133, 72, 0.78) 0.58rem 0.72rem, transparent 0.76rem 1.08rem),
+          linear-gradient(180deg, #abd765, #6caf58);
+      }
+
+      .instant-title__grass--left {
+        left: 0;
+        border-radius: 0 1.8rem 0 0;
+      }
+
+      .instant-title__grass--right {
+        right: 0;
+        border-radius: 1.8rem 0 0 0;
+      }
+
+      .instant-title__karu {
+        left: 55%;
+        bottom: 30%;
+        width: 1.45rem;
+        height: 1.05rem;
+        border: 1px solid rgba(84, 91, 57, 0.18);
+        border-radius: 54% 46% 48% 52%;
+        background:
+          radial-gradient(circle at 34% 42%, #2c392d 0 0.09rem, transparent 0.1rem),
+          radial-gradient(circle at 66% 42%, #2c392d 0 0.09rem, transparent 0.1rem),
+          linear-gradient(180deg, #fff7ce, #f1d88f);
+        box-shadow: 0 0.22rem 0 rgba(69, 95, 57, 0.18);
+        animation: instant-title-karu 1.8s ease-in-out infinite;
+      }
+
+      .instant-title__spore-bar {
+        position: relative;
+        z-index: 1;
+        box-sizing: border-box;
+        width: min(20rem, 76vw);
+        height: 1.08rem;
+        margin-top: 0.78rem;
+        padding: 0.17rem;
+        overflow: visible;
+        border: 2px solid rgba(69, 95, 43, 0.52);
+        border-radius: 999px;
+        background:
+          radial-gradient(circle at 14% 45%, rgba(255, 255, 226, 0.54) 0 0.18rem, transparent 0.2rem),
+          radial-gradient(circle at 74% 42%, rgba(255, 255, 226, 0.32) 0 0.14rem, transparent 0.16rem),
+          linear-gradient(180deg, rgba(231, 220, 137, 0.86), rgba(117, 136, 73, 0.62));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 238, 0.82),
+          inset 0 -0.22rem 0.38rem rgba(56, 82, 35, 0.22),
+          0 0.24rem 0 rgba(68, 106, 57, 0.22);
+      }
+
+      .instant-title__spore-bar::before,
+      .instant-title__spore-bar::after {
+        content: "";
+        position: absolute;
+        z-index: 2;
+        width: 0.48rem;
+        height: 0.48rem;
+        border-radius: 999px;
+        background:
+          radial-gradient(circle at 34% 28%, rgba(255, 255, 238, 0.96), rgba(255, 255, 238, 0.1) 34%, transparent 48%),
+          linear-gradient(150deg, #a5e173, #3aa06f);
+        box-shadow: 0 0.14rem 0.28rem rgba(43, 92, 62, 0.24);
+        animation: instant-title-spore-drift 1.8s ease-in-out infinite;
+      }
+
+      .instant-title__spore-bar::before {
+        left: 13%;
+        top: -0.42rem;
+      }
+
+      .instant-title__spore-bar::after {
+        right: 18%;
+        bottom: -0.36rem;
+        width: 0.38rem;
+        height: 0.38rem;
+        animation-delay: 0.42s;
+      }
+
+      .instant-title__spore-fill {
+        position: relative;
+        display: block;
+        width: var(--loading-progress);
+        min-width: 1.1rem;
+        height: 100%;
+        overflow: hidden;
+        border-radius: 999px 58% 58% 999px;
+        background:
+          radial-gradient(circle at 92% 48%, rgba(252, 255, 167, 0.96) 0 0.3rem, transparent 0.32rem),
+          repeating-radial-gradient(circle at 24% 45%, rgba(255, 255, 225, 0.42) 0 0.07rem, transparent 0.08rem 0.44rem),
+          linear-gradient(90deg, #269b64, #6fd247 55%, #e2f06a);
+        box-shadow:
+          inset 0 0.08rem 0 rgba(255, 255, 230, 0.82),
+          inset 0 -0.18rem 0.28rem rgba(31, 97, 55, 0.32),
+          0 0 0.72rem rgba(107, 218, 87, 0.58);
+        transition: width 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .instant-title__spore-fill::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        right: -0.06rem;
+        z-index: 2;
+        width: 0.74rem;
+        height: 0.74rem;
+        border-radius: 48% 52% 46% 54%;
+        background:
+          radial-gradient(circle at 34% 28%, rgba(255, 255, 237, 0.98), rgba(255, 255, 237, 0.12) 38%, transparent 52%),
+          linear-gradient(150deg, #dff36f, #43b56c);
+        box-shadow:
+          inset 0 -0.1rem 0.16rem rgba(44, 111, 58, 0.2),
+          0 0 0.45rem rgba(202, 236, 95, 0.58);
+        transform: translateY(-50%);
+      }
+
+      .instant-title__spore-fill::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(90deg, transparent 0 18%, rgba(255, 255, 218, 0.42) 32%, transparent 48%),
+          repeating-linear-gradient(115deg, transparent 0 0.7rem, rgba(67, 135, 72, 0.28) 0.74rem 0.88rem, transparent 0.92rem 1.42rem);
+        animation: instant-title-spore-sheen 1.6s linear infinite;
+      }
+
+      .instant-title__spore-fill span {
+        position: absolute;
+        top: 50%;
+        z-index: 1;
+        width: 0.38rem;
+        height: 0.38rem;
+        border-radius: 50% 46% 54% 50%;
+        background:
+          radial-gradient(circle at 34% 28%, rgba(255, 255, 232, 0.96), rgba(255, 255, 232, 0.2) 42%, transparent 58%),
+          #6fc56c;
+        transform: translateY(-50%);
+        animation: instant-title-spore-pulse 1.34s ease-in-out infinite;
+      }
+
+      .instant-title__spore-fill span:nth-child(1) {
+        left: 18%;
+      }
+
+      .instant-title__spore-fill span:nth-child(2) {
+        left: 48%;
+        width: 0.5rem;
+        height: 0.5rem;
+        animation-delay: 0.18s;
+      }
+
+      .instant-title__spore-fill span:nth-child(3) {
+        left: 76%;
+        animation-delay: 0.36s;
+      }
+
+      @keyframes instant-title-water {
+        0%,
+        100% {
+          transform: translateX(-0.28rem);
+        }
+        50% {
+          transform: translateX(0.28rem);
+        }
+      }
+
+      @keyframes instant-title-karu {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-0.16rem);
+        }
+      }
+
+      @keyframes instant-title-spore-drift {
+        0%,
+        100% {
+          transform: translateY(0) scale(1);
+        }
+        50% {
+          transform: translateY(-0.18rem) scale(1.08);
+        }
+      }
+
+      @keyframes instant-title-spore-sheen {
+        0% {
+          transform: translateX(-42%);
+        }
+        100% {
+          transform: translateX(42%);
+        }
+      }
+
+      @keyframes instant-title-spore-pulse {
+        0%,
+        100% {
+          opacity: 0.62;
+          transform: translateY(-50%) scale(0.86);
+        }
+        50% {
+          opacity: 1;
+          transform: translateY(-50%) scale(1.14);
+        }
+      }
+
+      @media (max-width: 540px) {
+        .instant-title > div {
+          padding: 0.86rem 0.78rem 1rem;
+        }
+
+        .instant-title strong {
+          font-size: 3.35rem;
+        }
+
+        .instant-title [data-loading-status] {
+          font-size: 0.84rem;
+        }
+
+        .instant-title__spore-bar {
+          width: min(17rem, 74vw);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .instant-title__water,
+        .instant-title__karu,
+        .instant-title__spore-bar::before,
+        .instant-title__spore-bar::after,
+        .instant-title__spore-fill::before,
+        .instant-title__spore-fill::after,
+        .instant-title__spore-fill span {
+          animation: none;
+        }
+      }
+
+      /* Aqua-glass first paint: matches the in-app creature-care UI before the bundle loads. */
+      body {
+        background:
+          radial-gradient(circle at 26% 18%, rgba(210, 253, 255, 0.72), transparent 18rem),
+          radial-gradient(circle at 72% 25%, rgba(91, 224, 238, 0.5), transparent 20rem),
+          radial-gradient(circle at 52% 84%, rgba(150, 244, 122, 0.45), transparent 24rem),
+          linear-gradient(180deg, #056eb0 0%, #31c3df 34%, #91eef0 58%, #56ca8b 100%);
+      }
+
+      .instant-title {
+        background:
+          radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.74), transparent 14rem),
+          radial-gradient(circle at 16% 78%, rgba(160, 249, 120, 0.34), transparent 14rem),
+          radial-gradient(circle at 84% 70%, rgba(70, 221, 234, 0.34), transparent 13rem),
+          linear-gradient(180deg, rgba(34, 178, 224, 0.92) 0%, rgba(130, 235, 238, 0.84) 48%, rgba(75, 189, 117, 0.9) 100%);
+      }
+
+      .instant-title > div {
+        border-color: rgba(221, 255, 255, 0.72);
+        border-radius: 2rem;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.14) 42%, rgba(30, 182, 205, 0.38)),
+          linear-gradient(145deg, rgba(89, 223, 237, 0.64), rgba(16, 129, 180, 0.5));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.96),
+          inset 0 -0.45rem 1rem rgba(0, 96, 126, 0.2),
+          0 0 0 1px rgba(255, 255, 255, 0.24),
+          0 0.72rem 0 rgba(8, 112, 156, 0.28),
+          0 2rem 4rem rgba(0, 77, 124, 0.28);
+      }
+
+      .instant-title__scene {
+        border-color: rgba(226, 255, 255, 0.62);
+        background:
+          radial-gradient(circle at 18% 18%, rgba(255, 255, 225, 0.94) 0 8%, transparent 9%),
+          radial-gradient(circle at 50% 72%, rgba(128, 246, 179, 0.48), transparent 34%),
+          linear-gradient(180deg, #6adff1 0 40%, #aef7ef 41% 62%, #40bdd2 63% 76%, #82d982 77% 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.9),
+          inset 0 -0.6rem 1.1rem rgba(0, 113, 143, 0.2),
+          0 0 1.7rem rgba(172, 255, 255, 0.36);
+      }
+
+      .instant-title strong {
+        color: #fff49a;
+        -webkit-text-stroke-color: rgba(9, 88, 135, 0.86);
+        text-shadow:
+          0 0.04em 0 rgba(255, 255, 255, 0.88),
+          0 0.11em 0 rgba(40, 176, 214, 0.78),
+          0 0.19em 0 rgba(32, 116, 170, 0.46),
+          0 0 1.6rem rgba(156, 255, 255, 0.45);
+      }
+
+      .instant-title [data-loading-status] {
+        color: rgba(226, 255, 255, 0.94);
+        text-shadow: 0 0.12rem 0.4rem rgba(0, 82, 128, 0.4);
+      }
+
+      .instant-title__spore-bar {
+        border-color: rgba(226, 255, 255, 0.64);
+        background:
+          radial-gradient(circle at 18% 45%, rgba(255, 255, 255, 0.72) 0 0.18rem, transparent 0.2rem),
+          radial-gradient(circle at 74% 42%, rgba(174, 255, 255, 0.44) 0 0.14rem, transparent 0.16rem),
+          linear-gradient(180deg, rgba(167, 246, 255, 0.68), rgba(2, 103, 162, 0.46));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.88),
+          inset 0 -0.2rem 0.42rem rgba(0, 90, 136, 0.25),
+          0 0 1rem rgba(117, 242, 255, 0.34);
+      }
+
+      .instant-title__spore-bar::before,
+      .instant-title__spore-bar::after,
+      .instant-title__spore-fill span {
+        background:
+          radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.1) 34%, transparent 48%),
+          linear-gradient(150deg, #d9ff75, #35d6d7);
+      }
+
+      .instant-title__spore-fill {
+        background:
+          radial-gradient(circle at 92% 48%, rgba(255, 255, 210, 0.96) 0 0.3rem, transparent 0.32rem),
+          repeating-radial-gradient(circle at 24% 45%, rgba(255, 255, 255, 0.44) 0 0.07rem, transparent 0.08rem 0.44rem),
+          linear-gradient(90deg, #15b8da, #35e0d2 55%, #c8ff59);
+        box-shadow:
+          inset 0 0.08rem 0 rgba(255, 255, 255, 0.82),
+          inset 0 -0.18rem 0.28rem rgba(0, 104, 139, 0.32),
+          0 0 0.88rem rgba(82, 234, 255, 0.62);
+      }
+
+      /* Retro habitat-atlas first paint: adventure-map frame, sim ledger, organic cell progress. */
+      body {
+        background:
+          repeating-linear-gradient(0deg, rgba(22, 43, 36, 0.22) 0 1px, transparent 1px 40px),
+          repeating-linear-gradient(90deg, rgba(22, 43, 36, 0.16) 0 1px, transparent 1px 40px),
+          linear-gradient(180deg, #142e2d 0%, #2f5b50 42%, #8a6c3f 100%);
+        color: #2d2015;
+        font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+      }
+
+      .instant-title {
+        --loading-progress: 16%;
+        padding: 1.5rem;
+        background:
+          linear-gradient(180deg, rgba(255, 235, 177, 0.08), rgba(15, 42, 39, 0.35) 48%, rgba(18, 35, 27, 0.12)),
+          repeating-linear-gradient(135deg, rgba(255, 245, 202, 0.08) 0 1px, transparent 1px 9px),
+          linear-gradient(145deg, #173a35 0%, #416958 42%, #c29a5c 100%);
+      }
+
+      .instant-title::before {
+        inset: auto 0 0;
+        width: auto;
+        height: 33vh;
+        transform: none;
+        border-radius: 0;
+        background:
+          linear-gradient(170deg, transparent 0 14%, rgba(35, 76, 48, 0.78) 15% 40%, transparent 41%),
+          linear-gradient(190deg, transparent 0 20%, rgba(24, 58, 42, 0.9) 21% 48%, transparent 49%),
+          linear-gradient(180deg, transparent 0%, rgba(17, 43, 35, 0.92) 58%, rgba(13, 31, 27, 0.98) 100%);
+        filter: none;
+        opacity: 1;
+      }
+
+      .instant-title::after {
+        background:
+          repeating-linear-gradient(0deg, rgba(255, 244, 194, 0.09) 0 1px, transparent 1px 5px),
+          repeating-linear-gradient(90deg, rgba(39, 27, 14, 0.06) 0 1px, transparent 1px 13px),
+          linear-gradient(180deg, rgba(255, 244, 194, 0.2), rgba(30, 50, 34, 0.18));
+        mix-blend-mode: multiply;
+        opacity: 0.58;
+      }
+
+      .instant-title > div {
+        width: min(47.5rem, calc(100vw - 2rem));
+        padding: 0.8rem;
+        border: 2px solid #28190f;
+        border-radius: 8px;
+        background:
+          linear-gradient(180deg, rgba(255, 239, 186, 0.98), rgba(204, 146, 73, 0.94)),
+          repeating-linear-gradient(90deg, rgba(97, 58, 24, 0.13) 0 1px, transparent 1px 12px);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 248, 209, 0.72),
+          inset 0 -0.34rem 0 rgba(94, 54, 23, 0.2),
+          0 0.34rem 0 #1b2f26,
+          0 1.6rem 3.2rem rgba(5, 22, 20, 0.42);
+      }
+
+      .instant-title > div::after {
+        inset: 0.44rem;
+        border: 1px solid rgba(71, 43, 21, 0.38);
+        border-radius: 6px;
+        background: none;
+        opacity: 1;
+      }
+
+      .instant-title__header,
+      .instant-title__ledger {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 0.5rem;
+        align-items: center;
+        width: 100%;
+        box-sizing: border-box;
+        color: #f7e0a1;
+        font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+        font-size: 0.68rem;
+        font-weight: 800;
+        line-height: 1.1;
         text-transform: uppercase;
+        text-shadow: 0 1px 0 rgba(44, 24, 12, 0.72);
+      }
+
+      .instant-title__header {
+        margin-bottom: 0.5rem;
+        padding: 0.42rem 0.56rem;
+        border-radius: 6px;
+        background:
+          linear-gradient(90deg, rgba(56, 31, 17, 0.92), rgba(87, 51, 24, 0.88) 50%, rgba(56, 31, 17, 0.92));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 225, 151, 0.3),
+          0 1px 0 rgba(255, 241, 188, 0.44);
+      }
+
+      .instant-title__header span:nth-child(2) {
+        display: grid;
+        place-items: center;
+        width: 1.55rem;
+        height: 1.55rem;
+        border-radius: 50%;
+        color: #412915;
+        background:
+          linear-gradient(180deg, #f9df84, #b9832e);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 253, 210, 0.82),
+          0 0 0 1px rgba(50, 27, 13, 0.5);
+      }
+
+      .instant-title__header span:last-child {
+        text-align: right;
+      }
+
+      .instant-title__scene {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        aspect-ratio: 2.18;
+        border: 2px solid #322113;
+        border-radius: 6px;
+        background:
+          linear-gradient(180deg, #5dbfba 0 33%, #a9c86e 34% 53%, #d3b465 54% 68%, #6f8a45 69% 100%);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 250, 205, 0.52),
+          inset 0 -0.7rem 1rem rgba(43, 44, 20, 0.2),
+          0 0.4rem 0 rgba(91, 54, 22, 0.2);
+      }
+
+      .instant-title__scene::before,
+      .instant-title__scene::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .instant-title__scene::before {
+        background:
+          repeating-linear-gradient(0deg, rgba(65, 39, 21, 0.16) 0 1px, transparent 1px 1.3rem),
+          repeating-linear-gradient(90deg, rgba(65, 39, 21, 0.12) 0 1px, transparent 1px 1.3rem);
+        opacity: 0.36;
+      }
+
+      .instant-title__scene::after {
+        background:
+          linear-gradient(180deg, rgba(255, 245, 183, 0.26), transparent 28%),
+          linear-gradient(90deg, rgba(43, 24, 12, 0.22), transparent 15% 85%, rgba(43, 24, 12, 0.22));
+      }
+
+      .instant-title__scene span {
+        position: absolute;
+        display: block;
+      }
+
+      .instant-title__mountain {
+        bottom: 45%;
+        width: 30%;
+        height: 36%;
+        clip-path: polygon(50% 0, 100% 100%, 0 100%);
+        background:
+          linear-gradient(135deg, transparent 0 49%, rgba(255, 237, 180, 0.34) 50% 63%, transparent 64%),
+          linear-gradient(180deg, #e7d798, #7d7752 64%, #4e5e3c);
+      }
+
+      .instant-title__mountain--left {
+        left: 3%;
+      }
+
+      .instant-title__mountain--right {
+        right: 7%;
+        bottom: 43%;
+        width: 36%;
+        height: 41%;
+      }
+
+      .instant-title__plateau {
+        left: 0;
+        right: 0;
+        bottom: 30%;
+        height: 29%;
+        clip-path: polygon(0 36%, 18% 20%, 34% 34%, 52% 18%, 72% 30%, 100% 14%, 100% 100%, 0 100%);
+        background:
+          linear-gradient(180deg, rgba(241, 210, 112, 0.8), rgba(94, 133, 70, 0.96));
+      }
+
+      .instant-title__water {
+        left: -7%;
+        right: -8%;
+        bottom: 19%;
+        height: 24%;
+        border-radius: 46% 54% 44% 40%;
+        background:
+          repeating-linear-gradient(0deg, rgba(255, 247, 190, 0.28) 0 2px, transparent 2px 0.7rem),
+          linear-gradient(90deg, #276c83, #52c6b6 46%, #1f6177);
+        box-shadow:
+          inset 0 0.18rem 0 rgba(255, 249, 202, 0.42),
+          inset 0 -0.34rem 0 rgba(18, 65, 73, 0.22);
+        animation: instant-title-water 2.8s ease-in-out infinite;
+      }
+
+      .instant-title__route {
+        left: 33%;
+        bottom: 2%;
+        width: 34%;
+        height: 61%;
+        border-radius: 48% 52% 6px 6px;
+        background:
+          repeating-linear-gradient(180deg, rgba(92, 53, 22, 0.28) 0 0.2rem, transparent 0.2rem 0.72rem),
+          linear-gradient(180deg, rgba(255, 225, 130, 0.95), rgba(157, 92, 38, 0.8));
+        clip-path: polygon(44% 0, 58% 0, 68% 42%, 56% 100%, 25% 100%, 40% 44%);
+        transform: perspective(9rem) rotateX(48deg);
+      }
+
+      .instant-title__trees {
+        left: 4%;
+        right: 5%;
+        bottom: 29%;
+        height: 18%;
+        background:
+          linear-gradient(135deg, transparent 0 26%, #244c31 27% 42%, transparent 43%),
+          linear-gradient(45deg, transparent 0 58%, #315f37 59% 72%, transparent 73%),
+          linear-gradient(180deg, transparent 0 58%, rgba(31, 72, 42, 0.86) 59% 100%);
+        opacity: 0.94;
+      }
+
+      .instant-title__pin {
+        width: 0.82rem;
+        height: 0.82rem;
+        border: 2px solid #3a2112;
+        border-radius: 50% 50% 50% 0;
+        background: #f6d15a;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 219, 0.8),
+          0 0.18rem 0 rgba(45, 29, 16, 0.28);
+        transform: rotate(-45deg);
+      }
+
+      .instant-title__pin::after {
+        content: "";
+        position: absolute;
+        inset: 0.2rem;
+        border-radius: 50%;
+        background: #7b3427;
+      }
+
+      .instant-title__pin--burrow {
+        left: 31%;
+        bottom: 30%;
+      }
+
+      .instant-title__pin--crown {
+        right: 24%;
+        top: 28%;
+        background: #a7e266;
+      }
+
+      .instant-title__karu {
+        left: 54%;
+        bottom: 28%;
+        width: 1.65rem;
+        height: 1.16rem;
+        border: 1px solid rgba(45, 30, 15, 0.34);
+        border-radius: 55% 45% 48% 52%;
+        background:
+          radial-gradient(circle at 34% 42%, #2a2b1e 0 0.08rem, transparent 0.09rem),
+          radial-gradient(circle at 64% 41%, #2a2b1e 0 0.08rem, transparent 0.09rem),
+          linear-gradient(180deg, #fff3bf, #d69f54);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 252, 216, 0.72),
+          0 0.2rem 0 rgba(47, 55, 31, 0.22);
+        animation: instant-title-karu 1.9s ease-in-out infinite;
+      }
+
+      .instant-title__title-row {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 4rem auto 4rem;
+        align-items: center;
+        gap: 0.55rem;
+        margin-top: 0.66rem;
+      }
+
+      .instant-title strong {
+        margin: 0;
+        color: #f7c653;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 4.8rem;
+        font-weight: 900;
+        letter-spacing: 0;
+        line-height: 0.82;
+        -webkit-text-stroke: 0.11rem rgba(49, 27, 13, 0.96);
+        text-shadow:
+          0 0.04em 0 #fff0a3,
+          0 0.11em 0 #7c3f1f,
+          0 0.18em 0 rgba(18, 52, 38, 0.52);
+      }
+
+      .instant-title__mark {
+        display: flex;
+        width: auto;
+        height: auto;
+        margin: 0;
+        gap: 0.22rem;
+        justify-content: flex-end;
+      }
+
+      .instant-title__mark--right {
+        justify-content: flex-start;
+      }
+
+      .instant-title__mark span {
+        position: static;
+        width: 0.76rem;
+        height: 0.76rem;
+        border: 1px solid rgba(47, 27, 13, 0.46);
+        border-radius: 50% 50% 50% 12%;
+        background:
+          radial-gradient(circle at 33% 26%, rgba(255, 255, 222, 0.9), transparent 38%),
+          linear-gradient(150deg, #c7ef75, #32a86d);
+        box-shadow:
+          inset 0 -1px 0 rgba(38, 78, 38, 0.2),
+          0 0.12rem 0 rgba(57, 33, 15, 0.2);
+        transform: rotate(-24deg);
+      }
+
+      .instant-title__mark span:nth-child(2) {
+        width: 1rem;
+        height: 1rem;
+        background:
+          radial-gradient(circle at 33% 26%, rgba(255, 255, 222, 0.9), transparent 38%),
+          linear-gradient(150deg, #fde37a, #55b35b);
+      }
+
+      .instant-title [data-loading-status] {
+        position: relative;
+        z-index: 1;
+        min-height: 1.35rem;
+        margin: 0.42rem 0 0;
+        color: #412915;
+        font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+        font-size: 0.8rem;
+        font-weight: 900;
+        letter-spacing: 0;
+        line-height: 1.35;
+        text-transform: uppercase;
+        text-shadow: 0 1px 0 rgba(255, 240, 188, 0.8);
+      }
+
+      .instant-title__spore-bar {
+        width: min(24rem, 78vw);
+        height: 1.04rem;
+        margin-top: 0.58rem;
+        padding: 0.16rem;
+        border: 2px solid #342113;
+        border-radius: 6px;
+        background:
+          linear-gradient(180deg, #2d2115, #62401f);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 225, 156, 0.28),
+          0 1px 0 rgba(255, 244, 198, 0.5),
+          0 0.26rem 0 rgba(44, 30, 17, 0.18);
+      }
+
+      .instant-title__spore-bar::before,
+      .instant-title__spore-bar::after {
+        width: 0.34rem;
+        height: 0.34rem;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 34% 28%, rgba(255, 248, 198, 0.95), transparent 44%),
+          linear-gradient(150deg, #d6f35c, #34a66d);
+        animation: instant-title-spore-drift 2.1s ease-in-out infinite;
+      }
+
+      .instant-title__spore-bar::before {
+        left: 0.74rem;
+        top: -0.42rem;
+      }
+
+      .instant-title__spore-bar::after {
+        right: 0.82rem;
+        bottom: -0.4rem;
+      }
+
+      .instant-title__spore-fill {
+        min-width: 1rem;
+        border-radius: 4px;
+        background:
+          radial-gradient(circle at 92% 50%, rgba(255, 252, 164, 0.96) 0 0.28rem, transparent 0.3rem),
+          repeating-radial-gradient(circle at 24% 48%, rgba(255, 245, 190, 0.45) 0 0.06rem, transparent 0.07rem 0.42rem),
+          linear-gradient(90deg, #238763, #67bd43 58%, #e7d95a);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 218, 0.72),
+          inset 0 -0.16rem 0.18rem rgba(39, 88, 42, 0.34),
+          0 0 0.7rem rgba(173, 209, 71, 0.48);
+      }
+
+      .instant-title__spore-fill::before {
+        background:
+          radial-gradient(circle at 34% 28%, rgba(255, 255, 217, 0.98), rgba(255, 255, 217, 0.16) 38%, transparent 52%),
+          linear-gradient(150deg, #f6e96b, #52b34e);
+      }
+
+      .instant-title__spore-fill::after {
+        background:
+          linear-gradient(90deg, transparent 0 20%, rgba(255, 244, 177, 0.45) 36%, transparent 52%),
+          repeating-linear-gradient(115deg, transparent 0 0.56rem, rgba(36, 91, 51, 0.3) 0.58rem 0.68rem, transparent 0.72rem 1.18rem);
+      }
+
+      .instant-title__spore-fill span {
+        background:
+          radial-gradient(circle at 34% 28%, rgba(255, 255, 232, 0.96), rgba(255, 255, 232, 0.2) 42%, transparent 58%),
+          #82cb5a;
+      }
+
+      .instant-title__ledger {
+        grid-template-columns: repeat(3, 1fr);
+        margin-top: 0.72rem;
+        color: #3d2715;
+        text-shadow: 0 1px 0 rgba(255, 236, 176, 0.82);
+      }
+
+      .instant-title__ledger span {
+        display: block;
+        min-width: 0;
+        padding: 0.42rem 0.46rem;
+        overflow: hidden;
+        border: 1px solid rgba(92, 54, 23, 0.35);
+        border-radius: 6px;
+        background:
+          linear-gradient(180deg, rgba(255, 239, 177, 0.72), rgba(184, 129, 61, 0.24));
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      @media (max-width: 640px) {
+        .instant-title {
+          padding: 0.8rem;
+        }
+
+        .instant-title > div {
+          padding: 0.58rem;
+        }
+
+        .instant-title__header {
+          grid-template-columns: 1fr auto;
+        }
+
+        .instant-title__header span:last-child {
+          display: none;
+        }
+
+        .instant-title__scene {
+          aspect-ratio: 1.48;
+        }
+
+        .instant-title__title-row {
+          grid-template-columns: 2.2rem auto 2.2rem;
+          gap: 0.28rem;
+        }
+
+        .instant-title strong {
+          font-size: 3.05rem;
+          -webkit-text-stroke-width: 0.07rem;
+        }
+
+        .instant-title__mark span {
+          width: 0.56rem;
+          height: 0.56rem;
+        }
+
+        .instant-title__mark span:nth-child(2) {
+          width: 0.74rem;
+          height: 0.74rem;
+        }
+
+        .instant-title [data-loading-status] {
+          font-size: 0.68rem;
+        }
+
+        .instant-title__ledger {
+          grid-template-columns: 1fr;
+          gap: 0.32rem;
+          margin-top: 0.54rem;
+        }
+
+        .instant-title__ledger span:nth-child(2),
+        .instant-title__ledger span:nth-child(3) {
+          display: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .instant-title__water,
+        .instant-title__karu,
+        .instant-title__spore-bar::before,
+        .instant-title__spore-bar::after,
+        .instant-title__spore-fill::before,
+        .instant-title__spore-fill::after,
+        .instant-title__spore-fill span {
+          animation: none;
+        }
       }
 
     </style>
   </head>
   <body>
     <div id="app">
-      <div class="instant-title" aria-label="Mossu">
+      <div class="instant-title" aria-label="Mossu loading screen">
         <div>
-          <div class="instant-title__mark" aria-hidden="true">
-            <span></span>
-            <span></span>
-            <span></span>
+          <div class="instant-title__header" aria-hidden="true">
+            <span>Habitat atlas</span>
+            <span>III</span>
+            <span>Creature route</span>
           </div>
-          <strong>Mossu</strong>
-          <p data-loading-status="" aria-live="polite"></p>
+          <div class="instant-title__scene" aria-hidden="true">
+            <span class="instant-title__mountain instant-title__mountain--left"></span>
+            <span class="instant-title__mountain instant-title__mountain--right"></span>
+            <span class="instant-title__plateau"></span>
+            <span class="instant-title__water"></span>
+            <span class="instant-title__route"></span>
+            <span class="instant-title__trees"></span>
+            <span class="instant-title__pin instant-title__pin--burrow"></span>
+            <span class="instant-title__pin instant-title__pin--crown"></span>
+            <span class="instant-title__karu"></span>
+          </div>
+          <div class="instant-title__title-row">
+            <div class="instant-title__mark" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <strong>Mossu</strong>
+            <div class="instant-title__mark instant-title__mark--right" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+          <p data-loading-status="" aria-live="polite">Charting the habitat route</p>
+          <div class="instant-title__spore-bar" aria-hidden="true">
+            <span class="instant-title__spore-fill">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </div>
+          <div class="instant-title__ledger" aria-hidden="true">
+            <span>Burrow Hollow ready</span>
+            <span>Moss Crown plotted</span>
+            <span>Karu signal warm</span>
+          </div>
         </div>
       </div>
     </div>

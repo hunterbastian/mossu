@@ -5,17 +5,23 @@
   "type": "module",
   "scripts": {
     "dev": "BROWSER=\"Google Chrome\" vite --open",
+    "lint": "eslint .",
+    "format": "prettier . --write --ignore-unknown",
+    "format:check": "prettier --check --ignore-unknown package.json eslint.config.js .prettierrc.json tests/e2e/visualPerf.spec.ts scripts/perf/mossu-route-save.json",
+    "format:check:all": "prettier . --check --ignore-unknown",
     "test:contracts": "tsc -p tsconfig.contracts.json && esbuild tests/contracts/runContracts.ts --bundle --platform=node --format=esm --outfile=.contract-test-build/runContracts.mjs && node .contract-test-build/runContracts.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.ts",
-    "perf:guard": "npm run build && node scripts/perfGuard.mjs --headed",
-    "perf:guard:baseline": "npm run build && node scripts/perfGuard.mjs --headed --output=output/perf-guard/baseline.json --screenshot-dir=output/perf-guard/baseline",
-    "perf:guard:candidate": "npm run build && node scripts/perfGuard.mjs --headed --baseline=output/perf-guard/baseline.json --output=output/perf-guard/candidate.json --screenshot-dir=output/perf-guard/candidate",
+    "test:e2e:visual": "playwright test tests/e2e/visualPerf.spec.ts",
+    "perf:guard": "npm run build && node scripts/perfGuard.mjs --headed --browser=chrome",
+    "perf:guard:baseline": "npm run build && node scripts/perfGuard.mjs --headed --browser=chrome --output=output/perf-guard/baseline.json --screenshot-dir=output/perf-guard/baseline",
+    "perf:guard:candidate": "npm run build && node scripts/perfGuard.mjs --headed --browser=chrome --baseline=output/perf-guard/baseline.json --output=output/perf-guard/candidate.json --screenshot-dir=output/perf-guard/candidate",
+    "perf:guard:coop": "npm run build && node scripts/perfGuard.mjs --headed --browser=chrome --url-param=coopStress=1 --output=output/perf-guard/coop-stress.json --screenshot-dir=output/perf-guard/coop-stress",
     "perf:guard:route": "npm run perf:guard:candidate",
     "perf:guard:headless": "npm run build && node scripts/perfGuard.mjs",
-    "perf:guard:headed": "npm run build && node scripts/perfGuard.mjs --headed",
+    "perf:guard:headed": "npm run build && node scripts/perfGuard.mjs --headed --browser=chrome",
     "qa": "npm run test:contracts && npm run build"
   },
   "dependencies": {
@@ -24,10 +30,14 @@
     "three-mesh-bvh": "^0.9.9"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.59.1",
     "@types/three": "^0.184.0",
+    "eslint": "^10.2.1",
     "playwright": "^1.59.1",
+    "prettier": "^3.8.3",
     "typescript": "^5.9.3",
-    "vite": "^7.1.9"
+    "typescript-eslint": "^8.59.1",
+    "vite": "^7.3.2"
   }
 }

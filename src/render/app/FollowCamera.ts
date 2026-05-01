@@ -13,6 +13,9 @@ import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-
 import { PlayerState } from "../../simulation/gameState";
 import {
   sampleIslandBoundaryPoint,
+  sampleBiomeZone,
+  sampleHabitatLayer,
+  sampleTerrainHeight,
   startingLookTarget,
   startingPosition,
   worldLandmarks,
@@ -33,16 +36,16 @@ CameraControls.install({ THREE });
 (Mesh.prototype as Mesh).raycast = acceleratedRaycast;
 (Raycaster.prototype as Raycaster & { firstHitOnly?: boolean }).firstHitOnly = true;
 
-const GAMEPLAY_FOV = 49;
-const MAP_FOV = 24;
+const GAMEPLAY_FOV = 50;
+const MAP_FOV = 32;
 const MIN_DISTANCE = 24;
-const MAX_DISTANCE = 66;
-const DEFAULT_DISTANCE = 42;
+const MAX_DISTANCE = 92;
+const DEFAULT_DISTANCE = 50;
 const MAP_MARGIN = 84;
 const DEFAULT_FOCUS_HEIGHT = 5.8;
-const START_DISTANCE = 49;
+const START_DISTANCE = 56;
 const START_FOCUS_HEIGHT = 5.1;
-const START_CAMERA_LIFT = 10.8;
+const START_CAMERA_LIFT = 13.6;
 const START_SHOULDER = -2.8;
 const OPENING_HANDOFF_START = 0.72;
 const MIN_POLAR_ANGLE = 0.58;
@@ -59,6 +62,10 @@ const MAP_ZOOM_MAX = 1.2;
 const MAP_ZOOM_WHEEL_SENSITIVITY = 0.00085;
 const MAP_KEYBOARD_PAN_SPEED = 118;
 const CINEMATIC_SHOULDER_DRIFT = 0.24;
+const OPEN_FIELD_DISTANCE_BOOST = 9.5;
+const OPEN_FIELD_FOV_BOOST = 3.4;
+const OPEN_FIELD_FOCUS_LIFT = 1.1;
+const OPEN_FIELD_LOOK_AHEAD_BOOST = 0.035;
 
 type CameraProfileName = "walk" | "roll" | "air" | "swim" | "ridge" | "summit" | "void";
 
@@ -93,17 +100,17 @@ interface CameraProfile {
 const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
   walk: {
     name: "walk",
-    distance: 44,
+    distance: 48,
     speedDistanceBoost: 1.15,
-    terrainDistanceBoost: 3.1,
-    focusHeight: 5.35,
-    terrainFocusLift: 0.95,
+    terrainDistanceBoost: 4.8,
+    focusHeight: 5.65,
+    terrainFocusLift: 1.18,
     lookAheadBase: 0.11,
     lookAheadSpeed: 0.15,
-    polar: 1.47,
-    terrainPolarLift: 0.05,
+    polar: 1.43,
+    terrainPolarLift: 0.035,
     speedPolarLift: 0.008,
-    fov: 48,
+    fov: 50,
     shoulder: 0.14,
     yawResponsiveness: 0.42,
     focusDamping: 3.8,
@@ -177,17 +184,17 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
   },
   ridge: {
     name: "ridge",
-    distance: 48,
+    distance: 56,
     speedDistanceBoost: 0.9,
-    terrainDistanceBoost: 3,
-    focusHeight: 7.7,
-    terrainFocusLift: 1.35,
+    terrainDistanceBoost: 4.8,
+    focusHeight: 8.5,
+    terrainFocusLift: 1.65,
     lookAheadBase: 0.095,
     lookAheadSpeed: 0.11,
-    polar: 1.5,
-    terrainPolarLift: 0.09,
+    polar: 1.46,
+    terrainPolarLift: 0.06,
     speedPolarLift: 0.01,
-    fov: 49,
+    fov: 51,
     shoulder: 0.35,
     yawResponsiveness: 0.36,
     focusDamping: 3.25,
@@ -198,17 +205,17 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
   },
   summit: {
     name: "summit",
-    distance: 51,
+    distance: 60,
     speedDistanceBoost: 0.65,
-    terrainDistanceBoost: 2.1,
-    focusHeight: 8.9,
-    terrainFocusLift: 1.05,
+    terrainDistanceBoost: 4.2,
+    focusHeight: 9.8,
+    terrainFocusLift: 1.4,
     lookAheadBase: 0.085,
     lookAheadSpeed: 0.1,
-    polar: 1.54,
-    terrainPolarLift: 0.08,
+    polar: 1.48,
+    terrainPolarLift: 0.06,
     speedPolarLift: 0,
-    fov: 49,
+    fov: 51,
     shoulder: 0.28,
     yawResponsiveness: 0.3,
     focusDamping: 2.9,
@@ -272,6 +279,11 @@ const MAP_BOUNDS = (() => {
   };
 })();
 
+const MAP_CENTER_X = (MAP_BOUNDS.minX + MAP_BOUNDS.maxX) * 0.5;
+const MAP_CENTER_Z = (MAP_BOUNDS.minZ + MAP_BOUNDS.maxZ) * 0.5;
+const MAP_SPAN_X = Math.max(MAP_BOUNDS.maxX - MAP_BOUNDS.minX, 420);
+const MAP_SPAN_Z = Math.max(MAP_BOUNDS.maxZ - MAP_BOUNDS.minZ, 420);
+
 type GeometryWithBvh = BufferGeometry & {
   boundsTree?: unknown;
   computeBoundsTree?: typeof computeBoundsTree;
@@ -318,7 +330,9 @@ export class FollowCamera {
   private currentLookAhead = 0.08;
   private currentPolar = CAMERA_PROFILES.walk.polar;
   private currentFov = GAMEPLAY_FOV;
+  private appliedFov = GAMEPLAY_FOV;
   private currentShoulder = 0;
+  private openFieldBlend = 0;
 
   private readonly focus = new Vector3();
   private readonly desiredFocus = new Vector3();
@@ -366,7 +380,7 @@ export class FollowCamera {
   };
 
   constructor(private readonly domElement: HTMLElement) {
-    this.camera = new PerspectiveCamera(GAMEPLAY_FOV, 1, 0.1, 2200);
+    this.camera = new PerspectiveCamera(GAMEPLAY_FOV, 1, 0.1, 3800);
     this.controls = new CameraControls(this.camera, this.domElement);
     this.configureControls();
     this.resetGameplayRig(this.startFocus, this.startCameraPosition);
@@ -396,6 +410,28 @@ export class FollowCamera {
     const speed = Math.hypot(player.velocity.x, player.velocity.z);
     const speedBoost = MathUtils.clamp(speed / 24, 0, 1);
     const profile = this.selectCameraProfile(player, terrainLift);
+    const playerGround = sampleTerrainHeight(player.position.x, player.position.z);
+    const habitat = sampleHabitatLayer(player.position.x, player.position.z, playerGround);
+    const biome = sampleBiomeZone(player.position.x, player.position.z, playerGround);
+    const meadowBiomeBoost =
+      biome === "plains" ? 0.28 :
+      biome === "hills" ? 0.24 :
+      biome === "foothills" ? 0.18 :
+      biome === "alpine" ? 0.1 :
+      0;
+    const openFieldTarget =
+      player.swimming || player.fallingToVoid
+        ? 0
+        : MathUtils.clamp(
+            habitat.meadow * 0.54 +
+            habitat.clearing * 0.5 +
+            meadowBiomeBoost -
+            habitat.forest * 0.48 -
+            habitat.shore * 0.24,
+            0,
+            1,
+          );
+    this.openFieldBlend = MathUtils.damp(this.openFieldBlend, openFieldTarget, 1.85, dt);
     this.activeProfileName = profile.name;
     if (profile.name !== this.lastProfileName) {
       this.distanceBias = 0;
@@ -431,8 +467,21 @@ export class FollowCamera {
       this.rollSettle = Math.max(this.rollSettle, 0.34);
     }
 
-    const focusHeightTarget = profile.focusHeight + terrainLift * profile.terrainFocusLift;
-    const lookAheadTarget = profile.lookAheadBase + speedBoost * profile.lookAheadSpeed;
+    const openFieldProfileScale =
+      profile.name === "walk" ? 1 :
+      profile.name === "roll" ? 0.82 :
+      profile.name === "ridge" || profile.name === "summit" ? 0.58 :
+      profile.name === "air" ? 0.36 :
+      0;
+    const openFieldDistanceBoost = this.openFieldBlend * OPEN_FIELD_DISTANCE_BOOST * openFieldProfileScale;
+    const focusHeightTarget =
+      profile.focusHeight +
+      terrainLift * profile.terrainFocusLift +
+      this.openFieldBlend * OPEN_FIELD_FOCUS_LIFT * openFieldProfileScale;
+    const lookAheadTarget =
+      profile.lookAheadBase +
+      speedBoost * profile.lookAheadSpeed +
+      this.openFieldBlend * OPEN_FIELD_LOOK_AHEAD_BOOST * openFieldProfileScale;
     const shoulderDrift =
       Math.sin(this.cinematicTime * 0.34 + terrainLift * 0.8) *
       CINEMATIC_SHOULDER_DRIFT *
@@ -446,7 +495,12 @@ export class FollowCamera {
     this.currentFocusHeight = MathUtils.damp(this.currentFocusHeight, focusHeightTarget, profile.profileDamping, dt);
     this.currentLookAhead = MathUtils.damp(this.currentLookAhead, lookAheadTarget, profile.profileDamping, dt);
     this.currentShoulder = MathUtils.damp(this.currentShoulder, shoulderTarget, profile.profileDamping, dt);
-    this.currentFov = MathUtils.damp(this.currentFov, profile.fov, profile.profileDamping, dt);
+    this.currentFov = MathUtils.damp(
+      this.currentFov,
+      profile.fov + this.openFieldBlend * OPEN_FIELD_FOV_BOOST * openFieldProfileScale,
+      profile.profileDamping,
+      dt,
+    );
 
     this.playerVelocity.set(player.velocity.x, 0, player.velocity.z);
     const cameraLookYaw = cameraPositionYawToLookYaw(this.controls.azimuthAngle);
@@ -478,6 +532,7 @@ export class FollowCamera {
       const targetDistance =
         profile.distance
         + terrainLift * profile.terrainDistanceBoost
+        + openFieldDistanceBoost
         + speedBoost * profile.speedDistanceBoost
         + this.distanceBias
         + this.distanceFeedbackKick
@@ -568,34 +623,35 @@ export class FollowCamera {
       this.gameplayTarget.lerpVectors(this.openingSequenceTarget, this.gameplayTarget, handoffT);
     }
 
-    const baseMapCenterX = (MAP_BOUNDS.minX + MAP_BOUNDS.maxX) * 0.5;
-    const baseMapCenterZ = (MAP_BOUNDS.minZ + MAP_BOUNDS.maxZ) * 0.5;
-    const mapSpanX = Math.max(MAP_BOUNDS.maxX - MAP_BOUNDS.minX, 420);
-    const mapSpanZ = Math.max(MAP_BOUNDS.maxZ - MAP_BOUNDS.minZ, 420);
-    const halfVerticalFov = MathUtils.degToRad(MAP_FOV * 0.5);
-    const halfHorizontalFov = Math.atan(Math.tan(halfVerticalFov) * this.camera.aspect);
-    const baseMapHeight =
-      Math.max(
-        (mapSpanZ * 0.5) / Math.tan(halfVerticalFov),
-        (mapSpanX * 0.5) / Math.tan(halfHorizontalFov),
-      ) *
-        0.88 +
-      56;
-    const mapHeight = baseMapHeight * this.mapZoomFactor;
-    this.mapUnitsPerPixel = (Math.tan(halfVerticalFov) * mapHeight * 2) / this.viewportHeight;
-    this.clampMapPanOffset();
-
-    const mapCenterX = baseMapCenterX + this.mapPanOffset.x;
-    const mapCenterZ = baseMapCenterZ + this.mapPanOffset.z;
-    this.mapTarget.set(mapCenterX, 10, mapCenterZ);
-    this.mapPosition.set(mapCenterX, mapHeight, mapCenterZ);
-
     const targetBlend = this.viewMode === "map_lookdown" ? 1 : 0;
     this.mapBlend = MathUtils.damp(this.mapBlend, targetBlend, 10, dt);
     const easedBlend = easeInOutSine(this.mapBlend);
 
-    this.finalPosition.lerpVectors(this.gameplayPosition, this.mapPosition, easedBlend);
-    this.finalTarget.lerpVectors(this.gameplayTarget, this.mapTarget, easedBlend);
+    if (targetBlend > 0 || easedBlend > 0.001) {
+      const halfVerticalFov = MathUtils.degToRad(MAP_FOV * 0.5);
+      const verticalTan = Math.tan(halfVerticalFov);
+      const halfHorizontalFov = Math.atan(verticalTan * this.camera.aspect);
+      const baseMapHeight =
+        Math.max(
+          (MAP_SPAN_Z * 0.5) / verticalTan,
+          (MAP_SPAN_X * 0.5) / Math.tan(halfHorizontalFov),
+        ) *
+          0.76 +
+        56;
+      const mapHeight = baseMapHeight * this.mapZoomFactor;
+      this.mapUnitsPerPixel = (verticalTan * mapHeight * 2) / this.viewportHeight;
+      this.clampMapPanOffset();
+
+      const mapCenterX = MAP_CENTER_X + this.mapPanOffset.x;
+      const mapCenterZ = MAP_CENTER_Z + this.mapPanOffset.z;
+      this.mapTarget.set(mapCenterX, 10, mapCenterZ);
+      this.mapPosition.set(mapCenterX, mapHeight, mapCenterZ);
+      this.finalPosition.lerpVectors(this.gameplayPosition, this.mapPosition, easedBlend);
+      this.finalTarget.lerpVectors(this.gameplayTarget, this.mapTarget, easedBlend);
+    } else {
+      this.finalPosition.copy(this.gameplayPosition);
+      this.finalTarget.copy(this.gameplayTarget);
+    }
 
     if (!this.initialized || player.justRespawned) {
       this.currentPosition.copy(this.finalPosition);
@@ -607,8 +663,12 @@ export class FollowCamera {
     }
 
     this.target.copy(this.currentTarget);
-    this.camera.fov = MathUtils.lerp(this.currentFov, MAP_FOV, easedBlend);
-    this.camera.updateProjectionMatrix();
+    const nextFov = MathUtils.lerp(this.currentFov, MAP_FOV, easedBlend);
+    if (Math.abs(nextFov - this.appliedFov) > 0.01) {
+      this.camera.fov = nextFov;
+      this.camera.updateProjectionMatrix();
+      this.appliedFov = nextFov;
+    }
     this.camera.position.copy(this.currentPosition);
     this.currentUp.lerpVectors(this.gameplayUp, this.mapUp, easedBlend).normalize();
     this.camera.up.copy(this.currentUp);
@@ -674,6 +734,7 @@ export class FollowCamera {
       focusHeight: Number(this.currentFocusHeight.toFixed(2)),
       lookAhead: Number(this.currentLookAhead.toFixed(3)),
       shoulder: Number(this.currentShoulder.toFixed(2)),
+      openFieldBlend: Number(this.openFieldBlend.toFixed(3)),
       manualLookCooldown: Number(this.manualLookCooldown.toFixed(2)),
       recenterCooldown: Number(this.manualLookCooldown.toFixed(2)),
       autoRecenterEligible: this.autoRecenterEligible,

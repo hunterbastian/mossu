@@ -17,7 +17,7 @@ import type { FrameState } from "../../simulation/gameState";
 import { PLAYER_RADIUS } from "../../simulation/playerSimulationConstants";
 import { sampleTerrainHeight, sampleWaterState, scenicPockets, startingLookTarget, startingPosition } from "../../simulation/world";
 import { easeOutBack } from "../motionCurves";
-import { createKaruModelRig, type AmbientBlobRig } from "../objects/KaruAvatar";
+import { createKaruModelRig } from "../objects/KaruAvatar";
 import { scatterAroundPocket } from "./sceneHelpers";
 
 export type KaruMood = "curious" | "shy" | "brave" | "sleepy";
@@ -114,6 +114,9 @@ const FAUNA_RECRUITED_IDLE_SLOT_DISTANCE = 7.5;
 const FAUNA_NEST_WANDER_RADIUS = 2.8;
 const FAUNA_NEST_RETURN_RADIUS = 7.2;
 const FAUNA_NEST_SHY_LIMIT_RADIUS = 11.5;
+const FAUNA_VISIBLE_DISTANCE = 220;
+const FAUNA_FULL_DETAIL_DISTANCE = 86;
+const FAUNA_MID_DETAIL_DISTANCE = 148;
 
 const ambientPlayerMotion = new Vector3();
 const ambientToPlayer = new Vector3();
@@ -196,6 +199,20 @@ function dominantMood(blobs: AmbientBlob[]): KaruMood {
     counts.set(blob.mood, (counts.get(blob.mood) ?? 0) + 1);
   });
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "curious";
+}
+
+function setAmbientBlobVisualLod(blob: AmbientBlob, distanceToPlayer: number) {
+  const fullDetail = blob.recruited || distanceToPlayer < FAUNA_FULL_DETAIL_DISTANCE;
+  const midDetail = blob.recruited || distanceToPlayer < FAUNA_MID_DETAIL_DISTANCE;
+  blob.group.userData.fullDetail = fullDetail;
+  blob.group.userData.midDetail = midDetail;
+  blob.tail.visible = midDetail;
+  blob.feet.forEach((foot) => {
+    foot.visible = fullDetail;
+  });
+  blob.fluffPuffs.forEach((puff, index) => {
+    puff.visible = fullDetail || (midDetail && index % 2 === 0);
+  });
 }
 
 function planarDistance(a: Vector3, b: Vector3) {
@@ -680,6 +697,14 @@ export function updateAmbientBlobs(
     const groundY = sampleTerrainHeight(blob.group.position.x, blob.group.position.z);
     const toPlayer = ambientToPlayer.subVectors(playerPosition, blob.group.position);
     const planarToPlayer = Math.hypot(toPlayer.x, toPlayer.z);
+    const farUnrecruited = !blob.recruited && planarToPlayer > FAUNA_VISIBLE_DISTANCE;
+    blob.group.visible = !farUnrecruited;
+    if (farUnrecruited) {
+      blob.velocity.multiplyScalar(0.88);
+      blob.group.position.y = groundY + 0.08;
+      return;
+    }
+    setAmbientBlobVisualLod(blob, planarToPlayer);
     const playerTooClose = planarToPlayer < 8.5;
     const playerApproachAlignment =
       playerPlanarSpeed > 0.001 && planarToPlayer > 0.001
@@ -767,7 +792,6 @@ export function updateAmbientBlobs(
     }
 
     let recruitedMoveStrength = 0;
-    let recruitedIdleWanderActive = false;
     if (blob.recruited) {
       const tuning = moodFollowTuning(blob.mood);
       const regroupActive = elapsed < blob.regroupUntil;
@@ -810,7 +834,7 @@ export function updateAmbientBlobs(
         .addScaledVector(ambientRightDirection, followSideDistance);
       ambientLeaderSlot.y = sampleTerrainHeight(ambientLeaderSlot.x, ambientLeaderSlot.z);
       const formationDistance = planarDistance(blob.group.position, ambientLeaderSlot);
-      recruitedIdleWanderActive =
+      const recruitedIdleWanderActive =
         playerPlanarSpeed < FAUNA_RECRUITED_IDLE_PLAYER_SPEED &&
         !frame.player.swimming &&
         frame.player.grounded &&
@@ -1372,7 +1396,7 @@ export function updateAmbientBlobs(
       blob.mode === "shy" ? Math.max(0, Math.sin(elapsed * 9.6 + blob.poseSeed + gaitPhase + (isFrontFoot ? 0.2 : 0.7))) * 0.036 * scale :
       idleHop * (isFrontFoot ? 0.022 : 0.014) * scale;
     const footTuck = Math.max(rollMimicT, breezeMimicT * 0.62);
-    foot.visible = footTuck < 0.86;
+    foot.visible = ((blob.group.userData.fullDetail as boolean | undefined) ?? true) && footTuck < 0.86;
     const footSide = MathUtils.lerp(homeX * scale, homeX * 0.28 * scale, footTuck);
     const footHeight = MathUtils.lerp(0.09 * scale + footHop - idleSettle * 0.015 * scale, 0.16 * scale, footTuck);
     const sniffOffset = idleSniff * (isFrontFoot ? 0.028 : -0.01) * scale;
