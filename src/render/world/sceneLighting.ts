@@ -1,12 +1,4 @@
-import {
-  AmbientLight,
-  Color,
-  DirectionalLight,
-  HemisphereLight,
-  MathUtils,
-  PointLight,
-  Vector3,
-} from "three";
+import { AmbientLight, Color, DirectionalLight, HemisphereLight, MathUtils, PointLight, Vector3 } from "three";
 import type { GrassShader } from "./grassSystem";
 
 const SUN_ORBIT_TARGET = new Vector3(54, 12, 102);
@@ -17,6 +9,16 @@ const SUN_ORBIT_ARC_LIFT = 70;
 const SUN_ORBIT_SECONDS = 540;
 const SUN_ORBIT_INITIAL_PHASE = 0.846;
 const LOW_SUN_WARM = new Color("#ffc76a");
+const LOW_SUN_FOG = new Color("#fff0c6");
+const LOW_SUN_BACKGROUND = new Color("#ffe8b0");
+const HORIZON_TINT_LOW = new Color("#fff2ce");
+const HORIZON_TINT_HIGH = new Color("#def3ff");
+const HORIZON_HAZE_LOW = new Color("#fff8df");
+const HORIZON_HAZE_HIGH = new Color("#e1f3ff");
+const CLOUD_BRIGHT_LOW = new Color("#fffdf2");
+const CLOUD_BRIGHT_HIGH = new Color("#f2fbff");
+const CLOUD_SHADOW_LOW = new Color("#d9eadf");
+const CLOUD_SHADOW_HIGH = new Color("#c9dfef");
 
 /**
  * Single source of truth for sun orbit and target. The visible sky sun,
@@ -59,38 +61,30 @@ export function updateSunOrbitRig(sun: DirectionalLight, timeSeconds: number, el
 export interface SceneLightSet {
   sun: DirectionalLight;
   ambient: AmbientLight;
-  hemi: HemisphereLight;       // skyFill
-  bounce: DirectionalLight;     // skyBounce
+  hemi: HemisphereLight; // skyFill
+  bounce: DirectionalLight; // skyBounce
   meadowGlow: PointLight;
   alpineGlow: PointLight;
   fog: { density: number };
 }
 
-export function applySceneLightingMood(
-  lights: SceneLightSet,
-  mood: number,
-  cinematicLift: number,
-  breath: number,
-) {
+export function applySceneLightingMood(lights: SceneLightSet, mood: number, cinematicLift: number, breath: number) {
   const m = MathUtils.clamp(mood, 0, 1);
-  const orbitHeight = typeof lights.sun.userData.orbitHeight === "number"
-    ? MathUtils.clamp(lights.sun.userData.orbitHeight, 0, 1)
-    : 0.8;
-  const orbitKeyStrength = MathUtils.lerp(0.9, 1.07, orbitHeight);
-  lights.sun.intensity =
-    (MathUtils.lerp(3.46, 3.18, m) + cinematicLift * 0.2 + breath * 0.024) * orbitKeyStrength;
+  const orbitHeight =
+    typeof lights.sun.userData.orbitHeight === "number" ? MathUtils.clamp(lights.sun.userData.orbitHeight, 0, 1) : 0.8;
+  const lowAngleWarmth =
+    typeof lights.sun.userData.lowAngleWarmth === "number"
+      ? MathUtils.clamp(lights.sun.userData.lowAngleWarmth, 0, 1)
+      : 0;
+  const orbitKeyStrength = MathUtils.lerp(0.86, 1.14, orbitHeight) + lowAngleWarmth * 0.035;
+  lights.sun.intensity = (MathUtils.lerp(3.52, 3.22, m) + cinematicLift * 0.2 + breath * 0.024) * orbitKeyStrength;
   lights.ambient.intensity =
-    MathUtils.lerp(1.04, 0.94, m) - orbitHeight * 0.035 + cinematicLift * 0.038;
-  lights.hemi.intensity =
-    MathUtils.lerp(1.2, 1.08, m) + cinematicLift * 0.055;
-  lights.bounce.intensity =
-    MathUtils.lerp(0.62, 0.54, m) + cinematicLift * 0.055;
-  lights.meadowGlow.intensity =
-    MathUtils.lerp(0.68, 0.3, m) + cinematicLift * 0.18;
-  lights.alpineGlow.intensity =
-    MathUtils.lerp(0.54, 0.82, m) + cinematicLift * 0.14;
-  lights.fog.density =
-    MathUtils.lerp(0.00048, 0.00068, m) - cinematicLift * 0.000035;
+    MathUtils.lerp(1.0, 0.9, m) - orbitHeight * 0.052 - lowAngleWarmth * 0.035 + cinematicLift * 0.038;
+  lights.hemi.intensity = MathUtils.lerp(1.18, 1.06, m) - lowAngleWarmth * 0.018 + cinematicLift * 0.055;
+  lights.bounce.intensity = MathUtils.lerp(0.66, 0.56, m) + lowAngleWarmth * 0.05 + cinematicLift * 0.055;
+  lights.meadowGlow.intensity = MathUtils.lerp(0.52, 0.24, m) + lowAngleWarmth * 0.055 + cinematicLift * 0.12;
+  lights.alpineGlow.intensity = MathUtils.lerp(0.46, 0.72, m) + cinematicLift * 0.1;
+  lights.fog.density = MathUtils.lerp(0.0004, 0.00054, m) - cinematicLift * 0.000025;
 }
 
 /**
@@ -104,7 +98,7 @@ export interface ColorPair {
 
 export interface SceneColorTargets {
   sun: DirectionalLight;
-  hemi: HemisphereLight;       // skyFill
+  hemi: HemisphereLight; // skyFill
   fog: { color: Color };
   background?: Color | null;
 }
@@ -117,22 +111,21 @@ export interface SceneColorPairs {
   background: ColorPair;
 }
 
-export function applySceneLightingColors(
-  targets: SceneColorTargets,
-  pairs: SceneColorPairs,
-  mood: number,
-) {
+export function applySceneLightingColors(targets: SceneColorTargets, pairs: SceneColorPairs, mood: number) {
   const m = MathUtils.clamp(mood, 0, 1);
-  const lowAngleWarmth = typeof targets.sun.userData.lowAngleWarmth === "number"
-    ? MathUtils.clamp(targets.sun.userData.lowAngleWarmth, 0, 1)
-    : 0;
+  const lowAngleWarmth =
+    typeof targets.sun.userData.lowAngleWarmth === "number"
+      ? MathUtils.clamp(targets.sun.userData.lowAngleWarmth, 0, 1)
+      : 0;
   targets.sun.color.copy(pairs.sun.lowland).lerp(pairs.sun.highland, m);
-  targets.sun.color.lerp(LOW_SUN_WARM, lowAngleWarmth * 0.22);
+  targets.sun.color.lerp(LOW_SUN_WARM, lowAngleWarmth * 0.32);
   targets.hemi.color.copy(pairs.skyFill.lowland).lerp(pairs.skyFill.highland, m);
   targets.hemi.groundColor.copy(pairs.skyGround.lowland).lerp(pairs.skyGround.highland, m);
   targets.fog.color.copy(pairs.fog.lowland).lerp(pairs.fog.highland, m);
+  targets.fog.color.lerp(LOW_SUN_FOG, lowAngleWarmth * 0.12 * (1 - m * 0.42));
   if (targets.background) {
     targets.background.copy(pairs.background.lowland).lerp(pairs.background.highland, m);
+    targets.background.lerp(LOW_SUN_BACKGROUND, lowAngleWarmth * 0.05 * (1 - m * 0.35));
   }
 }
 
@@ -148,10 +141,10 @@ export function getAtmosphereHorizonTints(
   outCloudShadow: Color,
 ) {
   const m = MathUtils.clamp(mood, 0, 1);
-  outHorizonTint.set("#e3f8ff").lerp(new Color(0xd9f3ff), m * 0.55);
-  outHorizonHaze.set("#eefcff").lerp(new Color(0xdcefff), m * 0.45);
-  outCloudBright.set("#ffffff").lerp(new Color(0xf2fbff), m * 0.35);
-  outCloudShadow.set("#d7eaf6").lerp(new Color(0xc9dfef), m * 0.25);
+  outHorizonTint.copy(HORIZON_TINT_LOW).lerp(HORIZON_TINT_HIGH, m * 0.62);
+  outHorizonHaze.copy(HORIZON_HAZE_LOW).lerp(HORIZON_HAZE_HIGH, m * 0.5);
+  outCloudBright.copy(CLOUD_BRIGHT_LOW).lerp(CLOUD_BRIGHT_HIGH, m * 0.35);
+  outCloudShadow.copy(CLOUD_SHADOW_LOW).lerp(CLOUD_SHADOW_HIGH, m * 0.28);
 }
 
 const _ambScratch = new Color();

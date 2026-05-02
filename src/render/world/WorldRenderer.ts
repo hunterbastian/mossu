@@ -82,16 +82,8 @@ import {
   buildWaterBankAccents,
 } from "./terrainDecorations";
 import { markCameraCollider } from "./sceneHelpers";
-import {
-  batchStaticDecorations,
-  freezeStaticHierarchy,
-  moveChildren,
-} from "./staticBatching";
-import {
-  countGeometryTriangles,
-  countGeometryVertices,
-  countInstancedTriangles,
-} from "./geometryStats";
+import { batchStaticDecorations, freezeStaticHierarchy, moveChildren } from "./staticBatching";
+import { countGeometryTriangles, countGeometryVertices, countInstancedTriangles } from "./geometryStats";
 import {
   applySceneLightingColors,
   applySceneLightingMood,
@@ -103,14 +95,8 @@ import {
   writePatchSceneLightingUniforms,
 } from "./sceneLighting";
 import { buildTerrainFormStrokes, makeTerrainMesh } from "./terrainMesh";
-import {
-  buildHighlandWaterways,
-  WaterSystem,
-} from "./waterSystem";
-import {
-  buildGrasslandImmersionSystem,
-  updateGrasslandImmersionSystem,
-} from "./grasslandImmersion";
+import { buildHighlandWaterways, WaterSystem } from "./waterSystem";
+import { buildGrasslandImmersionSystem, updateGrasslandImmersionSystem } from "./grasslandImmersion";
 import { buildMountainBackdrop } from "./mountainBackdrop";
 
 const grasslandsArt = OOT_PS2_GRASSLANDS_PALETTE;
@@ -480,7 +466,12 @@ function buildFloatingIslandShell() {
   const upperMaterial = new MeshStandardMaterial({ color: "#d4cdb8", roughness: 0.98, side: DoubleSide });
   const lowerMaterial = new MeshStandardMaterial({ color: "#b9b7a2", roughness: 0.99, side: DoubleSide });
   const lowerShadowMaterial = new MeshStandardMaterial({ color: "#b6baa5", roughness: 0.99, side: DoubleSide });
-  const underbellyMaterial = new MeshStandardMaterial({ color: "#98aa8f", roughness: 0.99, side: DoubleSide, metalness: 0.02 });
+  const underbellyMaterial = new MeshStandardMaterial({
+    color: "#98aa8f",
+    roughness: 0.99,
+    side: DoubleSide,
+    metalness: 0.02,
+  });
   const mossMaterial = new MeshStandardMaterial({
     color: "#91b76d",
     roughness: 0.97,
@@ -1048,14 +1039,20 @@ export class WorldRenderer {
   private readonly shrine = buildShrine();
   private readonly terrainFormStrokes = buildTerrainFormStrokes();
   private readonly openingNestVista = batchStaticDecorations(buildOpeningNestVista(), "opening-nest-vista-batch");
-  private readonly openingWaterComposition = batchStaticDecorations(buildOpeningWaterComposition(), "opening-water-composition-batch");
+  private readonly openingWaterComposition = batchStaticDecorations(
+    buildOpeningWaterComposition(),
+    "opening-water-composition-batch",
+  );
   private readonly islandShell = buildFloatingIslandShell();
   private readonly distantFloatingIslands = buildDistantFloatingIslands();
   private readonly groundLayer = new Group();
   private readonly midLayer = new Group();
   private readonly treeClusters = new Group();
   private readonly forestGroveAccents = new Group();
-  private readonly biomeTransitionAccents = batchStaticDecorations(buildBiomeTransitionAccents(), "biome-transition-batch");
+  private readonly biomeTransitionAccents = batchStaticDecorations(
+    buildBiomeTransitionAccents(),
+    "biome-transition-batch",
+  );
   private readonly waterBankAccents = batchStaticDecorations(buildWaterBankAccents(), "water-bank-batch");
   private readonly anchorSceneAccents = batchStaticDecorations(buildAnchorSceneAccents(), "anchor-scene-batch");
   private readonly highlandAccents = batchStaticDecorations(buildHighlandAccents(), "highland-accent-batch");
@@ -1137,7 +1134,10 @@ export class WorldRenderer {
   private readonly deferredWorldSlices: Array<() => void> = [];
   private deferredWorldFrame = 0;
 
-  constructor(private readonly scene: Scene, options: WorldRendererOptions = {}) {
+  constructor(
+    private readonly scene: Scene,
+    options: WorldRendererOptions = {},
+  ) {
     this.waterDepthDebug = options.waterDepthDebug ?? false;
     this.waterSystem = new WaterSystem({ depthDebug: this.waterDepthDebug });
     this.skyDome = buildSkyDome({
@@ -1388,14 +1388,8 @@ export class WorldRenderer {
       this.mapMarkerGroup.add(marker.group);
     });
     worldMapMarkers.forEach((atlasMarker, index) => {
-      const color =
-        atlasMarker.kind === "bridge" ? "#8edaf5" :
-          atlasMarker.kind === "special" ? "#ffc75f" :
-            "#aeea80";
-      const radius =
-        atlasMarker.kind === "bridge" ? 2.4 :
-          atlasMarker.kind === "special" ? 2.8 :
-            2.2;
+      const color = atlasMarker.kind === "bridge" ? "#8edaf5" : atlasMarker.kind === "special" ? "#ffc75f" : "#aeea80";
+      const radius = atlasMarker.kind === "bridge" ? 2.4 : atlasMarker.kind === "special" ? 2.8 : 2.2;
       const marker: MapMarker = {
         group: createMapMarker(color, radius, atlasMarker.kind === "special" ? 12 : 9, 0.28),
         baseScale: 0.9,
@@ -1647,10 +1641,7 @@ export class WorldRenderer {
     this.updateRemoteMossus(elapsed, mapLookdown);
     this.updateMossuContactShadow(frame, mapLookdown);
     this.skyDome.position.copy(frame.player.position);
-    this.suppressHighlandVistaGrass = !mapLookdown && (
-      frame.player.position.z > 122 ||
-      frame.player.position.y > 76
-    );
+    this.suppressHighlandVistaGrass = !mapLookdown && (frame.player.position.z > 122 || frame.player.position.y > 76);
     this.updateSceneMood(frame, dt, viewCamera, elapsed);
     this.scene.fog = mapLookdown ? null : this.gameplayFog;
     if (!mapLookdown) {
@@ -1795,9 +1786,7 @@ export class WorldRenderer {
       visual.group.position.y = visual.baseY + bob;
       if (visual.kind === "berry" || visual.kind === "seed" || visual.kind === "shell") {
         visual.group.rotation.y = elapsed * 0.55 * visual.spinDirection + visual.swayOffset;
-        visual.group.rotation.z = visual.kind === "shell"
-          ? Math.sin(elapsed * 1.2 + visual.swayOffset) * 0.04
-          : 0;
+        visual.group.rotation.z = visual.kind === "shell" ? Math.sin(elapsed * 1.2 + visual.swayOffset) * 0.04 : 0;
       } else if (visual.kind === "feather") {
         visual.group.rotation.y = visual.swayOffset + Math.sin(elapsed * 1.35 + visual.swayOffset) * 0.16;
         visual.group.rotation.z = Math.sin(elapsed * 1.8 + index * 0.3) * 0.11;
@@ -1837,7 +1826,10 @@ export class WorldRenderer {
     const grassLodStats = this.windMeshes.map((mesh) => getGrassMeshLodStats(mesh));
     const grassImpostorInstances = this.grassImpostorMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
     const forestInstances = this.treeWindMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
-    const staticTreeWindTriangles = this.treeLeafWindMeshes.reduce((sum, mesh) => sum + countGeometryTriangles(mesh.geometry), 0);
+    const staticTreeWindTriangles = this.treeLeafWindMeshes.reduce(
+      (sum, mesh) => sum + countGeometryTriangles(mesh.geometry),
+      0,
+    );
     const smallPropInstances = this.smallPropMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
 
     return {
@@ -1863,7 +1855,8 @@ export class WorldRenderer {
       waterSurfaces: waterControllers.length,
       waterVertices: waterGeometryStats.vertices,
       waterTriangles: waterGeometryStats.triangles,
-      animatedShaderMeshes: this.windMeshes.length + this.treeWindMeshes.length + this.treeLeafWindMeshes.length + waterControllers.length,
+      animatedShaderMeshes:
+        this.windMeshes.length + this.treeWindMeshes.length + this.treeLeafWindMeshes.length + waterControllers.length,
       grassShaderMeshes: this.windMeshes.length,
       treeShaderMeshes: this.treeWindMeshes.length + this.treeLeafWindMeshes.length,
       waterShaderSurfaces: waterControllers.length,
@@ -1873,7 +1866,11 @@ export class WorldRenderer {
   private collectTreeWindMeshes(root: Object3D) {
     root.traverse((node) => {
       const instancedMesh = node as InstancedMesh;
-      if (instancedMesh.isInstancedMesh && instancedMesh.userData.canopyWind && !this.treeWindMeshes.includes(instancedMesh)) {
+      if (
+        instancedMesh.isInstancedMesh &&
+        instancedMesh.userData.canopyWind &&
+        !this.treeWindMeshes.includes(instancedMesh)
+      ) {
         this.treeWindMeshes.push(instancedMesh);
       }
 
@@ -1953,9 +1950,7 @@ export class WorldRenderer {
       const playerDistance = Math.hypot(centerX - player.x, centerZ - player.z);
       const cameraDistance = Math.hypot(centerX - camera.x, centerZ - camera.z);
       const cullDistance = mesh.count > 80 ? SMALL_PROP_CULL_DISTANCE : FAR_DECOR_CULL_DISTANCE;
-      mesh.visible =
-        playerDistance <= radius + cullDistance ||
-        cameraDistance <= radius + cullDistance * 0.82;
+      mesh.visible = playerDistance <= radius + cullDistance || cameraDistance <= radius + cullDistance * 0.82;
     });
   }
 
@@ -1968,9 +1963,8 @@ export class WorldRenderer {
       );
     }
     const landingPulse = this.heroGrassPulse;
-    const rollingWake = frame.player.rolling && frame.player.grounded
-      ? MathUtils.clamp(planarSpeed / 22, 0.18, 0.5)
-      : 0;
+    const rollingWake =
+      frame.player.rolling && frame.player.grounded ? MathUtils.clamp(planarSpeed / 22, 0.18, 0.5) : 0;
     const karuWatchWake = this.faunaStats.firstEncounterActive ? 0.22 : 0;
     let coopWake = 0;
     let coopLandingWake = 0;
@@ -1988,12 +1982,17 @@ export class WorldRenderer {
         coopLandingWake = Math.max(coopLandingWake, proximity * 0.18);
       }
     });
-    const basePush = frame.player.fallingToVoid || !frame.player.grounded
-      ? 0
-      : frame.player.rolling
-        ? MathUtils.clamp(planarSpeed / 24, 0.22, 1)
-        : MathUtils.clamp(planarSpeed / 14, 0, 0.48);
-    const playerPush = MathUtils.clamp(basePush + landingPulse + rollingWake + karuWatchWake + coopWake + coopLandingWake, 0, 1.35);
+    const basePush =
+      frame.player.fallingToVoid || !frame.player.grounded
+        ? 0
+        : frame.player.rolling
+          ? MathUtils.clamp(planarSpeed / 24, 0.22, 1)
+          : MathUtils.clamp(planarSpeed / 14, 0, 0.48);
+    const playerPush = MathUtils.clamp(
+      basePush + landingPulse + rollingWake + karuWatchWake + coopWake + coopLandingWake,
+      0,
+      1.35,
+    );
     if (!this.suppressHighlandVistaGrass) {
       this.windMeshes.forEach((mesh) => {
         const shader = mesh.userData.shader;
@@ -2003,10 +2002,7 @@ export class WorldRenderer {
           (shader.uniforms.uPlayerVelocity.value as Vector3).set(frame.player.velocity.x, 0, frame.player.velocity.z);
           shader.uniforms.uPlayerPush.value = playerPush;
           if (this.remoteMossus.size > 0) {
-            shader.uniforms.uPlayerPushRadius.value = Math.max(
-              shader.uniforms.uPlayerPushRadius.value as number,
-              13.8,
-            );
+            shader.uniforms.uPlayerPushRadius.value = Math.max(shader.uniforms.uPlayerPushRadius.value as number, 13.8);
           }
         }
       });
@@ -2052,16 +2048,26 @@ export class WorldRenderer {
         this.environmentPulse = Math.max(this.environmentPulse, 0.12 + remote.state.eventPulse * 0.08);
       }
     });
+    const playerX = frame.player.position.x;
+    const playerZ = frame.player.position.z;
+    const decisionClarityWindow = Math.max(
+      Math.exp(-(((playerX - 24) / 46) ** 2) - ((playerZ - 88) / 36) ** 2),
+      Math.exp(-(((playerX - 20) / 44) ** 2) - ((playerZ - 108) / 34) ** 2),
+      Math.exp(-(((playerX - 42) / 46) ** 2) - ((playerZ - 134) / 34) ** 2),
+      Math.exp(-(((playerX - 16) / 42) ** 2) - ((playerZ - 186) / 32) ** 2),
+      Math.exp(-(((playerX - 18) / 44) ** 2) - ((playerZ - 214) / 34) ** 2),
+    );
     const heightMood = MathUtils.smoothstep(playerHeight, 34, 128);
-    const routeMood = MathUtils.smoothstep(frame.player.position.z, 64, 202);
-    const targetMood = MathUtils.clamp(heightMood * 0.72 + routeMood * 0.4, 0, 1);
+    const routeMood = MathUtils.smoothstep(playerZ, 64, 202);
+    const targetMood = MathUtils.clamp(heightMood * 0.72 + routeMood * 0.4 - decisionClarityWindow * 0.055, 0, 1);
     const blend = 1 - Math.exp(-dt * 1.8);
     this.elevationMood = MathUtils.lerp(this.elevationMood, targetMood, blend);
     const movementWake =
       (frame.player.rolling ? 0.055 : 0.026) *
       MathUtils.clamp(planarSpeed / 30, 0, 1) *
       (frame.player.fallingToVoid ? 0 : 1);
-    const cinematicLift = MathUtils.clamp(this.environmentPulse + movementWake, 0, 0.42);
+    const cinematicLift =
+      MathUtils.clamp(this.environmentPulse + movementWake, 0, 0.42) * (1 - decisionClarityWindow * 0.18);
     const breath = Math.sin(elapsed * 0.34 + this.elevationMood * 1.8) * 0.5 + 0.5;
 
     updateSunOrbitRig(this.sun, elapsed, this.elevationMood);
@@ -2088,6 +2094,10 @@ export class WorldRenderer {
       this.elevationMood,
       cinematicLift,
       breath,
+    );
+    this.gameplayFog.density = Math.max(
+      0.00034,
+      this.gameplayFog.density - decisionClarityWindow * 0.000075,
     );
     this.environmentPulse = MathUtils.damp(this.environmentPulse, 0, 2.35, dt);
     syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera, elapsed);
@@ -2137,11 +2147,13 @@ export class WorldRenderer {
     }
 
     const playerSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
-    const playerWaterStrength =
-      frame.player.swimming ? 1.18 :
-      frame.player.rolling ? 1.16 :
-      frame.player.justLanded ? 1.05 :
-      0.86;
+    const playerWaterStrength = frame.player.swimming
+      ? 1.18
+      : frame.player.rolling
+        ? 1.16
+        : frame.player.justLanded
+          ? 1.05
+          : 0.86;
     this.waterSystem.emitRippleForActor(
       "mossu",
       frame.player.position,
@@ -2189,8 +2201,8 @@ export class WorldRenderer {
 
       const mesh = patch as Mesh;
       const material = mesh.material as MeshBasicMaterial;
-      material.opacity = ((patch.userData.baseOpacity as number | undefined) ?? 0.12) *
-        (0.82 + Math.sin(elapsed * 0.18 + index) * 0.18);
+      material.opacity =
+        ((patch.userData.baseOpacity as number | undefined) ?? 0.12) * (0.82 + Math.sin(elapsed * 0.18 + index) * 0.18);
     });
   }
 
@@ -2294,10 +2306,7 @@ export class WorldRenderer {
 
       particle.origin.set(x, y, z);
       particle.normal.copy(this.landingNormal);
-      particle.direction
-        .set(Math.cos(angle), 0, Math.sin(angle))
-        .projectOnPlane(this.landingNormal)
-        .normalize();
+      particle.direction.set(Math.cos(angle), 0, Math.sin(angle)).projectOnPlane(this.landingNormal).normalize();
 
       if (particle.direction.lengthSq() < 0.001) {
         particle.direction.set(Math.cos(angle), 0, Math.sin(angle)).normalize();
@@ -2397,10 +2406,12 @@ export class WorldRenderer {
     this.playerMapMarker.group.position.set(player.x, playerGround + 0.2, player.z);
     this.shrineMapMarker.group.position.set(18, sampleTerrainHeight(18, 214) + 0.2, 214);
 
-    [this.playerMapMarker, this.shrineMapMarker, ...this.landmarkMapMarkers, ...this.atlasMapMarkers].forEach((marker, index) => {
-      const pulse = 1 + Math.sin(elapsed * marker.pulseSpeed + index * 0.9) * 0.08;
-      const highlightBoost = marker === this.playerMapMarker ? 1.95 : marker === this.shrineMapMarker ? 1.6 : 1.28;
-      marker.group.scale.setScalar(marker.baseScale * pulse * highlightBoost);
-    });
+    [this.playerMapMarker, this.shrineMapMarker, ...this.landmarkMapMarkers, ...this.atlasMapMarkers].forEach(
+      (marker, index) => {
+        const pulse = 1 + Math.sin(elapsed * marker.pulseSpeed + index * 0.9) * 0.08;
+        const highlightBoost = marker === this.playerMapMarker ? 1.95 : marker === this.shrineMapMarker ? 1.6 : 1.28;
+        marker.group.scale.setScalar(marker.baseScale * pulse * highlightBoost);
+      },
+    );
   }
 }

@@ -74,7 +74,7 @@ const DEFAULT_BIOME_PALETTES: Record<BiomeZone, MoteBiomePalette> = {
     colors: ["#f0ecd8", "#dcd8b8", "#b8c6a0"],
     density: 0.6,
     size: 0.42,
-    speed: 0.10,
+    speed: 0.1,
     rise: 0.02,
     lifeSeconds: 8.0,
     blending: "alpha",
@@ -92,8 +92,8 @@ const DEFAULT_BIOME_PALETTES: Record<BiomeZone, MoteBiomePalette> = {
     colors: ["#fcfdfe", "#e8eef4", "#cad5e0"],
     density: 0.95,
     size: 0.36,
-    speed: 0.30,
-    rise: -0.10,
+    speed: 0.3,
+    rise: -0.1,
     lifeSeconds: 4.0,
     blending: "alpha",
   },
@@ -101,7 +101,7 @@ const DEFAULT_BIOME_PALETTES: Record<BiomeZone, MoteBiomePalette> = {
     colors: ["#e8f4ff", "#c8dcff", "#aab8ff", "#fff4d8"],
     density: 0.55,
     size: 0.46,
-    speed: 0.10,
+    speed: 0.1,
     rise: 0.06,
     lifeSeconds: 5.5,
     blending: "additive",
@@ -177,7 +177,7 @@ function makeMoteMaterial(blending: "alpha" | "additive"): ShaderMaterial {
   return new ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    blending: blending === "additive" ? AdditiveBlending : undefined,
+    ...(blending === "additive" ? { blending: AdditiveBlending } : {}),
     uniforms: {
       uCameraRight: { value: new Vector3(1, 0, 0) },
       uCameraUp: { value: new Vector3(0, 1, 0) },
@@ -280,8 +280,12 @@ export function buildAmbientMotes(options: AmbientMoteOptions = {}): AmbientMote
   group.add(meshAlpha, meshAdditive);
 
   const motes: MoteInstance[] = Array.from({ length: poolSize }, () => ({
-    px: 0, py: 0, pz: 0,
-    vx: 0, vy: 0, vz: 0,
+    px: 0,
+    py: 0,
+    pz: 0,
+    vx: 0,
+    vy: 0,
+    vz: 0,
     age: 0,
     life: 0,
     size: 0,

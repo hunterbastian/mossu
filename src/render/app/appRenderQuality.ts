@@ -56,7 +56,7 @@ export function createRenderResolutionPolicy({
   const viewportPixelCount = Math.max(1, viewportWidth * viewportHeight);
   const budgetPixelRatio = Math.sqrt(preferredPixelCount / viewportPixelCount);
   const hardCap = qualityLow ? LOW_QUALITY_MAX_PIXEL_RATIO : MAX_PIXEL_RATIO;
-  const floor = qualityLow ? LOW_QUALITY_MIN_PIXEL_RATIO : MIN_PIXEL_RATIO;
+  const floor = qualityLow ? LOW_QUALITY_MIN_PIXEL_RATIO : Math.min(MIN_PIXEL_RATIO, budgetPixelRatio);
   const maxPixelRatio = Math.min(devicePixelRatio, hardCap, Math.max(floor, budgetPixelRatio));
   const minPixelRatio = Math.min(maxPixelRatio, floor);
 

@@ -182,9 +182,7 @@ function makeGrassBladeGeometry(width: number, height: number, crossPlanes = 1) 
     return geometry;
   }
 
-  const blades = [0, 0.62, -0.62]
-    .slice(0, crossPlanes)
-    .map((angle) => geometry.clone().rotateY(angle).toNonIndexed());
+  const blades = [0, 0.62, -0.62].slice(0, crossPlanes).map((angle) => geometry.clone().rotateY(angle).toNonIndexed());
   geometry.dispose();
   return mergeBufferGeometries(blades);
 }
@@ -240,8 +238,15 @@ export function createGrassMesh(
         : zone === "foothills"
           ? 0.78 + openingMask * 0.1 + habitat.edge * 0.1 + riverNookMask * 0.18
           : 0.94 + habitat.edge * 0.08;
-    const habitatPlacementFade = MathUtils.clamp(1 + habitat.meadow * 0.3 - habitat.forest * 0.18 - habitat.shore * 0.38, 0.42, 1.3);
-    if (Math.random() > MathUtils.clamp(density * placementBias * habitatPlacementFade * (options.placementMultiplier ?? 1), 0, 1)) {
+    const habitatPlacementFade = MathUtils.clamp(
+      1 + habitat.meadow * 0.3 - habitat.forest * 0.18 - habitat.shore * 0.38,
+      0.42,
+      1.3,
+    );
+    if (
+      Math.random() >
+      MathUtils.clamp(density * placementBias * habitatPlacementFade * (options.placementMultiplier ?? 1), 0, 1)
+    ) {
       continue;
     }
 
@@ -259,19 +264,17 @@ export function createGrassMesh(
       isMeadow ? (Math.random() - 0.5) * 0.06 : (Math.random() - 0.5) * 0.14,
     );
     const scale = 0.66 + Math.random() * (zone === "alpine" || zone === "ridge" ? 0.26 : 0.72);
-    const width = zone === "alpine" || zone === "ridge"
-      ? 0.64 + Math.random() * 0.22
-      : 0.72 + Math.random() * 0.24;
+    const width = zone === "alpine" || zone === "ridge" ? 0.64 + Math.random() * 0.22 : 0.72 + Math.random() * 0.24;
     const heroBoost = isMeadow ? Math.max(openingMask, habitat.meadow * 0.72) : 0;
     const riverNookBoost = MathUtils.clamp(riverNookMask * (1 - riverWetness), 0, 1);
     const adjustedScale =
-      scale
-      * (zone === "alpine" || zone === "ridge" ? 1.04 : 1.04 + heroBoost * 0.28 + riverNookBoost * 0.18)
-      * (options.scaleMultiplier ?? 1);
+      scale *
+      (zone === "alpine" || zone === "ridge" ? 1.04 : 1.04 + heroBoost * 0.28 + riverNookBoost * 0.18) *
+      (options.scaleMultiplier ?? 1);
     const adjustedWidth =
-      width
-      * (zone === "alpine" || zone === "ridge" ? 0.96 : 0.9 + heroBoost * 0.08 + riverNookBoost * 0.06)
-      * (options.widthMultiplier ?? 1);
+      width *
+      (zone === "alpine" || zone === "ridge" ? 0.96 : 0.9 + heroBoost * 0.08 + riverNookBoost * 0.06) *
+      (options.widthMultiplier ?? 1);
     dummy.scale.set(adjustedWidth, adjustedScale, adjustedWidth);
     dummy.updateMatrix();
     mesh.setMatrixAt(placed, dummy.matrix);
@@ -281,19 +284,18 @@ export function createGrassMesh(
     const coolPatch = Math.cos(x * 0.018 - z * 0.013) * 0.5 + 0.5;
     const patchMix = MathUtils.clamp(
       sunPatch * 0.62 +
-      coolPatch * 0.15 +
-      fieldCluster * 0.12 +
-      heroBoost * 0.14 +
-      riverNookBoost * 0.16 +
-      habitat.edge * 0.08 -
-      habitat.forest * 0.1,
+        coolPatch * 0.15 +
+        fieldCluster * 0.12 +
+        heroBoost * 0.14 +
+        riverNookBoost * 0.16 +
+        habitat.edge * 0.08 -
+        habitat.forest * 0.1,
       0,
       1,
     );
-    const color = tintBottom.clone().lerp(
-      tintTop,
-      MathUtils.clamp(0.14 + patchMix * 0.72 + Math.random() * 0.05, 0, 1),
-    );
+    const color = tintBottom
+      .clone()
+      .lerp(tintTop, MathUtils.clamp(0.14 + patchMix * 0.72 + Math.random() * 0.05, 0, 1));
     color
       .lerp(new Color(grassArt.meadowHighlight), habitat.meadow * (0.16 + openingMask * 0.08))
       .lerp(new Color(grassArt.openingSun), openingMask * 0.08 * (0.4 + sunPatch * 0.6))
@@ -611,8 +613,10 @@ export function createGrassMesh(
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
-        vec3 posterized = floor(diffuseColor.rgb * 11.0) / 11.0;
-        diffuseColor.rgb = mix(diffuseColor.rgb, posterized, 0.14);
+        float grassInkEdge = smoothstep(0.7, 1.0, vSoftEdge) * smoothstep(0.12, 0.86, vBladeMix) * (1.0 - vDistanceBlend * 0.64);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.72, 0.84, 0.58), grassInkEdge * 0.26);
+        vec3 posterized = floor(diffuseColor.rgb * 9.0 + 0.5) / 9.0;
+        diffuseColor.rgb = mix(diffuseColor.rgb, posterized, 0.18);
       `,
       );
 
@@ -679,8 +683,15 @@ export function createGrassPatchImpostorMesh(
       continue;
     }
 
-    const elevationMood = MathUtils.clamp(MathUtils.smoothstep(height, 46, 140) * 0.74 + MathUtils.smoothstep(z, 80, 218) * 0.28, 0, 1);
-    const size = MathUtils.lerp(9.5, 24, Math.random()) * MathUtils.lerp(1.18, 0.78, elevationMood) * (options.scaleMultiplier ?? 1);
+    const elevationMood = MathUtils.clamp(
+      MathUtils.smoothstep(height, 46, 140) * 0.74 + MathUtils.smoothstep(z, 80, 218) * 0.28,
+      0,
+      1,
+    );
+    const size =
+      MathUtils.lerp(9.5, 24, Math.random()) *
+      MathUtils.lerp(1.18, 0.78, elevationMood) *
+      (options.scaleMultiplier ?? 1);
     const flatten = MathUtils.lerp(0.18, 0.44, Math.random());
     dummy.position.set(x, height + (options.yOffset ?? 0.078), z);
     dummy.rotation.set(0, Math.random() * Math.PI, 0);

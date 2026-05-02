@@ -57,6 +57,7 @@ export interface SaveState {
   unlockedAbilities: Set<AbilityId>;
   catalogedLandmarkIds: Set<string>;
   gatheredForageableIds: Set<string>;
+  recruitedKaruIds: Set<string>;
 }
 
 export interface InteractionTargetState {
@@ -113,35 +114,13 @@ export class GameState {
 
   constructor() {
     this.frame = {
-      player: {
-        position: startingPosition.clone(),
-        velocity: new Vector3(),
-        heading: 0,
-        stamina: STAMINA_MAX,
-        staminaMax: STAMINA_MAX,
-        staminaVisible: false,
-        rolling: false,
-        rollingBoostActive: false,
-        rollHoldSeconds: 0,
-        rollModeReady: false,
-        floating: false,
-        grounded: true,
-        swimming: false,
-        waterMode: "onLand",
-        waterDepth: 0,
-        waterSurfaceY: 0,
-        fallingToVoid: false,
-        voidFallTime: 0,
-        justLanded: false,
-        justRespawned: false,
-        landingImpact: 0,
-      },
-      save: {
-        unlockedAbilities: new Set<AbilityId>(["breeze_float"]),
-        catalogedLandmarkIds: new Set<string>(),
-        gatheredForageableIds: new Set<string>(),
-      },
-      currentZone: sampleBiomeZone(startingPosition.x, startingPosition.z, sampleTerrainHeight(startingPosition.x, startingPosition.z)),
+      player: createInitialPlayerState(),
+      save: createDefaultSaveState(),
+      currentZone: sampleBiomeZone(
+        startingPosition.x,
+        startingPosition.z,
+        sampleTerrainHeight(startingPosition.x, startingPosition.z),
+      ),
       currentLandmark: worldLandmarks[0]?.title ?? "Mossu",
       objective: sampleObjectiveText(),
       interactionTarget: null,
@@ -150,6 +129,16 @@ export class GameState {
       lastGatheredForageableId: null,
     };
     this.updateProgress();
+  }
+
+  resetProgress() {
+    this.frame.player = createInitialPlayerState();
+    this.frame.save = createDefaultSaveState();
+    Object.assign(this.simulationRuntime, createPlayerSimulationRuntime());
+    this.frame.lastCatalogedLandmarkId = null;
+    this.frame.lastGatheredForageableId = null;
+    this.updateProgress(false);
+    this.markSaveDirty();
   }
 
   update(dt: number, input: InputSnapshot, cameraYaw: number) {
@@ -244,4 +233,39 @@ export class GameState {
       this.markSaveDirty();
     }
   }
+}
+
+export function createDefaultSaveState(): SaveState {
+  return {
+    unlockedAbilities: new Set<AbilityId>(["breeze_float"]),
+    catalogedLandmarkIds: new Set<string>(),
+    gatheredForageableIds: new Set<string>(),
+    recruitedKaruIds: new Set<string>(),
+  };
+}
+
+function createInitialPlayerState(): PlayerState {
+  return {
+    position: startingPosition.clone(),
+    velocity: new Vector3(),
+    heading: 0,
+    stamina: STAMINA_MAX,
+    staminaMax: STAMINA_MAX,
+    staminaVisible: false,
+    rolling: false,
+    rollingBoostActive: false,
+    rollHoldSeconds: 0,
+    rollModeReady: false,
+    floating: false,
+    grounded: true,
+    swimming: false,
+    waterMode: "onLand",
+    waterDepth: 0,
+    waterSurfaceY: 0,
+    fallingToVoid: false,
+    voidFallTime: 0,
+    justLanded: false,
+    justRespawned: false,
+    landingImpact: 0,
+  };
 }

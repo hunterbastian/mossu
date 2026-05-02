@@ -1,12 +1,13 @@
 # Playtest Checklist
 
-Last updated: 2026-04-25
+Last updated: 2026-05-01
 
-Use this after major game changes. Start with `npm run build`, then run the game in Chrome or another real browser.
+Use this after major game changes. Start with `npm run qa`, then run the game in Chrome or another real browser.
 
 ## Build
 
-- `npm run build` passes.
+- `npm run qa` passes.
+- `npm run build` passes if it was run separately from `qa`.
 - No TypeScript errors.
 - No obvious browser console errors.
 
@@ -17,6 +18,7 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - HUD appears and does not overlap incoherently.
 - Objective text is readable.
 - Opening lake, grass, trees, river, and mountains are visible enough to orient the player.
+- The visible 3D sun is present in the sky, reads as part of the world, and is not a flat UI overlay.
 
 ## Controls
 
@@ -29,6 +31,7 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Camera can tilt up enough to see mountains.
 - Camera recenters gently without snapping.
 - `Space` jumps / floats / swim-strokes.
+- `Q` works as dedicated Breeze Float in air and as underwater dive in deep swim water.
 - `Shift` rolls.
 - `E` interacts with nearby landmarks or fauna.
 - `Tab` opens and closes inventory/profile.
@@ -66,6 +69,14 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Mountains are visible when looking upward.
 - Fog/mist adds depth without hiding the path.
 
+## Sun And Atmosphere
+
+- The sun appears as a 3D sky/world element and moves subtly with the orbit rig.
+- Directional light, sky sun, cloud lighting, grass/water highlights, and haze agree enough that the sun appears to affect the scene.
+- Low-angle warmth and light god rays stay subtle; they should not wash out route readability or HUD contrast.
+- Cloud layers, watercolor-like distance fog, and moving grass cloud-shadows read as soft atmosphere, not heavy dark bands across the route.
+- Disabling or hiding debug layers does not leave a visible sun/light mismatch.
+
 ## Forest And Grass
 
 - Instanced forest does not show black or broken canopies.
@@ -90,8 +101,11 @@ Use this after major game changes. Start with `npm run build`, then run the game
 ## Visual Anchor Scenes
 
 - Title screen into opening meadow: spawn remains readable, grass/clover detail stays at the edges, and the title transition does not hide Mossu.
-- Opening lake shore: shallow/deep bands, damp lip, reeds, pebbles, and swim state agree from the normal gameplay camera.
-- River bend / creek shore: Silver Bend reads as water with visible bank rims, not a pale translucent slab.
+- Opening meadow sky read: visible sun, cloud edge light, grass highlights, and soft haze feel coherent from the normal camera.
+- Anime/painterly read: color grade adds warm highlights, cooler shadows, and light value bands without washing out Mossu, the HUD, route edges, or water-depth cues.
+- Character silhouettes: Mossu and Karu soft outlines are visible at normal camera distance but do not look like thick black stickers.
+- Opening lake shore: simplified turquoise depth bands, soft milk edge, damp lip, reeds, pebbles, and swim state agree from the normal gameplay camera.
+- River bend / creek shore: Silver Bend reads as painted water with white foam strokes and visible bank rims, not a pale translucent slab.
 - Forest edge near route: mature trees frame the route while saplings/shrubs stay in transition areas.
 - Highland creek / small waterfalls: trickles, mossy lips, and creek ribbons read as small island water features.
 - Shrine approach: final climb has pale rock/greenery framing without blocking route readability.
@@ -102,6 +116,8 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Inventory/profile is readable at laptop size.
 - Map route markers match the world route.
 - Pause menu does not stack with map or inventory.
+- Pause menu shows current trail progress and whether saves are persistent or session-only.
+- Fresh-start reset in the pause menu asks for confirmation, returns Mossu to Burrow Hollow, clears collected progression, and leaves the game playable without refresh.
 - Holographic cards, once implemented, remain readable and performant.
 
 ## Mossu Handbook (`Tab`)
@@ -119,6 +135,7 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Followers use separation, alignment, cohesion, and leader follow.
 - Followers do not crowd, clip badly, or vanish.
 - Followers remain readable across slopes, banks, and shallow water edges.
+- Mossback Titan does not appear, warn, attack, ripple water, or show in model viewer unless it has been intentionally restored from parked assets.
 
 ## Performance
 
@@ -126,6 +143,7 @@ Use this after major game changes. Start with `npm run build`, then run the game
 - Frame rate remains acceptable near dense grass/forest.
 - Opening map/inventory/pause does not hitch heavily.
 - Dynamic pixel ratio does not visibly blur the game too much.
+- Anime color grade, soft outlines, and painterly grass/water bands do not cause a visible performance drop.
 - No runaway memory or repeated console warnings after a few minutes.
 - With `?perfHud=1`, track FPS/p95 frame time, pixel ratio, bloom, renderer calls, triangles, active grass instances, and water surfaces after any world-density pass. Use `?perfDebug=1` when you need the full world-count dump.
 

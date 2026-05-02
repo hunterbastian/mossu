@@ -1,6 +1,6 @@
 # Mossu Procedural Model Families
 
-Last updated: 2026-04-26
+Last updated: 2026-05-01
 
 Mossu currently has no imported gameplay `.glb`, `.gltf`, `.fbx`, or `.obj` models. The game is procedural, but it should still have stable model families: recognizable things that stay true across generated placements, like a cow mob or forest tree in Minecraft.
 
@@ -269,6 +269,7 @@ Sky and mood family.
 Variants:
 
 - sky dome
+- orbiting sun
 - cloud cluster
 - mountain mist puff
 - valley mist patch
@@ -276,10 +277,12 @@ Variants:
 Always true:
 
 - soft, bright, gentle atmosphere
+- visible sun and scene DirectionalLight stay aligned
+- sun highlights remain subtle and readable
 - visible depth across the valley and ridge route
 - supports cozy adventure tone rather than heavy fog
 
-Source: `src/render/world/atmosphereSystem.ts`, `src/render/world/WorldRenderer.ts`
+Source: `src/render/world/atmosphereSystem.ts`, `src/render/world/sceneLighting.ts`, `src/render/world/WorldRenderer.ts`
 
 ## 14. Map And Marker Kit
 
@@ -316,6 +319,21 @@ These are not all separate model families, but they should remain visually disti
 - Cloudback Ridge
 - Ridge Saddle
 - Moss Crown Shrine
+
+## Parked Families
+
+These are preserved but intentionally inactive. See [Asset Parking](ASSET_PARKING.md) before restoring them.
+
+### Mossback Titan
+
+Status: parked.
+
+Source:
+
+- `src/simulation/unused/giantMossCreature.ts`
+- `src/render/objects/unused/MossbackTitanAvatar.ts`
+
+Do not treat this as part of the active creature model inventory until it is deliberately restored into simulation, rendering, HUD copy, model-viewer options, and tests.
 
 ## Concept Sheet Priority
 

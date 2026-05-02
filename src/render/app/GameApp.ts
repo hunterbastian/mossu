@@ -1,21 +1,12 @@
-import {
-  ACESFilmicToneMapping,
-  Clock,
-  Scene,
-  SRGBColorSpace,
-  Vector2,
-} from "three";
+import { ACESFilmicToneMapping, Clock, Scene, SRGBColorSpace, Vector2 } from "three";
 import type { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import type { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import type { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { GameState } from "../../simulation/gameState";
 import { InputController, InputSnapshot } from "../../simulation/input";
-import { sampleRiverEdgeState, sampleWaterAmbience, sampleWindStrength } from "../../simulation/world";
-import {
-  CoopStressSimulator,
-  getCoopStressRemoteCount,
-  type CoopStressSnapshot,
-} from "../../simulation/coopStress";
+import { getFlavorPingText } from "../../simulation/landmarkFlavorPing";
+import { sampleRiverEdgeState, sampleWaterAmbience, sampleWindStrength, worldLandmarks } from "../../simulation/world";
+import { CoopStressSimulator, getCoopStressRemoteCount, type CoopStressSnapshot } from "../../simulation/coopStress";
 import { ViewMode } from "../../simulation/viewMode";
 import { AmbientWaterAudio } from "./AmbientWaterAudio";
 import {
@@ -70,6 +61,7 @@ import {
   shouldUsePostProcessing as shouldUsePostProcessingRuntime,
   shouldUseRetroTexture as shouldUseRetroTextureRuntime,
   suppressPostProcessing as suppressPostProcessingRuntime,
+  updateAnimeColorGradePass,
   updateRenderPath,
   updateRetroTexturePass,
 } from "./appPostProcessing";
@@ -84,6 +76,7 @@ import { getUnderwaterEffectTargetIntensity } from "./appUnderwaterEffect";
 import { MapDragController } from "./appMapDrag";
 import { shouldUsePersistentSave } from "./localSave";
 import {
+  clearLocalSaveState,
   createLocalSaveRuntime,
   persistLocalSaveState as persistStoredSaveState,
   restoreLocalSaveState as restoreStoredSaveState,
@@ -99,11 +92,67 @@ import {
 } from "./rendererBackend";
 import { createOpeningSequenceOverlay, createTitleScreen } from "./appTitleScreen";
 import { serializeE2eGameTextState, serializeGameTextState } from "./appTextState";
+import { ANIME_COLOR_GRADE_SHADER } from "./animeColorGradeShader";
+
+type DebugRouteJumpId = "fir-gate" | "highland-basin" | "ridge-saddle" | "shrine";
+
+type DebugRouteJump = {
+  label: string;
+  landmarkId: string;
+  position?: { x: number; z: number };
+  heading: number;
+  cameraOptions: DebugRouteCameraOptions;
+};
+
+const DEBUG_ROUTE_JUMPS: Record<DebugRouteJumpId, DebugRouteJump> = {
+  "fir-gate": {
+    label: "Fir Gate",
+    landmarkId: "fir-gate",
+    heading: -0.18,
+    cameraOptions: { distance: 30, focusHeight: 4.2, lift: 9 },
+  },
+  "highland-basin": {
+    label: "Highland Basin",
+    landmarkId: "highland-basin",
+    position: { x: 52, z: 140 },
+    heading: -1.12,
+    cameraOptions: { distance: 32, focusHeight: 4.6, lift: 8.2 },
+  },
+  "ridge-saddle": {
+    label: "Ridge Saddle",
+    landmarkId: "ridge-saddle-landmark",
+    position: { x: 20, z: 198 },
+    heading: -0.35,
+    cameraOptions: { distance: 30, focusHeight: 5, lift: 8.8 },
+  },
+  shrine: {
+    label: "Moss Crown Shrine",
+    landmarkId: "peak-shrine",
+    position: { x: 10, z: 218 },
+    heading: 3.1,
+    cameraOptions: { distance: 28, focusHeight: 4.4, lift: 6.2 },
+  },
+};
+
+function getDebugRouteJump(id: string): DebugRouteJump | null {
+  const normalized = id.trim().toLowerCase() as DebugRouteJumpId;
+  return DEBUG_ROUTE_JUMPS[normalized] ?? null;
+}
+
+function buildRouteStampPing(landmarkId: string, stampedIds: ReadonlySet<string>) {
+  const landmark = worldLandmarks.find((entry) => entry.id === landmarkId);
+  const stampedCount = worldLandmarks.filter((entry) => entry.inventoryEntry && stampedIds.has(entry.id)).length;
+  const stampTotal = worldLandmarks.filter((entry) => entry.inventoryEntry).length;
+  const keepsake = landmark?.inventoryEntry?.title ?? landmark?.title ?? "field note";
+  const flavor = landmark ? getFlavorPingText(landmark) : "The guide pressed in a new mark.";
+  return `Route stamp ${stampedCount}/${stampTotal}: ${keepsake}. ${flavor}`;
+}
 
 export class GameApp {
   private readonly renderer: GameRenderer;
   private composer: EffectComposer | null = null;
   private bloomPass: UnrealBloomPass | null = null;
+  private animeColorGradePass: ShaderPass | null = null;
   private retroTexturePass: ShaderPass | null = null;
   private readonly requestedRendererBackend: RequestedRendererBackend;
   private readonly activeRendererBackend: ActiveRendererBackend;
@@ -222,9 +271,8 @@ export class GameApp {
     });
     this.maxPixelRatio = this.renderResolutionPolicy.maxPixelRatio;
     this.minPixelRatio = this.renderResolutionPolicy.minPixelRatio;
-    this.activePixelRatio = this.coopStress || this.deterministicPerf
-      ? this.minPixelRatio
-      : this.renderResolutionPolicy.initialPixelRatio;
+    this.activePixelRatio =
+      this.coopStress || this.deterministicPerf ? this.minPixelRatio : this.renderResolutionPolicy.initialPixelRatio;
     this.renderer = rendererBundle.renderer;
     this.requestedRendererBackend = rendererBundle.requestedBackend;
     this.activeRendererBackend = rendererBundle.activeBackend;
@@ -340,6 +388,7 @@ export class GameApp {
     this.waterAudio.dispose();
     this.underwaterEffect.dispose();
     this.retroTexturePass?.material.dispose();
+    this.animeColorGradePass?.material.dispose();
     this.composer?.dispose();
     this.cameraDebugPanel?.remove();
     this.perfDebugPanel?.remove();
@@ -400,6 +449,12 @@ export class GameApp {
       BLOOM_THRESHOLD,
     );
     composer.addPass(bloomPass);
+    const animeColorGradePass = new ShaderPass(ANIME_COLOR_GRADE_SHADER);
+    animeColorGradePass.uniforms.uResolution.value.set(
+      window.innerWidth * this.activePixelRatio,
+      window.innerHeight * this.activePixelRatio,
+    );
+    composer.addPass(animeColorGradePass);
     const retroTexturePass = new ShaderPass(RETRO_RENDER_TEXTURE_SHADER);
     retroTexturePass.uniforms.uResolution.value.set(
       window.innerWidth * this.activePixelRatio,
@@ -414,6 +469,7 @@ export class GameApp {
     composer.addPass(underwaterPass);
     this.composer = composer;
     this.bloomPass = bloomPass;
+    this.animeColorGradePass = animeColorGradePass;
     this.retroTexturePass = retroTexturePass;
     this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
     this.logRenderPathEvent("postprocessing-ready");
@@ -446,6 +502,44 @@ export class GameApp {
 
     this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
     this.syncHud();
+  }
+
+  debugJumpToRouteSpot(id: string) {
+    const jump = getDebugRouteJump(id);
+    if (!jump) {
+      return false;
+    }
+
+    const landmark = worldLandmarks.find((entry) => entry.id === jump.landmarkId);
+    if (!landmark) {
+      return false;
+    }
+
+    this.debugCompleteOpeningSequence();
+    this.pauseMenuOpen = false;
+    this.characterScreenOpen = false;
+    this.openingSequenceActive = false;
+    this.titleScreenOpen = false;
+    this.idleControlSeconds = 0;
+    this.followCamera.setIdleOrbitActive(false);
+    this.mapDrag.cancel();
+    this.setViewMode("third_person");
+
+    const player = this.state.frame.player;
+    const jumpX = jump.position?.x ?? landmark.position.x;
+    const jumpZ = jump.position?.z ?? landmark.position.z;
+    if (!teleportDebugPlayerTo(player, jumpX, jumpZ)) {
+      return false;
+    }
+    player.heading = jump.heading;
+
+    this.world.flushDeferredWorldSlices();
+    this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
+    this.followCamera.debugSnapToPlayerHeading(player, jump.heading, jump.cameraOptions);
+    this.hud.showFlavorPing(`Debug jump: ${jump.label}`);
+    this.syncHud();
+    this.focusGameplaySurface();
+    return true;
   }
 
   debugFaceRouteHeading(heading: number, cameraOptions?: DebugRouteCameraOptions) {
@@ -587,7 +681,7 @@ export class GameApp {
     const input = this.input.sample();
     let faunaRecruitPressed = false;
     let faunaRegroupPressed = false;
-    let preZoneForFeedback: (typeof this.state.frame.currentZone) | null = null;
+    let preZoneForFeedback: typeof this.state.frame.currentZone | null = null;
     let preSwimForFeedback: boolean | null = null;
 
     if (this.titleScreenOpen) {
@@ -677,7 +771,9 @@ export class GameApp {
       if (frame.lastCatalogedLandmarkId === "peak-shrine" && !this.summitCompletionSeen) {
         this.summitCompletionSeen = true;
         this.followCamera.kickCinematic({ polar: -0.045, distance: 3.2, shoulder: 0.22 });
-        this.hud.showFlavorPing("Moss Crown reached. Summit Circuit unlocked in the field guide.");
+        this.hud.showFlavorPing("Moss Crown reached. Shrine reward claimed: the Summit Circuit is open.");
+      } else if (frame.lastCatalogedLandmarkId) {
+        this.hud.showFlavorPing(buildRouteStampPing(frame.lastCatalogedLandmarkId, frame.save.catalogedLandmarkIds));
       }
     }
 
@@ -708,6 +804,9 @@ export class GameApp {
     );
     markProfile("worldMs");
     const faunaStats = this.world.getFaunaStats();
+    if (faunaStats.recruitedThisFrame > 0) {
+      this.state.markSaveDirty();
+    }
     if (
       faunaStats.firstEncounterActive &&
       !this.firstKaruEncounterSeen &&
@@ -787,10 +886,7 @@ export class GameApp {
   }
 
   private updateUnderwaterEffect(dt: number, elapsed: number) {
-    const targetIntensity = getUnderwaterEffectTargetIntensity(
-      this.followCamera.camera,
-      this.state.frame.player,
-    );
+    const targetIntensity = getUnderwaterEffectTargetIntensity(this.followCamera.camera, this.state.frame.player);
     this.underwaterEffect.update({ dt, elapsed, targetIntensity });
   }
 
@@ -803,10 +899,14 @@ export class GameApp {
     if (this.bloomPass) {
       this.bloomPass.enabled = postProcessingEnabled;
     }
+    if (this.animeColorGradePass) {
+      this.animeColorGradePass.enabled = postProcessingEnabled;
+    }
     if (this.retroTexturePass) {
       this.retroTexturePass.enabled = this.shouldUseRetroTexture();
     }
     if (postProcessingEnabled && this.composer) {
+      updateAnimeColorGradePass(this.animeColorGradePass, this.elapsed, this.activePixelRatio);
       updateRetroTexturePass(this.retroTexturePass, this.elapsed, this.activePixelRatio);
       this.composer.render();
       return;
@@ -882,6 +982,7 @@ export class GameApp {
       viewMode: this.viewMode,
       pauseMenuOpen: this.pauseMenuOpen,
       characterScreenOpen: this.characterScreenOpen,
+      savePersistenceEnabled: this.savePersistenceEnabled,
       pointerLocked: this.followCamera.isPointerLocked(),
       focusedCollectionId: this.focusedCollectionId,
       fauna: this.world.getFaunaStats(),
@@ -990,10 +1091,7 @@ export class GameApp {
 
   private getCachedWorldPerfStats() {
     const now = performance.now();
-    if (
-      this.cachedWorldPerfStats === null ||
-      now - this.cachedWorldPerfStatsAt >= WORLD_PERF_STATS_UPDATE_MS
-    ) {
+    if (this.cachedWorldPerfStats === null || now - this.cachedWorldPerfStatsAt >= WORLD_PERF_STATS_UPDATE_MS) {
       this.cachedWorldPerfStats = this.world.getPerfStats();
       this.cachedWorldPerfStatsAt = now;
     }
@@ -1044,10 +1142,7 @@ export class GameApp {
       return;
     }
 
-    this.idleControlSeconds = Math.min(
-      IDLE_CAMERA_ORBIT_DELAY_SECONDS + 1,
-      this.idleControlSeconds + dt,
-    );
+    this.idleControlSeconds = Math.min(IDLE_CAMERA_ORBIT_DELAY_SECONDS + 1, this.idleControlSeconds + dt);
     this.followCamera.setIdleOrbitActive(this.idleControlSeconds >= IDLE_CAMERA_ORBIT_DELAY_SECONDS);
   }
 
@@ -1083,10 +1178,7 @@ export class GameApp {
     });
     this.maxPixelRatio = this.renderResolutionPolicy.maxPixelRatio;
     this.minPixelRatio = this.renderResolutionPolicy.minPixelRatio;
-    const nextPixelRatio = Math.min(
-      this.maxPixelRatio,
-      Math.max(this.minPixelRatio, this.activePixelRatio),
-    );
+    const nextPixelRatio = Math.min(this.maxPixelRatio, Math.max(this.minPixelRatio, this.activePixelRatio));
     if (Math.abs(nextPixelRatio - this.activePixelRatio) < 0.01) {
       return;
     }
@@ -1185,6 +1277,9 @@ export class GameApp {
       case "map":
         this.openMap();
         break;
+      case "reset-progress":
+        this.resetProgressFromUi();
+        break;
     }
   };
 
@@ -1263,6 +1358,42 @@ export class GameApp {
     }
   }
 
+  private resetProgressFromUi() {
+    const confirmed = window.confirm("Reset Mossu's saved guide and return to Burrow Hollow?");
+    if (!confirmed) {
+      return;
+    }
+
+    this.resetProgressToStart();
+  }
+
+  debugResetProgress() {
+    this.resetProgressToStart();
+  }
+
+  private resetProgressToStart() {
+    this.state.resetProgress();
+    if (this.savePersistenceEnabled) {
+      clearLocalSaveState(this.state.frame.save, this.localSaveRuntime);
+      this.lastSavePersistenceRevision = this.state.getSaveRevision();
+    }
+    this.firstKaruEncounterSeen = false;
+    this.summitCompletionSeen = false;
+    this.focusedCollectionId = null;
+    this.mapFocusedRouteIndex = -1;
+    this.pauseMenuOpen = false;
+    this.characterScreenOpen = false;
+    this.openingSequenceActive = false;
+    this.titleScreenOpen = false;
+    this.viewMode = "third_person";
+    this.followCamera.resetToStart();
+    this.movementAudio.stop();
+    this.hud.showFlavorPing("Fresh start saved. Mossu is back at Burrow Hollow.");
+    this.syncHud();
+    this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
+    this.focusGameplaySurface();
+  }
+
   private focusNextRouteMapMarker() {
     if (routeLandmarks.length === 0) {
       return;
@@ -1321,13 +1452,18 @@ export class GameApp {
     this.movementAudio.unlock();
     this.gameplayFeedback.unlock();
     this.waterAudio.unlock();
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && this.titleScreen.contains(activeElement)) {
+      activeElement.blur();
+    }
+    this.renderer.domElement.tabIndex = -1;
+    this.renderer.domElement.focus({ preventScroll: true });
     this.titleScreen.classList.add("title-screen--hidden");
-    this.titleScreen.setAttribute("aria-hidden", "true");
+    this.titleScreen.inert = true;
     this.openingSequenceOverlay.classList.add("opening-sequence--visible");
     this.openingSequenceOverlay.setAttribute("aria-hidden", "false");
     this.followCamera.setOpeningSequenceProgress(0);
     this.suppressPostProcessing(OPENING_SEQUENCE_SECONDS + POST_PROCESSING_RESUME_DELAY_SECONDS);
-    this.renderer.domElement.tabIndex = -1;
     this.syncHud();
     this.focusGameplaySurface();
   };
@@ -1344,8 +1480,7 @@ export class GameApp {
     const sequenceAge = this.elapsed - this.openingSequenceStartedAt;
     const skipRequested =
       sequenceAge >= OPENING_SEQUENCE_SKIP_AFTER_SECONDS &&
-      (
-        Math.abs(input.moveX) > 0.01 ||
+      (Math.abs(input.moveX) > 0.01 ||
         Math.abs(input.moveY) > 0.01 ||
         input.jumpPressed ||
         input.abilityPressed ||
@@ -1354,8 +1489,7 @@ export class GameApp {
         input.interactPressed ||
         input.inventoryTogglePressed ||
         input.mapTogglePressed ||
-        input.escapePressed
-      );
+        input.escapePressed);
 
     this.openingSequenceOverlay.style.setProperty("--opening-progress", progress.toFixed(3));
     if (progress >= 1 || skipRequested) {

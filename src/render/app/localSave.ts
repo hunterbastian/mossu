@@ -10,6 +10,7 @@ export type StoredSaveStatePayload = {
     unlockedAbilities: string[];
     catalogedLandmarkIds: string[];
     gatheredForageableIds: string[];
+    recruitedKaruIds?: string[];
   };
 };
 
@@ -40,6 +41,7 @@ export function applyStoredSaveState(save: SaveState, payload: StoredSaveStatePa
   save.unlockedAbilities = new Set(payload.save.unlockedAbilities as AbilityId[]);
   save.catalogedLandmarkIds = new Set(payload.save.catalogedLandmarkIds ?? []);
   save.gatheredForageableIds = new Set(payload.save.gatheredForageableIds ?? []);
+  save.recruitedKaruIds = new Set(payload.save.recruitedKaruIds ?? []);
 }
 
 export function buildStoredSaveStatePayload(save: SaveState): StoredSaveStatePayload {
@@ -49,6 +51,7 @@ export function buildStoredSaveStatePayload(save: SaveState): StoredSaveStatePay
       unlockedAbilities: [...save.unlockedAbilities].sort(),
       catalogedLandmarkIds: [...save.catalogedLandmarkIds].sort(),
       gatheredForageableIds: [...save.gatheredForageableIds].sort(),
+      recruitedKaruIds: [...save.recruitedKaruIds].sort(),
     },
   };
 }
@@ -57,10 +60,15 @@ export function writeStoredSaveState(payload: StoredSaveStatePayload) {
   window.localStorage.setItem(LOCAL_SAVE_STORAGE_KEY, JSON.stringify(payload));
 }
 
+export function clearStoredSaveState() {
+  window.localStorage.removeItem(LOCAL_SAVE_STORAGE_KEY);
+}
+
 export function getSaveSignature(save: SaveState) {
   return [
     [...save.unlockedAbilities].sort().join(","),
     [...save.catalogedLandmarkIds].sort().join(","),
     [...save.gatheredForageableIds].sort().join(","),
+    [...save.recruitedKaruIds].sort().join(","),
   ].join("|");
 }

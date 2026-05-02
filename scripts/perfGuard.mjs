@@ -10,6 +10,7 @@ const distRoot = path.join(root, "dist");
 const defaultFixturePath = path.join(root, "scripts", "perf", "mossu-route-save.json");
 const defaultOutputPath = path.join(root, "output", "perf-guard", "latest.json");
 const defaultScreenshotDir = path.join(root, "output", "perf-guard", "route");
+const defaultBrowserTmpDir = path.join(root, ".codex-tmp", "playwright-tmp");
 const FRAME_MS = 1000 / 60;
 
 const contentTypes = {
@@ -192,11 +193,13 @@ function normalizeAngle(angle) {
 }
 
 function sanitizeFilePart(value) {
-  return String(value ?? "checkpoint")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 72) || "checkpoint";
+  return (
+    String(value ?? "checkpoint")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 72) || "checkpoint"
+  );
 }
 
 function paethPredictor(left, up, upLeft) {
@@ -395,26 +398,32 @@ async function releaseKeys(page, keys) {
 async function runRenderSegment(page, segment) {
   const durationMs = segment.durationMs ?? 1000;
   const frameCount = Math.max(1, Math.round(durationMs / FRAME_MS));
-  return page.evaluate(async ({ count, frameMs }) => {
-    const frames = [];
-    for (let frame = 0; frame < count; frame += 1) {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      const start = performance.now();
-      window.advanceTime?.(frameMs, true);
-      frames.push(performance.now() - start);
-    }
-    return frames;
-  }, { count: frameCount, frameMs: FRAME_MS });
+  return page.evaluate(
+    async ({ count, frameMs }) => {
+      const frames = [];
+      for (let frame = 0; frame < count; frame += 1) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const start = performance.now();
+        window.advanceTime?.(frameMs, true);
+        frames.push(performance.now() - start);
+      }
+      return frames;
+    },
+    { count: frameCount, frameMs: FRAME_MS },
+  );
 }
 
 async function runSimulationWarmup(page, segment) {
   const durationMs = segment.durationMs ?? 1000;
   const frameCount = Math.max(1, Math.round(durationMs / FRAME_MS));
-  await page.evaluate(({ count, frameMs }) => {
-    for (let frame = 0; frame < count; frame += 1) {
-      window.advanceTime?.(frameMs, false);
-    }
-  }, { count: frameCount, frameMs: FRAME_MS });
+  await page.evaluate(
+    ({ count, frameMs }) => {
+      for (let frame = 0; frame < count; frame += 1) {
+        window.advanceTime?.(frameMs, false);
+      }
+    },
+    { count: frameCount, frameMs: FRAME_MS },
+  );
 }
 
 async function collectVisualSnapshot(page) {
@@ -555,20 +564,25 @@ async function captureCheckpoint(page, args, fixture, checkpoint, index, frames 
   await runRenderSegment(page, { durationMs: FRAME_MS });
   let state = await readGameState(page);
   const screenshotCamera = checkpoint.screenshotCamera ?? null;
-  const screenshotHeading = Number.isFinite(screenshotCamera?.heading) ? screenshotCamera.heading : checkpoint.screenshotHeading;
+  const screenshotHeading = Number.isFinite(screenshotCamera?.heading)
+    ? screenshotCamera.heading
+    : checkpoint.screenshotHeading;
   if (Number.isFinite(screenshotHeading)) {
-    await page.evaluate((payload) => {
-      window.mossuDebug?.faceRouteHeading?.(payload.heading, payload.cameraOptions);
-    }, {
-      heading: screenshotHeading,
-      cameraOptions: screenshotCamera
-        ? {
-            distance: screenshotCamera.distance,
-            focusHeight: screenshotCamera.focusHeight,
-            lift: screenshotCamera.lift,
-          }
-        : undefined,
-    });
+    await page.evaluate(
+      (payload) => {
+        window.mossuDebug?.faceRouteHeading?.(payload.heading, payload.cameraOptions);
+      },
+      {
+        heading: screenshotHeading,
+        cameraOptions: screenshotCamera
+          ? {
+              distance: screenshotCamera.distance,
+              focusHeight: screenshotCamera.focusHeight,
+              lift: screenshotCamera.lift,
+            }
+          : undefined,
+      },
+    );
     await runRenderSegment(page, { durationMs: checkpoint.screenshotSettleMs ?? 260 });
     state = await readGameState(page);
   }
@@ -603,7 +617,9 @@ async function captureCheckpoint(page, args, fixture, checkpoint, index, frames 
     target: checkpoint.target ?? null,
     expectedLandmarkId: checkpoint.landmarkId ?? null,
     expectedLandmark: checkpoint.expectedLandmark ?? null,
-    reached: checkpoint.target ? routeDistance(state.player, checkpoint.target) <= (checkpoint.arrivalRadius ?? 18) : true,
+    reached: checkpoint.target
+      ? routeDistance(state.player, checkpoint.target) <= (checkpoint.arrivalRadius ?? 18)
+      : true,
     distanceToTarget: checkpoint.target ? round(routeDistance(state.player, checkpoint.target), 1) : null,
     frameSummary: summarizeCheckpointFrames(frames),
     state,
@@ -666,11 +682,13 @@ async function driveRouteWaypoint(page, waypoint) {
     }
     const keys = chooseRouteKeys(lastState, target, waypoint);
     await pressKeys(page, keys);
-    frames.push(...(await withTimeout(
-      `route burst ${waypoint.label}`,
-      Math.max(20_000, burstMs * 20),
-      runRenderSegment(page, { durationMs: burstMs }),
-    )));
+    frames.push(
+      ...(await withTimeout(
+        `route burst ${waypoint.label}`,
+        Math.max(20_000, burstMs * 20),
+        runRenderSegment(page, { durationMs: burstMs }),
+      )),
+    );
     await releaseKeys(page, keys);
     elapsedMs += burstMs;
     lastState = await readGameState(page);
@@ -708,15 +726,18 @@ async function replayRouteWaypoint(page, waypoint, route) {
     const t = step / steps;
     const x = start.x + (target.x - start.x) * t;
     const z = start.z + (target.z - start.z) * t;
-    await page.evaluate((payload) => {
-      window.mossuDebug?.applySaveState?.({
-        player: {
-          x: payload.x,
-          z: payload.z,
-          heading: payload.heading,
-        },
-      });
-    }, { x, z, heading });
+    await page.evaluate(
+      (payload) => {
+        window.mossuDebug?.applySaveState?.({
+          player: {
+            x: payload.x,
+            z: payload.z,
+            heading: payload.heading,
+          },
+        });
+      },
+      { x, z, heading },
+    );
     await runSimulationWarmup(page, { durationMs: waypoint.stepWarmupMs ?? route.stepWarmupMs ?? 220 });
     const measuredFrames = await withTimeout(
       `route replay ${waypoint.label}`,
@@ -741,18 +762,25 @@ async function runRouteWalk(page, args, fixture) {
   const checkpoints = [];
   const allFrames = [];
 
-  checkpoints.push(await captureCheckpoint(page, args, fixture, {
-    label: route.startLabel ?? "Burrow Hollow start",
-    target: fixture.save?.player,
-    landmarkId: route.startLandmarkId,
-  }, checkpoints.length));
+  checkpoints.push(
+    await captureCheckpoint(
+      page,
+      args,
+      fixture,
+      {
+        label: route.startLabel ?? "Burrow Hollow start",
+        target: fixture.save?.player,
+        landmarkId: route.startLandmarkId,
+      },
+      checkpoints.length,
+    ),
+  );
 
   for (const waypoint of route.waypoints ?? []) {
     const driver = waypoint.driver ?? route.driver ?? "replay";
     console.log(`perf:guard route ${driver}: ${waypoint.label} -> (${waypoint.target.x}, ${waypoint.target.z})`);
-    const segment = driver === "input"
-      ? await driveRouteWaypoint(page, waypoint)
-      : await replayRouteWaypoint(page, waypoint, route);
+    const segment =
+      driver === "input" ? await driveRouteWaypoint(page, waypoint) : await replayRouteWaypoint(page, waypoint, route);
     allFrames.push(...segment.frames);
     const checkpoint = await captureCheckpoint(page, args, fixture, waypoint, checkpoints.length, segment.frames);
     checkpoints.push({
@@ -777,11 +805,13 @@ async function runFixedSegments(page, fixture) {
     const keys = segment.keys ?? [];
     console.log(`perf:guard segment: ${segment.label ?? "unnamed"} (${segment.durationMs ?? 1000}ms)`);
     await pressKeys(page, keys);
-    frames.push(...(await withTimeout(
-      `segment ${segment.label ?? "unnamed"}`,
-      Math.max(60_000, (segment.durationMs ?? 1000) * 10),
-      runRenderSegment(page, segment),
-    )));
+    frames.push(
+      ...(await withTimeout(
+        `segment ${segment.label ?? "unnamed"}`,
+        Math.max(60_000, (segment.durationMs ?? 1000) * 10),
+        runRenderSegment(page, segment),
+      )),
+    );
     await releaseKeys(page, keys);
     frames.push(...(await runRenderSegment(page, { durationMs: FRAME_MS })));
   }
@@ -852,35 +882,69 @@ function findFailures({ fixture, args, initialState, finalState, frameSummary, c
         checkpoint.frameSummary.samples > 0 &&
         checkpoint.frameSummary.averageFps < routeGuardrails.minCheckpointAverageFps
       ) {
-        failures.push(`${checkpoint.label} average FPS ${checkpoint.frameSummary.averageFps} < ${routeGuardrails.minCheckpointAverageFps}`);
+        failures.push(
+          `${checkpoint.label} average FPS ${checkpoint.frameSummary.averageFps} < ${routeGuardrails.minCheckpointAverageFps}`,
+        );
       }
       if (
         Number.isFinite(routeGuardrails.maxCheckpointP95FrameMs) &&
         checkpoint.frameSummary.p95FrameMs > routeGuardrails.maxCheckpointP95FrameMs
       ) {
-        failures.push(`${checkpoint.label} p95 frame ${checkpoint.frameSummary.p95FrameMs}ms > ${routeGuardrails.maxCheckpointP95FrameMs}ms`);
+        failures.push(
+          `${checkpoint.label} p95 frame ${checkpoint.frameSummary.p95FrameMs}ms > ${routeGuardrails.maxCheckpointP95FrameMs}ms`,
+        );
       }
       if (checkpoint.screenshot?.error && visualGuardrails.requireScreenshot === true) {
         failures.push(`${checkpoint.label} screenshot failed: ${checkpoint.screenshot.error}`);
       }
-      if (Number.isFinite(visualGuardrails.minScreenshotBytes) && checkpoint.screenshot?.bytes < visualGuardrails.minScreenshotBytes) {
-        failures.push(`${checkpoint.label} screenshot ${checkpoint.screenshot.bytes} bytes < ${visualGuardrails.minScreenshotBytes}`);
+      if (
+        Number.isFinite(visualGuardrails.minScreenshotBytes) &&
+        checkpoint.screenshot?.bytes < visualGuardrails.minScreenshotBytes
+      ) {
+        failures.push(
+          `${checkpoint.label} screenshot ${checkpoint.screenshot.bytes} bytes < ${visualGuardrails.minScreenshotBytes}`,
+        );
       }
       if (checkpoint.visual?.available) {
-        if (Number.isFinite(visualGuardrails.minContrast) && checkpoint.visual.contrast < visualGuardrails.minContrast) {
-          failures.push(`${checkpoint.label} visual contrast ${checkpoint.visual.contrast} < ${visualGuardrails.minContrast}`);
+        if (
+          Number.isFinite(visualGuardrails.minContrast) &&
+          checkpoint.visual.contrast < visualGuardrails.minContrast
+        ) {
+          failures.push(
+            `${checkpoint.label} visual contrast ${checkpoint.visual.contrast} < ${visualGuardrails.minContrast}`,
+          );
         }
-        if (Number.isFinite(visualGuardrails.minAverageChroma) && checkpoint.visual.averageChroma < visualGuardrails.minAverageChroma) {
-          failures.push(`${checkpoint.label} visual chroma ${checkpoint.visual.averageChroma} < ${visualGuardrails.minAverageChroma}`);
+        if (
+          Number.isFinite(visualGuardrails.minAverageChroma) &&
+          checkpoint.visual.averageChroma < visualGuardrails.minAverageChroma
+        ) {
+          failures.push(
+            `${checkpoint.label} visual chroma ${checkpoint.visual.averageChroma} < ${visualGuardrails.minAverageChroma}`,
+          );
         }
-        if (Number.isFinite(visualGuardrails.minNonBlankRatio) && checkpoint.visual.nonBlankRatio < visualGuardrails.minNonBlankRatio) {
-          failures.push(`${checkpoint.label} nonblank pixels ${checkpoint.visual.nonBlankRatio} < ${visualGuardrails.minNonBlankRatio}`);
+        if (
+          Number.isFinite(visualGuardrails.minNonBlankRatio) &&
+          checkpoint.visual.nonBlankRatio < visualGuardrails.minNonBlankRatio
+        ) {
+          failures.push(
+            `${checkpoint.label} nonblank pixels ${checkpoint.visual.nonBlankRatio} < ${visualGuardrails.minNonBlankRatio}`,
+          );
         }
-        if (Number.isFinite(visualGuardrails.maxDarkRatio) && checkpoint.visual.darkRatio > visualGuardrails.maxDarkRatio) {
-          failures.push(`${checkpoint.label} dark pixels ${checkpoint.visual.darkRatio} > ${visualGuardrails.maxDarkRatio}`);
+        if (
+          Number.isFinite(visualGuardrails.maxDarkRatio) &&
+          checkpoint.visual.darkRatio > visualGuardrails.maxDarkRatio
+        ) {
+          failures.push(
+            `${checkpoint.label} dark pixels ${checkpoint.visual.darkRatio} > ${visualGuardrails.maxDarkRatio}`,
+          );
         }
-        if (Number.isFinite(visualGuardrails.maxLightRatio) && checkpoint.visual.lightRatio > visualGuardrails.maxLightRatio) {
-          failures.push(`${checkpoint.label} light pixels ${checkpoint.visual.lightRatio} > ${visualGuardrails.maxLightRatio}`);
+        if (
+          Number.isFinite(visualGuardrails.maxLightRatio) &&
+          checkpoint.visual.lightRatio > visualGuardrails.maxLightRatio
+        ) {
+          failures.push(
+            `${checkpoint.label} light pixels ${checkpoint.visual.lightRatio} > ${visualGuardrails.maxLightRatio}`,
+          );
         }
       } else if (visualGuardrails.requireVisualSnapshot) {
         failures.push(`${checkpoint.label} visual snapshot unavailable: ${checkpoint.visual?.reason ?? "unknown"}`);
@@ -911,21 +975,26 @@ function compareBaseline(current, baseline) {
       baselineP95FrameMs: baselineCheckpoint.frameSummary.p95FrameMs,
       averageFpsDelta: round(checkpoint.frameSummary.averageFps - baselineCheckpoint.frameSummary.averageFps, 1),
       p95FrameMsDelta: round(checkpoint.frameSummary.p95FrameMs - baselineCheckpoint.frameSummary.p95FrameMs, 2),
-      visualHashChanged: checkpoint.visual?.hash && baselineCheckpoint.visual?.hash
-        ? checkpoint.visual.hash !== baselineCheckpoint.visual.hash
-        : null,
-      contrastDelta: checkpoint.visual?.available && baselineCheckpoint.visual?.available
-        ? round(checkpoint.visual.contrast - baselineCheckpoint.visual.contrast, 1)
-        : null,
-      averageChromaDelta: checkpoint.visual?.available && baselineCheckpoint.visual?.available
-        ? round(checkpoint.visual.averageChroma - baselineCheckpoint.visual.averageChroma, 1)
-        : null,
-      nonBlankRatioDelta: checkpoint.visual?.available && baselineCheckpoint.visual?.available
-        ? round(checkpoint.visual.nonBlankRatio - baselineCheckpoint.visual.nonBlankRatio, 3)
-        : null,
-      screenshotBytesDelta: Number.isFinite(checkpoint.screenshot?.bytes) && Number.isFinite(baselineCheckpoint.screenshot?.bytes)
-        ? checkpoint.screenshot.bytes - baselineCheckpoint.screenshot.bytes
-        : null,
+      visualHashChanged:
+        checkpoint.visual?.hash && baselineCheckpoint.visual?.hash
+          ? checkpoint.visual.hash !== baselineCheckpoint.visual.hash
+          : null,
+      contrastDelta:
+        checkpoint.visual?.available && baselineCheckpoint.visual?.available
+          ? round(checkpoint.visual.contrast - baselineCheckpoint.visual.contrast, 1)
+          : null,
+      averageChromaDelta:
+        checkpoint.visual?.available && baselineCheckpoint.visual?.available
+          ? round(checkpoint.visual.averageChroma - baselineCheckpoint.visual.averageChroma, 1)
+          : null,
+      nonBlankRatioDelta:
+        checkpoint.visual?.available && baselineCheckpoint.visual?.available
+          ? round(checkpoint.visual.nonBlankRatio - baselineCheckpoint.visual.nonBlankRatio, 3)
+          : null,
+      screenshotBytesDelta:
+        Number.isFinite(checkpoint.screenshot?.bytes) && Number.isFinite(baselineCheckpoint.screenshot?.bytes)
+          ? checkpoint.screenshot.bytes - baselineCheckpoint.screenshot.bytes
+          : null,
     };
   });
   return {
@@ -936,8 +1005,7 @@ function compareBaseline(current, baseline) {
     averageFpsDelta: round(current.frameSummary.averageFps - baseline.frameSummary.averageFps, 1),
     p95FrameMsDelta: round(current.frameSummary.p95FrameMs - baseline.frameSummary.p95FrameMs, 2),
     rendererCallsDelta:
-      (current.finalState.performance?.renderer?.calls ?? 0) -
-      (baseline.finalState?.performance?.renderer?.calls ?? 0),
+      (current.finalState.performance?.renderer?.calls ?? 0) - (baseline.finalState?.performance?.renderer?.calls ?? 0),
     trianglesDelta:
       (current.finalState.performance?.renderer?.triangles ?? 0) -
       (baseline.finalState?.performance?.renderer?.triangles ?? 0),
@@ -959,7 +1027,8 @@ function findBaselineFailures(comparison, guardrails, args) {
   const maxP95FrameMs = args.maxP95FrameMs ?? guardrails.maxP95FrameMs;
   const minCheckpointAverageFps = routeGuardrails.minCheckpointAverageFps ?? minAverageFps;
   const maxCheckpointP95FrameMs = routeGuardrails.maxCheckpointP95FrameMs ?? maxP95FrameMs;
-  const maxCheckpointAverageFpsDrop = args.maxCheckpointAverageFpsDrop ?? baselineRouteGuardrails.maxCheckpointAverageFpsDrop;
+  const maxCheckpointAverageFpsDrop =
+    args.maxCheckpointAverageFpsDrop ?? baselineRouteGuardrails.maxCheckpointAverageFpsDrop;
   const maxCheckpointP95FrameMsIncrease =
     args.maxCheckpointP95FrameMsIncrease ?? baselineRouteGuardrails.maxCheckpointP95FrameMsIncrease;
   const failures = [];
@@ -1005,6 +1074,10 @@ function findBaselineFailures(comparison, guardrails, args) {
 
 async function run() {
   const args = parseArgs(process.argv.slice(2));
+  await mkdir(defaultBrowserTmpDir, { recursive: true });
+  process.env.TMPDIR ||= defaultBrowserTmpDir;
+  process.env.TEMP ||= defaultBrowserTmpDir;
+  process.env.TMP ||= defaultBrowserTmpDir;
   const fixture = await loadJson(args.fixture);
   const server = await createStaticServer();
   const consoleErrors = [];
@@ -1039,7 +1112,7 @@ async function run() {
       console.error(`browser console error: ${text}`);
     });
     page.on("pageerror", (error) => {
-      const text = error instanceof Error ? error.stack ?? error.message : String(error);
+      const text = error instanceof Error ? (error.stack ?? error.message) : String(error);
       consoleErrors.push(text);
       console.error(`browser page error: ${text}`);
     });
@@ -1075,7 +1148,7 @@ async function run() {
 
     const initialState = await readGameState(page);
     const routeResult = fixture.route ? await runRouteWalk(page, args, fixture) : null;
-    const frames = routeResult?.frames ?? await runFixedSegments(page, fixture);
+    const frames = routeResult?.frames ?? (await runFixedSegments(page, fixture));
 
     await page.waitForTimeout(100);
     const finalState = await readGameState(page);
@@ -1101,7 +1174,15 @@ async function run() {
         catalogedLandmarkIds: getCatalogedLandmarkIds(finalState),
       };
     }
-    result.failures = findFailures({ fixture, args, initialState, finalState, frameSummary, consoleErrors, routeResult });
+    result.failures = findFailures({
+      fixture,
+      args,
+      initialState,
+      finalState,
+      frameSummary,
+      consoleErrors,
+      routeResult,
+    });
 
     if (args.baseline) {
       try {
@@ -1133,7 +1214,9 @@ async function run() {
       `renderer calls ${perf.renderer?.calls ?? "?"}, tris ${perf.renderer?.triangles ?? "?"}, pixelRatio ${perf.pixelRatio ?? "?"}, bloom ${perf.bloomEnabled ? "on" : "off"}`,
     );
     if (result.route) {
-      console.log(`route checkpoints ${result.route.reached}/${result.route.total}; stamps ${result.route.catalogedLandmarkIds.join(", ") || "none"}`);
+      console.log(
+        `route checkpoints ${result.route.reached}/${result.route.total}; stamps ${result.route.catalogedLandmarkIds.join(", ") || "none"}`,
+      );
       for (const checkpoint of result.route.checkpoints) {
         console.log(
           `  ${checkpoint.reached ? "PASS" : "FAIL"} ${checkpoint.label}: z ${checkpoint.state.player?.z ?? "?"}, landmark ${checkpoint.state.landmark ?? "?"}, avg ${checkpoint.frameSummary.averageFps}fps, p95 ${checkpoint.frameSummary.p95FrameMs}ms, visual ${checkpoint.visual?.hash ?? checkpoint.visual?.reason ?? "n/a"}, shot ${checkpoint.screenshot?.path ?? "none"}`,

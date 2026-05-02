@@ -17,8 +17,13 @@ declare global {
     mossuDebug?: {
       completeOpeningSequence?: () => void;
       teleportPlayerTo?: (x: number, z: number) => void;
+      jumpTo?: (id: string) => boolean;
       applySaveState?: (payload: MossuDebugSaveStatePayload) => void;
-      faceRouteHeading?: (heading: number, cameraOptions?: { distance?: number; focusHeight?: number; lift?: number }) => void;
+      resetProgress?: () => void;
+      faceRouteHeading?: (
+        heading: number,
+        cameraOptions?: { distance?: number; focusHeight?: number; lift?: number },
+      ) => void;
       setWaterDepthDebug?: (enabled: boolean) => void;
       setLayerVisibility?: (layer: string, visible: boolean) => void;
       getLastFrameProfile?: () => Record<string, number> | null;
@@ -32,8 +37,13 @@ interface MossuAppRuntime {
   advanceTime: (ms: number, renderFrame?: boolean) => void;
   debugCompleteOpeningSequence?: () => void;
   debugTeleportPlayerTo?: (x: number, z: number) => void;
+  debugJumpToRouteSpot?: (id: string) => boolean;
   debugApplySaveState?: (payload: MossuDebugSaveStatePayload) => void;
-  debugFaceRouteHeading?: (heading: number, cameraOptions?: { distance?: number; focusHeight?: number; lift?: number }) => void;
+  debugResetProgress?: () => void;
+  debugFaceRouteHeading?: (
+    heading: number,
+    cameraOptions?: { distance?: number; focusHeight?: number; lift?: number },
+  ) => void;
   debugSetWaterDepthDebug?: (enabled: boolean) => void;
   debugSetLayerVisibility?: (layer: string, visible: boolean) => void;
   debugGetLastFrameProfile?: () => Record<string, number> | null;
@@ -52,6 +62,7 @@ interface MossuDebugSaveStatePayload {
     unlockedAbilities?: string[];
     catalogedLandmarkIds?: string[];
     gatheredForageableIds?: string[];
+    recruitedKaruIds?: string[];
   };
 }
 
@@ -125,11 +136,7 @@ window.addEventListener(
 window.addEventListener("unhandledrejection", (event) => {
   const reason = event.reason;
   const message =
-    reason instanceof Error
-      ? reason.message
-      : typeof reason === "string"
-        ? reason
-        : "Unhandled promise rejection";
+    reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "Unhandled promise rejection";
   surfaceRuntimeError({
     message,
     reason,
@@ -145,7 +152,9 @@ function attachRuntime(app: MossuAppRuntime, mode: MossuE2eBridge["mode"]) {
     window.mossuDebug = {
       completeOpeningSequence: () => app.debugCompleteOpeningSequence?.(),
       teleportPlayerTo: (x, z) => app.debugTeleportPlayerTo?.(x, z),
+      jumpTo: (id) => app.debugJumpToRouteSpot?.(id) ?? false,
       applySaveState: (payload) => app.debugApplySaveState?.(payload),
+      resetProgress: () => app.debugResetProgress?.(),
       faceRouteHeading: (heading, cameraOptions) => app.debugFaceRouteHeading?.(heading, cameraOptions),
       setWaterDepthDebug: (enabled) => app.debugSetWaterDepthDebug?.(enabled),
       setLayerVisibility: (layer, visible) => app.debugSetLayerVisibility?.(layer, visible),

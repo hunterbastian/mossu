@@ -48,30 +48,30 @@ function fixed(value: number, digits: number) {
 function buildCompactCoopStress(snapshot: CoopStressSnapshot | null) {
   return snapshot
     ? {
-      enabled: true,
-      remoteCount: snapshot.remoteCount,
-      recentEvents: snapshot.shared.recentEvents.length,
-    }
+        enabled: true,
+        remoteCount: snapshot.remoteCount,
+        recentEvents: snapshot.shared.recentEvents.length,
+      }
     : { enabled: false, remoteCount: 0, recentEvents: 0 };
 }
 
 function buildFullCoopStress(snapshot: CoopStressSnapshot | null) {
   return snapshot
     ? {
-      enabled: true,
-      remoteCount: snapshot.remoteCount,
-      remotePlayers: snapshot.remotePlayers.map((remote) => ({
-        id: remote.id,
-        label: remote.label,
-        activity: remote.activity,
-        x: fixed(remote.player.position.x, 1),
-        y: fixed(remote.player.position.y, 1),
-        z: fixed(remote.player.position.z, 1),
-        rolling: remote.player.rolling,
-        swimming: remote.player.swimming,
-      })),
-      shared: snapshot.shared,
-    }
+        enabled: true,
+        remoteCount: snapshot.remoteCount,
+        remotePlayers: snapshot.remotePlayers.map((remote) => ({
+          id: remote.id,
+          label: remote.label,
+          activity: remote.activity,
+          x: fixed(remote.player.position.x, 1),
+          y: fixed(remote.player.position.y, 1),
+          z: fixed(remote.player.position.z, 1),
+          rolling: remote.player.rolling,
+          swimming: remote.player.swimming,
+        })),
+        shared: snapshot.shared,
+      }
     : { enabled: false, remoteCount: 0 };
 }
 
@@ -104,6 +104,7 @@ export function serializeE2eGameTextState({
     save: {
       catalogedLandmarkIds: [...frame.save.catalogedLandmarkIds],
       gatheredForageableIds: [...frame.save.gatheredForageableIds],
+      recruitedKaruIds: [...frame.save.recruitedKaruIds],
       unlockedAbilities: [...frame.save.unlockedAbilities],
     },
     camera,
@@ -179,10 +180,12 @@ export function serializeGameTextState({
       unlockedAbilities: [...frame.save.unlockedAbilities],
       catalogedLandmarkIds: [...frame.save.catalogedLandmarkIds],
       gatheredForageableIds: [...frame.save.gatheredForageableIds],
+      recruitedKaruIds: [...frame.save.recruitedKaruIds],
       persistent: {
         enabled: savePersistenceEnabled,
         key: savePersistenceEnabled ? LOCAL_SAVE_STORAGE_KEY : null,
         version: LOCAL_SAVE_VERSION,
+        resetAvailable: true,
       },
     },
     coopStress: buildFullCoopStress(coopStressSnapshot),
@@ -197,6 +200,7 @@ export function serializeGameTextState({
         total: characterData.totals.total,
         focusedEntry: focusedCollection?.keepsakeTitle ?? null,
       },
+      progression: characterData.progression,
       gatheredGoods: {
         gathered: characterData.gatheredTotals.gathered,
         total: characterData.gatheredTotals.total,
@@ -204,10 +208,10 @@ export function serializeGameTextState({
         pouchCounts,
         nearby: frame.forageableTarget
           ? {
-            title: frame.forageableTarget.title,
-            kind: frame.forageableTarget.kind,
-            distance: fixed(frame.forageableTarget.distance, 1),
-          }
+              title: frame.forageableTarget.title,
+              kind: frame.forageableTarget.kind,
+              distance: fixed(frame.forageableTarget.distance, 1),
+            }
           : null,
       },
     },
@@ -215,9 +219,7 @@ export function serializeGameTextState({
       name: faunaStats.speciesName,
       recruited: faunaStats.recruitedCount,
       nearestRecruitableDistance:
-        faunaStats.nearestRecruitableDistance === null
-          ? null
-          : fixed(faunaStats.nearestRecruitableDistance, 1),
+        faunaStats.nearestRecruitableDistance === null ? null : fixed(faunaStats.nearestRecruitableDistance, 1),
       recruitedThisFrame: faunaStats.recruitedThisFrame,
       firstEncounterActive: faunaStats.firstEncounterActive,
       rollingCount: faunaStats.rollingCount,

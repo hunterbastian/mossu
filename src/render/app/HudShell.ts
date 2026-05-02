@@ -32,7 +32,7 @@ const POUCH_KIND_ORDER: ForageableKind[] = ["seed", "shell", "moss_tuft", "berry
 const POUCH_REVEAL_MS = 4200;
 const PICKUP_CARD_MS = 2200;
 type BinderSectionId = "profile" | "cards" | "pouch";
-type PauseCommandId = "resume" | "handbook" | "map";
+type PauseCommandId = "resume" | "handbook" | "map" | "reset-progress";
 
 export interface HudShellUpdate {
   frame: FrameState;
@@ -40,6 +40,7 @@ export interface HudShellUpdate {
   viewMode: ViewMode;
   pauseMenuOpen: boolean;
   characterScreenOpen: boolean;
+  savePersistenceEnabled: boolean;
   pointerLocked: boolean;
   focusedCollectionId: string | null;
   fauna: {
@@ -96,8 +97,10 @@ export class HudShell {
     area: document.createElement("p"),
     landmark: document.createElement("p"),
     breeze: document.createElement("p"),
+    trail: document.createElement("p"),
     collections: document.createElement("p"),
     goods: document.createElement("p"),
+    save: document.createElement("p"),
   };
   private readonly characterScreen = document.createElement("aside");
   private readonly characterSummary = document.createElement("p");
@@ -216,6 +219,7 @@ export class HudShell {
     viewMode,
     pauseMenuOpen,
     characterScreenOpen,
+    savePersistenceEnabled,
     pointerLocked,
     focusedCollectionId,
     fauna,
@@ -235,23 +239,19 @@ export class HudShell {
     const nearbyForageable = frame.forageableTarget;
     const faunaName = fauna.speciesName;
     const nearbyRecruitableFauna =
-      fauna.nearestRecruitableDistance !== null &&
-      fauna.nearestRecruitableDistance <= 18.5;
+      fauna.nearestRecruitableDistance !== null && fauna.nearestRecruitableDistance <= 18.5;
     const shouldShowControlsPanel = pauseMenuOpen || characterScreenOpen;
     const overlayOpen = isMapMode || pauseMenuOpen || characterScreenOpen;
     const cinematicFocus =
       !overlayOpen &&
-      (
-        frame.player.rolling ||
+      (frame.player.rolling ||
         frame.player.floating ||
         latestCollection !== undefined ||
         latestGatheredGood !== undefined ||
         fauna.recruitedThisFrame > 0 ||
-        fauna.firstEncounterActive
-      );
-    const staminaRatio = frame.player.staminaMax <= 0
-      ? 0
-      : MathUtils.clamp(frame.player.stamina / frame.player.staminaMax, 0, 1);
+        fauna.firstEncounterActive);
+    const staminaRatio =
+      frame.player.staminaMax <= 0 ? 0 : MathUtils.clamp(frame.player.stamina / frame.player.staminaMax, 0, 1);
     const currentLandmarkId = worldLandmarks.find((landmark) => landmark.title === frame.currentLandmark)?.id ?? "";
     const liveSignature = [
       viewMode,
@@ -288,6 +288,9 @@ export class HudShell {
       characterData.totals.total,
       characterData.gatheredTotals.gathered,
       characterData.gatheredTotals.total,
+      characterData.progression.label,
+      characterData.progression.percent,
+      savePersistenceEnabled ? 1 : 0,
       Math.round(windStrength * 100),
       this.selectedPouchKind ?? "",
       now < this.pickupCardHideAt ? 1 : 0,
@@ -315,28 +318,37 @@ export class HudShell {
     this.characterScreen.classList.toggle("character-screen--open", characterScreenOpen);
     this.controlsPanel.classList.toggle("controls-panel--visible", shouldShowControlsPanel);
     this.updateMapOverlay(frame, characterData, viewMode);
-    this.updatePauseMenu(frame, characterData, windStrength);
+    this.updatePauseMenu(frame, characterData, windStrength, savePersistenceEnabled);
     this.updateCharacterScreen(characterData, focusedCollectionId, characterScreenOpen);
-    this.updatePouchHud(characterData, nearbyForageable?.kind ?? null, latestGatheredGood?.forageableId ?? null, overlayOpen);
+    this.updatePouchHud(
+      characterData,
+      nearbyForageable?.kind ?? null,
+      latestGatheredGood?.forageableId ?? null,
+      overlayOpen,
+    );
     this.updatePickupCard(latestGatheredGood ?? null, overlayOpen);
 
     if (pauseMenuOpen) {
       this.statusValues.objectiveTitle.textContent = "Care paused";
-      this.statusValues.objectiveBody.textContent = "Movement is paused. Check Mossu's field guide, review the habitat route, or jump back in.";
+      this.statusValues.objectiveBody.textContent =
+        "Movement is paused. Check Mossu's field guide, review the habitat route, or jump back in.";
       this.statusValues.ability.textContent = "Care paused.";
-      this.statusValues.prompt.innerHTML = "<strong>Care pause</strong> Resume, open the field guide, or swing out to the habitat map.";
+      this.statusValues.prompt.innerHTML =
+        "<strong>Care pause</strong> Resume, open the field guide, or swing out to the habitat map.";
       this.controlsPanelStatus.innerHTML = "Everything is paused while the menu is open.";
       this.statusValues.hint.innerHTML = this.renderQuickActions([
         ["Esc", "resume"],
         ["Tab", "guide"],
         ["M", "map"],
+        ["Reset", "fresh start"],
       ]);
       return;
     }
 
     if (isMapMode) {
       this.statusValues.objectiveTitle.textContent = "Habitat view";
-      this.statusValues.objectiveBody.textContent = "The camera is pulled high above the island so the full route and water pockets glow on screen.";
+      this.statusValues.objectiveBody.textContent =
+        "The camera is pulled high above the island so the full route and water pockets glow on screen.";
       this.statusValues.ability.textContent = "Habitat map.";
       this.statusValues.prompt.innerHTML = "<strong>Habitat view</strong>";
       this.controlsPanelStatus.innerHTML =
@@ -352,17 +364,18 @@ export class HudShell {
 
     this.statusValues.objectiveTitle.textContent = frame.objective.title;
     this.statusValues.objectiveBody.textContent = frame.objective.body;
-    this.statusValues.ability.textContent = frame.player.waterMode === "underwater"
-      ? "Underwater pocket: hold Space to stroke up, release Q to surface."
-      : frame.player.swimming
-      ? "Deep water pocket: Space strokes, Q dips below the surface."
-      : frame.player.waterMode === "wading"
-      ? "Shallow shelf: darker water ahead is deep enough to swim."
-      : frame.player.floating
-      ? "Breeze Float active: Mossu is riding the wind."
-      : frame.player.rollModeReady
-      ? "Roll ready. Jump, then hold Q or Space to float."
-      : "Q in air or hold Space after jumping to Breeze Float.";
+    this.statusValues.ability.textContent =
+      frame.player.waterMode === "underwater"
+        ? "Underwater pocket: hold Space to stroke up, release Q to surface."
+        : frame.player.swimming
+          ? "Deep water pocket: Space strokes, Q dips below the surface."
+          : frame.player.waterMode === "wading"
+            ? "Shallow shelf: darker water ahead is deep enough to swim."
+            : frame.player.floating
+              ? "Breeze Float active: Mossu is riding the wind."
+              : frame.player.rollModeReady
+                ? "Roll ready. Jump, then hold Q or Space to float."
+                : "Q in air or hold Space after jumping to Breeze Float.";
 
     const faunaMoodIcon = this.renderFaunaMoodIcon(fauna.dominantMood);
     const faunaMoodLabel = `${fauna.dominantMood[0].toUpperCase()}${fauna.dominantMood.slice(1)}`;
@@ -385,7 +398,10 @@ export class HudShell {
     this.statusValues.prompt.classList.toggle("prompt-chip--ambient", !hasContextPrompt);
     this.statusValues.prompt.classList.toggle(
       "prompt-chip--actionable",
-      nearbyForageable !== null || nearbyRecruitableFauna || latestGatheredGood !== undefined || latestCollection !== undefined,
+      nearbyForageable !== null ||
+        nearbyRecruitableFauna ||
+        latestGatheredGood !== undefined ||
+        latestCollection !== undefined,
     );
     this.statusValues.prompt.classList.toggle("prompt-chip--danger", false);
     this.statusValues.hint.classList.toggle("hint-chip--ambient", pointerLocked && !hasContextPrompt);
@@ -396,7 +412,8 @@ export class HudShell {
     } else if (latestGatheredGood) {
       this.statusValues.prompt.innerHTML = `<strong>Sample gathered</strong> ${latestGatheredGood.title} is in Mossu's pouch.`;
     } else if (latestCollection?.landmarkId === "peak-shrine") {
-      this.statusValues.prompt.innerHTML = "<strong>Summit reached</strong> Moss Crown is stamped. The return circuit is open.";
+      this.statusValues.prompt.innerHTML =
+        "<strong>Summit reached</strong> Moss Crown is stamped. The return circuit is open.";
     } else if (latestCollection) {
       this.statusValues.prompt.innerHTML = `<strong>Field note stamped</strong> ${latestCollection.keepsakeTitle} joined the guide.`;
     } else if (nearbyForageable) {
@@ -414,9 +431,11 @@ export class HudShell {
     } else if (frame.player.waterMode === "underwater") {
       this.statusValues.prompt.innerHTML = "<strong>Underwater</strong> Hold Space to bob up toward the blue surface.";
     } else if (frame.player.swimming) {
-      this.statusValues.prompt.innerHTML = "<strong>Deep water</strong> Mossu can swim here. Pale rims mark the easiest banks out.";
+      this.statusValues.prompt.innerHTML =
+        "<strong>Deep water</strong> Mossu can swim here. Pale rims mark the easiest banks out.";
     } else if (frame.player.waterMode === "wading") {
-      this.statusValues.prompt.innerHTML = "<strong>Shallow shelf</strong> Mossu can wade here; deeper blue pockets switch to swimming.";
+      this.statusValues.prompt.innerHTML =
+        "<strong>Shallow shelf</strong> Mossu can wade here; deeper blue pockets switch to swimming.";
     } else if (nearbyRecruitableFauna) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>E Invite Karu</strong> They are close enough to join Mossu.</span>`;
     } else if (fauna.recruitedCount > 0) {
@@ -424,11 +443,13 @@ export class HudShell {
     } else if (nearbyCollection) {
       this.statusValues.prompt.innerHTML = `<strong>Landmark ahead</strong> Walk into ${nearbyCollection.landmarkTitle} to stamp it.`;
     } else {
-      this.statusValues.prompt.innerHTML = "<strong>Route pulse</strong> Follow the warm trail. Tab guide · M map · Esc rest";
+      this.statusValues.prompt.innerHTML =
+        "<strong>Route pulse</strong> Follow the warm trail. Tab guide · M map · Esc rest";
     }
 
     if (characterScreenOpen) {
-      this.controlsPanelStatus.innerHTML = "Movement pauses while the field guide is open. Press <strong>Tab</strong> or <strong>Esc</strong> to get back outside.";
+      this.controlsPanelStatus.innerHTML =
+        "Movement pauses while the field guide is open. Press <strong>Tab</strong> or <strong>Esc</strong> to get back outside.";
     } else if (pointerLocked) {
       this.controlsPanelStatus.innerHTML = `${MOVEMENT_CONTROL_SUMMARY}. Mouse look is active, the wheel zooms, and <strong>Esc</strong> pauses.`;
     } else {
@@ -452,7 +473,10 @@ export class HudShell {
     );
   }
 
-  private updatePickupCard(latestGatheredGood: CharacterScreenView["gatheredGoods"][number] | null, overlayOpen: boolean) {
+  private updatePickupCard(
+    latestGatheredGood: CharacterScreenView["gatheredGoods"][number] | null,
+    overlayOpen: boolean,
+  ) {
     const now = performance.now();
     if (
       latestGatheredGood &&
@@ -505,9 +529,7 @@ export class HudShell {
 
     const visibleKinds = POUCH_KIND_ORDER.filter((kind) => (gatheredCounts.get(kind) ?? 0) > 0 || kind === nearbyKind);
     const shouldShow =
-      !overlayOpen &&
-      visibleKinds.length > 0 &&
-      (nearbyKind !== null || performance.now() < this.pouchRevealUntil);
+      !overlayOpen && visibleKinds.length > 0 && (nearbyKind !== null || performance.now() < this.pouchRevealUntil);
     if (this.selectedPouchKind && !visibleKinds.includes(this.selectedPouchKind)) {
       this.selectedPouchKind = null;
     }
@@ -518,7 +540,9 @@ export class HudShell {
       shouldExpand ? "expanded" : "compact",
       nearbyKind ?? "none",
       focusedKind ?? "none",
-      ...POUCH_KIND_ORDER.map((kind) => `${kind}:${gatheredCounts.get(kind) ?? 0}:${visibleKinds.includes(kind) ? 1 : 0}`),
+      ...POUCH_KIND_ORDER.map(
+        (kind) => `${kind}:${gatheredCounts.get(kind) ?? 0}:${visibleKinds.includes(kind) ? 1 : 0}`,
+      ),
     ].join("|");
 
     this.pouchHud.classList.toggle("pouch-hud--visible", shouldShow);
@@ -540,7 +564,10 @@ export class HudShell {
           kind === focusedKind ? "pouch-hud__item--selected" : "",
         ].join(" ");
         chip.setAttribute("aria-pressed", kind === this.selectedPouchKind ? "true" : "false");
-        chip.setAttribute("aria-label", `${this.formatForageableKind(kind)}: ${gatheredCounts.get(kind) ?? 0} gathered`);
+        chip.setAttribute(
+          "aria-label",
+          `${this.formatForageableKind(kind)}: ${gatheredCounts.get(kind) ?? 0} gathered`,
+        );
         chip.addEventListener("pointerenter", () => {
           this.selectedPouchKind = kind;
           this.pouchSignature = "";
@@ -570,13 +597,14 @@ export class HudShell {
     if (focusedKind) {
       const count = gatheredCounts.get(focusedKind) ?? 0;
       this.pouchDetailTitle.textContent = this.formatForageableKind(focusedKind);
-      this.pouchDetailBody.textContent = focusedKind === nearbyKind
-        ? count > 0
-          ? `Nearby. Press E to tuck another into Mossu's pouch.`
-          : `Nearby. Press E to tuck the first one into Mossu's pouch.`
-        : count > 0
-          ? `${count} tucked away. Tab opens the binder cards.`
-          : "Not gathered yet.";
+      this.pouchDetailBody.textContent =
+        focusedKind === nearbyKind
+          ? count > 0
+            ? `Nearby. Press E to tuck another into Mossu's pouch.`
+            : `Nearby. Press E to tuck the first one into Mossu's pouch.`
+          : count > 0
+            ? `${count} tucked away. Tab opens the binder cards.`
+            : "Not gathered yet.";
     } else {
       this.pouchDetailTitle.textContent = "";
       this.pouchDetailBody.textContent = "";
@@ -587,16 +615,27 @@ export class HudShell {
     return `<span class="karu-mood-icon karu-mood-icon--${mood}" aria-hidden="true"></span>`;
   }
 
-  private updatePauseMenu(frame: FrameState, characterData: CharacterScreenView, windStrength: number) {
-    this.pauseSummary.textContent = `Mossu is resting in ${this.prettyZone(frame.currentZone)} with ${characterData.totals.discovered} field notes stamped and ${characterData.gatheredTotals.gathered} pouch goods gathered.`;
+  private updatePauseMenu(
+    frame: FrameState,
+    characterData: CharacterScreenView,
+    windStrength: number,
+    savePersistenceEnabled: boolean,
+  ) {
+    this.pauseSummary.textContent = `${characterData.progression.label}: ${characterData.progression.detail}`;
     this.pauseStatusValues.area.textContent = this.prettyZone(frame.currentZone);
     this.pauseStatusValues.landmark.textContent = frame.currentLandmark;
     this.pauseStatusValues.breeze.textContent = `${Math.round(windStrength * 100)}% drift`;
+    this.pauseStatusValues.trail.textContent = `${characterData.progression.percent}% route set`;
     this.pauseStatusValues.collections.textContent = `${characterData.totals.discovered}/${characterData.totals.total} logged`;
     this.pauseStatusValues.goods.textContent = `${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total} gathered`;
+    this.pauseStatusValues.save.textContent = savePersistenceEnabled ? "Autosave on" : "Session only";
   }
 
-  private updateCharacterScreen(characterData: CharacterScreenView, focusedCollectionId: string | null, isOpen: boolean) {
+  private updateCharacterScreen(
+    characterData: CharacterScreenView,
+    focusedCollectionId: string | null,
+    isOpen: boolean,
+  ) {
     if (!isOpen) {
       this.characterScreenSignature = "";
       return;
@@ -622,12 +661,12 @@ export class HudShell {
       (entry) => entry.forageableId === characterData.latestGatheredGoodId,
     );
 
-    const keepsakeRatio = characterData.totals.total <= 0
-      ? 0
-      : characterData.totals.discovered / characterData.totals.total;
-    const goodsRatio = characterData.gatheredTotals.total <= 0
-      ? 0
-      : characterData.gatheredTotals.gathered / characterData.gatheredTotals.total;
+    const keepsakeRatio =
+      characterData.totals.total <= 0 ? 0 : characterData.totals.discovered / characterData.totals.total;
+    const goodsRatio =
+      characterData.gatheredTotals.total <= 0
+        ? 0
+        : characterData.gatheredTotals.gathered / characterData.gatheredTotals.total;
     const totalCollected = characterData.totals.discovered + characterData.gatheredTotals.gathered;
     const totalCollectibles = characterData.totals.total + characterData.gatheredTotals.total;
     const totalRatio = totalCollectibles <= 0 ? 0 : totalCollected / totalCollectibles;
@@ -768,7 +807,9 @@ export class HudShell {
 
         const rarity = document.createElement("p");
         rarity.className = "inventory-holo-card__rarity";
-        rarity.textContent = entry.discovered ? this.cardSeriesLabel(index, characterData.collections.length) : "unfound";
+        rarity.textContent = entry.discovered
+          ? this.cardSeriesLabel(index, characterData.collections.length)
+          : "unfound";
 
         const title = document.createElement("h3");
         title.className = "collection-entry__title";
@@ -916,7 +957,12 @@ export class HudShell {
     this.statusValues.hint.className = "hint-chip";
     this.statusValues.ability.className = "ability-pill";
     bottomStack.append(this.statusValues.prompt, this.buildControlsPanel(), this.statusValues.hint);
-    utilityStack.append(this.buildPouchHud(), this.buildRollModeHud(), this.buildStaminaHud(), this.statusValues.ability);
+    utilityStack.append(
+      this.buildPouchHud(),
+      this.buildRollModeHud(),
+      this.buildStaminaHud(),
+      this.statusValues.ability,
+    );
     bottom.append(bottomStack, utilityStack);
 
     top.append(status);
@@ -1104,7 +1150,9 @@ export class HudShell {
     const progress = MathUtils.clamp(holdSeconds / ROLL_MODE_INDICATOR_DELAY, 0, 1);
     const visible = !overlayOpen && (rolling || holdSeconds > 0 || ready);
     this.rollModeHud.style.setProperty("--roll-progress", progress.toFixed(3));
-    this.rollModeValue.textContent = ready ? "ready" : `${Math.ceil(Math.max(0, ROLL_MODE_INDICATOR_DELAY - holdSeconds))}s`;
+    this.rollModeValue.textContent = ready
+      ? "ready"
+      : `${Math.ceil(Math.max(0, ROLL_MODE_INDICATOR_DELAY - holdSeconds))}s`;
     this.rollModeHud.classList.toggle("roll-mode-hud--visible", visible);
     this.rollModeHud.classList.toggle("roll-mode-hud--active", ready);
   }
@@ -1147,7 +1195,15 @@ export class HudShell {
     previewCard.className = "character-screen__preview-card";
     previewCard.append(previewElement);
     this.characterNearby.className = "character-screen__nearby";
-    aside.append(eyebrow, title, this.characterSummary, this.characterStamp, this.characterProgress, previewCard, this.characterNearby);
+    aside.append(
+      eyebrow,
+      title,
+      this.characterSummary,
+      this.characterStamp,
+      this.characterProgress,
+      previewCard,
+      this.characterNearby,
+    );
 
     const content = document.createElement("div");
     content.className = "character-screen__content";
@@ -1224,7 +1280,12 @@ export class HudShell {
     return tabs;
   }
 
-  private buildCharacterProgressRow(labelText: string, kind: "keepsake" | "goods", valueNode: HTMLElement, fillNode: HTMLElement) {
+  private buildCharacterProgressRow(
+    labelText: string,
+    kind: "keepsake" | "goods",
+    valueNode: HTMLElement,
+    fillNode: HTMLElement,
+  ) {
     const row = document.createElement("div");
     row.className = `character-screen__progress-row character-screen__progress-row--${kind}`;
 
@@ -1285,8 +1346,24 @@ export class HudShell {
     actions.className = "pause-menu__actions";
     actions.append(
       this.buildPauseAction("resume", "Esc", "Resume care", "Return to the meadow exactly where Mossu paused."),
-      this.buildPauseAction("handbook", "Tab", "Field guide", "Check habitat notes, route traits, trail moves, and pouch samples."),
-      this.buildPauseAction("map", "M", "Habitat view", "Pull the camera above the island with no extra map panel covering the scenery."),
+      this.buildPauseAction(
+        "handbook",
+        "Tab",
+        "Field guide",
+        "Check habitat notes, route traits, trail moves, and pouch samples.",
+      ),
+      this.buildPauseAction(
+        "map",
+        "M",
+        "Habitat view",
+        "Pull the camera above the island with no extra map panel covering the scenery.",
+      ),
+      this.buildPauseAction(
+        "reset-progress",
+        "Reset",
+        "Fresh start",
+        "Clear saved notes and samples, then return to Burrow Hollow.",
+      ),
     );
 
     const settings = document.createElement("section");
@@ -1310,8 +1387,10 @@ export class HudShell {
       this.buildPauseStat("Habitat", this.pauseStatusValues.area),
       this.buildPauseStat("Landmark", this.pauseStatusValues.landmark),
       this.buildPauseStat("Breeze", this.pauseStatusValues.breeze),
+      this.buildPauseStat("Trail", this.pauseStatusValues.trail),
       this.buildPauseStat("Notes", this.pauseStatusValues.collections),
       this.buildPauseStat("Samples", this.pauseStatusValues.goods),
+      this.buildPauseStat("Save", this.pauseStatusValues.save),
     );
 
     shell.append(header, actions, settings, status);
@@ -1322,7 +1401,7 @@ export class HudShell {
   private buildPauseAction(command: PauseCommandId, keyText: string, titleText: string, bodyText: string) {
     const article = document.createElement("button");
     article.type = "button";
-    article.className = "pause-action";
+    article.className = `pause-action pause-action--${command}`;
     article.dataset.uiCommand = command;
 
     const key = document.createElement("kbd");
@@ -1865,11 +1944,17 @@ export class HudShell {
     if (kind === "ancient") {
       crown.setAttribute("d", "M -8 8 L -8 -6 Q -3 -12 0 -4 Q 3 -12 8 -6 L 8 8 M -11 8 L 11 8 M -6 3 Q 0 -2 6 3");
     } else if (kind === "fruit") {
-      crown.setAttribute("d", "M 0 -10 C 8 -10 13 -5 12 2 C 11 9 5 12 0 9 C -5 12 -11 9 -12 2 C -13 -5 -8 -10 0 -10 Z M -3 1 A 1.4 1.4 0 1 0 -3.1 1");
+      crown.setAttribute(
+        "d",
+        "M 0 -10 C 8 -10 13 -5 12 2 C 11 9 5 12 0 9 C -5 12 -11 9 -12 2 C -13 -5 -8 -10 0 -10 Z M -3 1 A 1.4 1.4 0 1 0 -3.1 1",
+      );
     } else if (kind === "grove") {
       crown.setAttribute("d", "M -11 5 C -13 -4 -6 -10 0 -8 C 6 -10 13 -4 11 5 C 8 11 -8 11 -11 5 Z M 0 9 L 0 2");
     } else {
-      crown.setAttribute("d", "M -10 8 L -5 0 L -8 0 L -3 -7 L -5 -7 L 0 -13 L 5 -7 L 3 -7 L 8 0 L 5 0 L 10 8 Z M 0 8 L 0 0");
+      crown.setAttribute(
+        "d",
+        "M -10 8 L -5 0 L -8 0 L -3 -7 L -5 -7 L 0 -13 L 5 -7 L 3 -7 L 8 0 L 5 0 L 10 8 Z M 0 8 L 0 0",
+      );
     }
     group.append(crown);
     return group;
@@ -1943,26 +2028,33 @@ export class HudShell {
     }
 
     const playerPoint = projectWorldToMap(frame.player.position.x, frame.player.position.z);
-    this.mapPlayerMarker.group.setAttribute("transform", `translate(${playerPoint.x.toFixed(1)} ${playerPoint.y.toFixed(1)})`);
+    this.mapPlayerMarker.group.setAttribute(
+      "transform",
+      `translate(${playerPoint.x.toFixed(1)} ${playerPoint.y.toFixed(1)})`,
+    );
 
     const currentLandmarkId = worldLandmarks.find((landmark) => landmark.title === frame.currentLandmark)?.id ?? null;
     const currentRouteLandmark = currentLandmarkId
-      ? routeLandmarks.find((landmark) => landmark.id === currentLandmarkId) ?? null
+      ? (routeLandmarks.find((landmark) => landmark.id === currentLandmarkId) ?? null)
       : null;
-    const nextRouteLandmark = routeLandmarks.find((landmark) => !frame.save.catalogedLandmarkIds.has(landmark.id)) ?? null;
+    const nextRouteLandmark =
+      routeLandmarks.find((landmark) => !frame.save.catalogedLandmarkIds.has(landmark.id)) ?? null;
 
     this.mapCurrentTitle.textContent = "Mossu habitat map";
     this.mapCurrentBody.textContent = frame.currentLandmark;
-    const completedRouteCount = routeLandmarks.filter((landmark) => frame.save.catalogedLandmarkIds.has(landmark.id)).length;
+    const completedRouteCount = routeLandmarks.filter((landmark) =>
+      frame.save.catalogedLandmarkIds.has(landmark.id),
+    ).length;
     const isSkywardStop = currentRouteLandmark?.id === "skyward-ledge" || nextRouteLandmark?.id === "skyward-ledge";
     const routeCopy = isSkywardStop
       ? "pause on the ledge for one long overlook before the final traverse."
       : "follow the river north and stay on the marked route.";
-    this.mapNextStop.textContent = currentRouteLandmark && !frame.save.catalogedLandmarkIds.has(currentRouteLandmark.id)
-      ? `Current stop: ${currentRouteLandmark.title}. Route progress ${completedRouteCount}/${routeLandmarks.length}. Drift through it to stamp the climb, then ${routeCopy}`
-      : nextRouteLandmark
-        ? `Next stop: ${nextRouteLandmark.title}. Route progress ${completedRouteCount}/${routeLandmarks.length}. ${routeCopy.charAt(0).toUpperCase() + routeCopy.slice(1)}`
-        : `Route complete. Mossu has already mapped the whole climb to the shrine with ${characterData.gatheredTotals.gathered} samples tucked away.`;
+    this.mapNextStop.textContent =
+      currentRouteLandmark && !frame.save.catalogedLandmarkIds.has(currentRouteLandmark.id)
+        ? `Current stop: ${currentRouteLandmark.title}. Route progress ${completedRouteCount}/${routeLandmarks.length}. Drift through it to stamp the climb, then ${routeCopy}`
+        : nextRouteLandmark
+          ? `Next stop: ${nextRouteLandmark.title}. Route progress ${completedRouteCount}/${routeLandmarks.length}. ${routeCopy.charAt(0).toUpperCase() + routeCopy.slice(1)}`
+          : `Route complete. Mossu has already mapped the whole climb to the shrine with ${characterData.gatheredTotals.gathered} samples tucked away.`;
     this.mapCollectionsSummary.textContent = `${characterData.totals.discovered}/${characterData.totals.total} field notes logged and ${characterData.gatheredTotals.gathered}/${characterData.gatheredTotals.total} samples gathered so far.`;
     this.mapStamp.textContent = `${characterData.totals.discovered} notes · ${characterData.gatheredTotals.gathered} samples`;
 
@@ -2025,9 +2117,7 @@ export class HudShell {
   }
 
   private formatForageableKind(kind: string) {
-    return kind
-      .replace("_", " ")
-      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    return kind.replace("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
   private formatForageableSymbol(kind: ForageableKind) {

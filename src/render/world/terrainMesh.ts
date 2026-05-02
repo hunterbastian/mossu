@@ -32,9 +32,32 @@ import { sampleOpeningMeadowMask } from "./worldMasks";
 const WORLD_SIZE = MOSSU_PLAYFIELD_EXTENT;
 const TERRAIN_SEGMENTS = 192;
 const terrainArt = OOT_PS2_GRASSLANDS_PALETTE.terrain;
+const animeWarmPaper = new Color("#f1d987");
+const animeCoolShade = new Color("#6f9690");
+const animeInkGreen = new Color("#6f855e");
 
 function ovalMask(x: number, z: number, centerX: number, centerZ: number, radiusX: number, radiusZ: number) {
-  return Math.exp(-(((x - centerX) / radiusX) ** 2) - (((z - centerZ) / radiusZ) ** 2));
+  return Math.exp(-(((x - centerX) / radiusX) ** 2) - ((z - centerZ) / radiusZ) ** 2);
+}
+
+function applyAnimeTerrainGrade(
+  color: Color,
+  grasslandsArtDirection: number,
+  scenicTravelBand: number,
+  snowMask: number,
+  islandEdge: number,
+) {
+  const luma = color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722;
+  const shadow = 1 - MathUtils.smoothstep(luma, 0.22, 0.58);
+  const highlight = MathUtils.smoothstep(luma, 0.5, 0.94);
+  const bandedLuma = Math.round(luma * 6) / 6;
+  const bandScale = bandedLuma / Math.max(luma, 0.001);
+  color.multiplyScalar(MathUtils.lerp(1, bandScale, 0.08 + grasslandsArtDirection * 0.04));
+  color.lerp(animeCoolShade, shadow * (0.045 + scenicTravelBand * 0.012) * (1 - snowMask * 0.4));
+  color.lerp(animeWarmPaper, highlight * (0.035 + grasslandsArtDirection * 0.045) * (1 - snowMask * 0.55));
+  color.lerp(animeInkGreen, MathUtils.clamp((1 - islandEdge) * shadow * 0.022, 0, 0.05));
+  color.offsetHSL(-0.004, 0.018 + grasslandsArtDirection * 0.012, 0.004);
+  return color;
 }
 
 function colorForTerrain(x: number, y: number, z: number) {
@@ -57,9 +80,21 @@ function colorForTerrain(x: number, y: number, z: number) {
   const startingWaterDampBank = sampleStartingWaterDampBankMask(x, z);
   const startingWaterWetness = sampleStartingWaterWetness(x, z);
   const bankShape = sampleWaterBankShape(x, z);
-  const waterShoreMask = MathUtils.clamp(riverDampBank + startingWaterDampBank + startingWaterWetness * 0.18 + bankShape.dampBand * 0.42, 0, 1);
-  const wetBankLine = MathUtils.clamp(riverDampBank * 0.72 + startingWaterDampBank * 0.8 + bankShape.dampBand * 0.72, 0, 1);
-  const dryLipLine = MathUtils.clamp((riverDampBank + startingWaterDampBank) * (1 - startingWaterWetness * 0.25) + bankShape.dryLip * 0.8 - slope * 0.28, 0, 1);
+  const waterShoreMask = MathUtils.clamp(
+    riverDampBank + startingWaterDampBank + startingWaterWetness * 0.18 + bankShape.dampBand * 0.42,
+    0,
+    1,
+  );
+  const wetBankLine = MathUtils.clamp(
+    riverDampBank * 0.72 + startingWaterDampBank * 0.8 + bankShape.dampBand * 0.72,
+    0,
+    1,
+  );
+  const dryLipLine = MathUtils.clamp(
+    (riverDampBank + startingWaterDampBank) * (1 - startingWaterWetness * 0.25) + bankShape.dryLip * 0.8 - slope * 0.28,
+    0,
+    1,
+  );
   const sandbarLine = MathUtils.clamp(bankShape.sandbarLift * 0.86 + bankShape.pebbleBand * 0.28, 0, 1);
   const coveShade = MathUtils.clamp(bankShape.coveCut * 0.64 + bankShape.shelfCut * 0.28, 0, 1);
   const paintedGround = samplePaintedGroundMask(x, z) * (1 - waterShoreMask * 0.42);
@@ -73,8 +108,8 @@ function colorForTerrain(x: number, y: number, z: number) {
   const heightGrass = MathUtils.clamp(MathUtils.smoothstep(y, 8, 82), 0, 1);
   const foothillTint = MathUtils.clamp(MathUtils.smoothstep(y, 38, 98), 0, 1);
   const alpineTint = MathUtils.clamp(MathUtils.smoothstep(y, 84, 148), 0, 1);
-  const foothillTravelBand = Math.exp(-(((x - 18) / 134) ** 2) - (((z - 106) / 108) ** 2));
-  const ridgeTravelBand = Math.exp(-(((x + 2) / 144) ** 2) - (((z - 178) / 118) ** 2));
+  const foothillTravelBand = Math.exp(-(((x - 18) / 134) ** 2) - ((z - 106) / 108) ** 2);
+  const ridgeTravelBand = Math.exp(-(((x + 2) / 144) ** 2) - ((z - 178) / 118) ** 2);
   const scenicTravelBand = MathUtils.clamp(
     Math.max(foothillTravelBand, ridgeTravelBand) + routeClearing * 0.38 + biomeTransitionOpen * 0.28,
     0,
@@ -111,18 +146,12 @@ function colorForTerrain(x: number, y: number, z: number) {
     ovalMask(x, z, 108, -34, 62, 54),
     ovalMask(x, z, -26, 76, 58, 50),
   );
-  const codexAncientGrounds = Math.max(
-    ovalMask(x, z, -90, 132, 58, 58),
-    ovalMask(x, z, 84, 148, 62, 62),
-  );
-  const codexWoodlandPath = Math.max(
-    ovalMask(x, z, -34, 84, 68, 52),
-    ovalMask(x, z, 42, 124, 66, 58),
-  );
+  const codexAncientGrounds = Math.max(ovalMask(x, z, -90, 132, 58, 58), ovalMask(x, z, 84, 148, 62, 62));
+  const codexWoodlandPath = Math.max(ovalMask(x, z, -34, 84, 68, 52), ovalMask(x, z, 42, 124, 66, 58));
   const canopyDapple = MathUtils.clamp(
     (Math.sin(x * 0.14 + z * 0.05) * Math.cos(z * 0.12 - x * 0.04) * 0.5 + 0.5) *
-    Math.max(codexDeepWoods, codexPeacefulGroves, codexAncientGrounds, codexWoodlandPath * 0.86) *
-    (1 - routeClearing * 0.38),
+      Math.max(codexDeepWoods, codexPeacefulGroves, codexAncientGrounds, codexWoodlandPath * 0.86) *
+      (1 - routeClearing * 0.38),
     0,
     1,
   );
@@ -130,13 +159,18 @@ function colorForTerrain(x: number, y: number, z: number) {
   const cliffSilhouette = MathUtils.clamp(northSilhouette * MathUtils.smoothstep(slope, 0.18, 0.55), 0, 0.24);
   const altitudeRock = MathUtils.smoothstep(y, 54, 132) * 0.34;
   const zoneRockBoost =
-    zone === "foothills" ? 0.18 :
-    zone === "alpine" ? 0.42 :
-    zone === "ridge" ? 0.58 :
-    zone === "peak_shrine" ? 0.6 :
-    0;
+    zone === "foothills" ? 0.18 : zone === "alpine" ? 0.42 : zone === "ridge" ? 0.58 : zone === "peak_shrine" ? 0.6 : 0;
   const routeRockCarve = routeClearing * (0.12 + scenicTravelBand * 0.08);
-  const rockMask = MathUtils.clamp(slopeRock + altitudeRock + zoneRockBoost + cliffSilhouette - routeRockCarve, 0, 0.96);
+  const rockMask = MathUtils.clamp(
+    slopeRock + altitudeRock + zoneRockBoost + cliffSilhouette - routeRockCarve,
+    0,
+    0.96,
+  );
+  const routeEdgeStroke = MathUtils.clamp(
+    routeClearing * (1 - routeDirt) * (0.32 + pathBands * 0.28 + scenicTravelBand * 0.12) * (1 - rockMask * 0.58),
+    0,
+    1,
+  );
   const snowBase =
     MathUtils.smoothstep(y, 118, 166) * 0.9 +
     MathUtils.smoothstep(z, 170, 232) * 0.3 +
@@ -146,13 +180,11 @@ function colorForTerrain(x: number, y: number, z: number) {
   const snowMask = MathUtils.clamp(snowBase * rockSnowDampen * (1 - routeClearing * 0.22), 0, 0.92);
   const grasslandsArtDirection = MathUtils.clamp(
     (1 - journeyNorth * 0.48) *
-      (
-        habitat.meadow * 0.54 +
+      (habitat.meadow * 0.54 +
         openingMask * 0.5 +
         scenicTravelBand * 0.3 +
         biomeTransitionOpen * 0.16 +
-        (zone === "plains" || zone === "hills" ? 0.24 : 0)
-      ),
+        (zone === "plains" || zone === "hills" ? 0.24 : 0)),
     0,
     1,
   );
@@ -164,7 +196,10 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color(terrainArt.groveSunlitFloor), codexPeacefulGroves * (0.16 + canopyDapple * 0.12))
     .lerp(new Color(terrainArt.forestDeepFloor), codexDeepWoods * (0.22 + (1 - canopyDapple) * 0.12))
     .lerp(new Color(terrainArt.ancientMossFloor), codexAncientGrounds * 0.2)
-    .lerp(new Color(terrainArt.forestDeepFloor), codexWoodlandPath * (0.1 + canopyDapple * 0.08) * (1 - routeClearing * 0.42))
+    .lerp(
+      new Color(terrainArt.forestDeepFloor),
+      codexWoodlandPath * (0.1 + canopyDapple * 0.08) * (1 - routeClearing * 0.42),
+    )
     .lerp(new Color(terrainArt.forestDappleWarm), canopyDapple * 0.08 * (1 - codexDeepWoods * 0.38))
     .lerp(new Color(terrainArt.foothillGreen), foothillTint * 0.2)
     .lerp(new Color(terrainArt.alpineSage), alpineTint * 0.22)
@@ -180,13 +215,19 @@ function colorForTerrain(x: number, y: number, z: number) {
   );
   grass.lerp(new Color(terrainArt.wildflower), wildflowerPunch);
   const zoneGreenRead =
-    zone === "plains" ? { lerp: new Color(terrainArt.zonePlains), w: 0.2 } :
-    zone === "hills" ? { lerp: new Color(terrainArt.zoneHills), w: 0.2 } :
-    zone === "foothills" ? { lerp: new Color(terrainArt.zoneFoothills), w: 0.22 } :
-    zone === "alpine" ? { lerp: new Color(terrainArt.zoneAlpine), w: 0.28 } :
-    zone === "ridge" ? { lerp: new Color(terrainArt.zoneRidge), w: 0.26 } :
-    zone === "peak_shrine" ? { lerp: new Color(terrainArt.zonePeakShrine), w: 0.22 } :
-    { lerp: grass, w: 0 };
+    zone === "plains"
+      ? { lerp: new Color(terrainArt.zonePlains), w: 0.2 }
+      : zone === "hills"
+        ? { lerp: new Color(terrainArt.zoneHills), w: 0.2 }
+        : zone === "foothills"
+          ? { lerp: new Color(terrainArt.zoneFoothills), w: 0.22 }
+          : zone === "alpine"
+            ? { lerp: new Color(terrainArt.zoneAlpine), w: 0.28 }
+            : zone === "ridge"
+              ? { lerp: new Color(terrainArt.zoneRidge), w: 0.26 }
+              : zone === "peak_shrine"
+                ? { lerp: new Color(terrainArt.zonePeakShrine), w: 0.22 }
+                : { lerp: grass, w: 0 };
   if (zoneGreenRead.w > 0) {
     grass.lerp(zoneGreenRead.lerp, zoneGreenRead.w * (1 - biomeTransitionOpen * 0.42));
   }
@@ -196,12 +237,18 @@ function colorForTerrain(x: number, y: number, z: number) {
     1,
   );
   grass.lerp(new Color(terrainArt.zoneSplatDark), zoneSplatB * 0.035);
-  grass.lerp(new Color(terrainArt.zoneBreakupLight), (1 - zoneSplatB) * microBreakup * (0.06 + grasslandsArtDirection * 0.04));
+  grass.lerp(
+    new Color(terrainArt.zoneBreakupLight),
+    (1 - zoneSplatB) * microBreakup * (0.06 + grasslandsArtDirection * 0.04),
+  );
   const rock = new Color(terrainArt.rockBase)
     .lerp(new Color(terrainArt.rockLight), 0.18 + mixValue * 0.22)
     .lerp(new Color(terrainArt.rockSlope), MathUtils.clamp(slope * 1.22 + alpineTint * 0.4, 0, 0.82))
     .lerp(new Color(terrainArt.rockTravel), MathUtils.clamp(scenicTravelBand * 0.18 + routeClearing * 0.12, 0, 0.24));
-  const snow = new Color(terrainArt.snowBase).lerp(new Color(terrainArt.snowCool), MathUtils.clamp(slope * 0.8 + painterlyNoise * 1.6, 0, 0.48));
+  const snow = new Color(terrainArt.snowBase).lerp(
+    new Color(terrainArt.snowCool),
+    MathUtils.clamp(slope * 0.8 + painterlyNoise * 1.6, 0, 0.48),
+  );
   const paintedEarth = new Color(terrainArt.paintedEarthBase)
     .lerp(new Color(terrainArt.paintedEarthWarm), MathUtils.clamp(0.3 + pathBands * 0.3 + openingMask * 0.18, 0, 1))
     .lerp(new Color(terrainArt.paintedEarthHigh), foothillTint * 0.2 + alpineTint * 0.18)
@@ -220,8 +267,11 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(paintedEarth, paintedGround * (0.42 + (1 - slopeRock) * 0.24))
     .lerp(
       wornDirt,
-      routeDirt * (0.42 + MathUtils.clamp(journeyNorth * 0.08 + scenicTravelBand * 0.1, 0, 0.14)) * (1 - rockMask * 0.86),
+      routeDirt *
+        (0.52 + MathUtils.clamp(journeyNorth * 0.1 + scenicTravelBand * 0.12, 0, 0.18)) *
+        (1 - rockMask * 0.86),
     )
+    .lerp(new Color(terrainArt.formRoute), routeEdgeStroke * 0.12)
     .lerp(sandbar, sandbarLine * 0.34)
     .lerp(new Color(terrainArt.wetBank), wetBankLine * 0.16)
     .lerp(new Color(terrainArt.coveShade), coveShade * 0.06)
@@ -241,18 +291,20 @@ function colorForTerrain(x: number, y: number, z: number) {
     .lerp(new Color("#8d8067"), worldRegion.ridge * 0.18 * (1 - snowMask * 0.4))
     .lerp(new Color("#a9c86e"), worldRegion.shrine * 0.16);
   const islandHeart = (1 - MathUtils.clamp(islandEdge, 0, 1)) ** 1.2;
-  let out = new Color(terrainColor).lerp(
-    new Color(terrainArt.islandHeart),
-    islandHeart * 0.1 * (1 - snowMask * 0.45),
-  );
-  const islandRimMask = MathUtils.clamp((islandEdge - 0.36) * 1.05, 0, 1)
-    * (1 - MathUtils.smoothstep(0.88, 0.99, islandEdge));
+  let out = new Color(terrainColor).lerp(new Color(terrainArt.islandHeart), islandHeart * 0.1 * (1 - snowMask * 0.45));
+  const islandRimMask =
+    MathUtils.clamp((islandEdge - 0.36) * 1.05, 0, 1) * (1 - MathUtils.smoothstep(0.88, 0.99, islandEdge));
   out = out.lerp(new Color(terrainArt.islandRim), islandRimMask * 0.12 * (1 - snowMask * 0.55));
   out = out.lerp(new Color("#f0df94"), MathUtils.clamp(grasslandsArtDirection * 0.06 + meadowBloom * 0.12, 0, 0.1));
   out.offsetHSL(0, -0.025, 0.035 * (1 - snowMask * 0.7));
   const luma = out.r * 0.2126 + out.g * 0.7152 + out.b * 0.0722;
-  const lumaFloor = MathUtils.clamp(0.48 + grasslandsArtDirection * 0.08 + worldRegion.meadow * 0.04 - snowMask * 0.08, 0.42, 0.58);
+  const lumaFloor = MathUtils.clamp(
+    0.48 + grasslandsArtDirection * 0.08 + worldRegion.meadow * 0.04 - snowMask * 0.08,
+    0.42,
+    0.58,
+  );
   out = out.lerp(new Color("#cedb86"), MathUtils.clamp((lumaFloor - luma) * 2.7, 0, 0.58));
+  out = applyAnimeTerrainGrade(out, grasslandsArtDirection, scenicTravelBand, snowMask, islandEdge);
   return out.lerp(new Color(terrainArt.islandEdgeMist), MathUtils.smoothstep(islandEdge, 0.74, 1) * 0.74);
 }
 

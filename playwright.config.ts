@@ -1,7 +1,18 @@
+import { mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
+
+const workspaceTmp = fileURLToPath(new URL("./.codex-tmp/playwright-tmp/", import.meta.url));
+mkdirSync(workspaceTmp, { recursive: true });
+process.env.TMPDIR = process.env.TMPDIR || workspaceTmp;
+process.env.TEMP = process.env.TEMP || workspaceTmp;
+process.env.TMP = process.env.TMP || workspaceTmp;
+delete process.env.NO_COLOR;
+process.env.FORCE_COLOR = "0";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  outputDir: ".codex-tmp/playwright-results",
   timeout: 120_000,
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),

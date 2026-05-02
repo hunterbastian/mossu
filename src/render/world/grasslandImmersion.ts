@@ -1,8 +1,10 @@
 import {
   BufferGeometry,
+  CircleGeometry,
   Color,
   ConeGeometry,
   CylinderGeometry,
+  DoubleSide,
   Float32BufferAttribute,
   Group,
   MathUtils,
@@ -14,11 +16,7 @@ import {
   PointsMaterial,
   SphereGeometry,
 } from "three";
-import {
-  isInsideIslandPlayableBounds,
-  sampleTerrainHeight,
-  sampleTerrainNormal,
-} from "../../simulation/world";
+import { isInsideIslandPlayableBounds, sampleTerrainHeight, sampleTerrainNormal } from "../../simulation/world";
 import { OOT_PS2_GRASSLANDS_PALETTE } from "../visualPalette";
 
 const immersionArt = OOT_PS2_GRASSLANDS_PALETTE.scene;
@@ -58,18 +56,12 @@ function makeDistantTree(scale: number, leafColor: string, trunkColor: string) {
   trunk.position.y = 0.72 * scale;
   group.add(trunk);
 
-  const crown = new Mesh(
-    new SphereGeometry(1, 8, 6),
-    new MeshLambertMaterial({ color: leafColor }),
-  );
+  const crown = new Mesh(new SphereGeometry(1, 8, 6), new MeshLambertMaterial({ color: leafColor }));
   crown.position.y = 1.7 * scale;
   crown.scale.set(1.0 * scale, 0.78 * scale, 0.88 * scale);
   group.add(crown);
 
-  const cap = new Mesh(
-    new SphereGeometry(1, 8, 6),
-    new MeshLambertMaterial({ color: leafColor }),
-  );
+  const cap = new Mesh(new SphereGeometry(1, 8, 6), new MeshLambertMaterial({ color: leafColor }));
   cap.position.set(-0.26 * scale, 2.16 * scale, 0.04 * scale);
   cap.scale.set(0.68 * scale, 0.46 * scale, 0.58 * scale);
   group.add(cap);
@@ -128,12 +120,15 @@ function buildDistantTreeBelts() {
     }
 
     const leafColor =
-      index % 4 === 0 ? immersionArt.immersionDistantLeafDeep :
-      index % 3 === 0 ? immersionArt.immersionDistantLeafB :
-      immersionArt.immersionDistantLeafA;
-    const tree = kind === "pine"
-      ? makeDistantPine(scale * 2.85, leafColor, immersionArt.immersionDistantTrunk)
-      : makeDistantTree(scale * 2.65, leafColor, immersionArt.immersionDistantTrunk);
+      index % 4 === 0
+        ? immersionArt.immersionDistantLeafDeep
+        : index % 3 === 0
+          ? immersionArt.immersionDistantLeafB
+          : immersionArt.immersionDistantLeafA;
+    const tree =
+      kind === "pine"
+        ? makeDistantPine(scale * 2.85, leafColor, immersionArt.immersionDistantTrunk)
+        : makeDistantTree(scale * 2.65, leafColor, immersionArt.immersionDistantTrunk);
     tree.position.set(x, sampleTerrainHeight(x, z), z);
     tree.rotation.y = seededUnit(index + x * 0.1) * Math.PI * 2;
     group.add(tree);
@@ -143,7 +138,44 @@ function buildDistantTreeBelts() {
 }
 
 function buildCloudShadowPatches() {
-  return [];
+  const shadows: Mesh[] = [];
+  const placements = [
+    [-62, -128, 34, 16, 0.055, -0.22],
+    [20, -78, 42, 18, 0.048, 0.18],
+    [-28, -20, 46, 20, 0.052, -0.08],
+    [42, 42, 38, 16, 0.044, 0.34],
+    [-44, 92, 44, 18, 0.04, -0.3],
+  ] as const;
+
+  placements.forEach(([x, z, radiusX, radiusZ, opacity, rotation], index) => {
+    if (!canPlaceGroundAccent(x, z, 0.72)) {
+      return;
+    }
+
+    const material = new MeshBasicMaterial({
+      color: index % 2 === 0 ? "#71856a" : "#6c8069",
+      transparent: true,
+      opacity,
+      depthWrite: false,
+      side: DoubleSide,
+    });
+    const shadow = new Mesh(new CircleGeometry(1, 34), material);
+    shadow.name = `moving-cloud-shadow-${index}`;
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.rotation.z = rotation;
+    shadow.scale.set(radiusX, radiusZ, 1);
+    shadow.position.set(x, sampleTerrainHeight(x, z) + 0.075 + index * 0.002, z);
+    shadow.renderOrder = 1;
+    shadow.userData.baseX = x;
+    shadow.userData.baseZ = z;
+    shadow.userData.baseOpacity = opacity;
+    shadow.userData.driftX = 8 + index * 2.4;
+    shadow.userData.driftZ = 4 + index * 1.3;
+    shadow.userData.driftSpeed = 0.018 + index * 0.002;
+    shadows.push(shadow);
+  });
+
+  return shadows;
 }
 
 function buildPollenMotes() {
@@ -243,12 +275,16 @@ export function updateGrasslandImmersionSystem(
   system.cloudShadows.forEach((shadow, index) => {
     const baseX = (shadow.userData.baseX as number | undefined) ?? shadow.position.x;
     const baseZ = (shadow.userData.baseZ as number | undefined) ?? shadow.position.z;
-    shadow.position.x = baseX + Math.sin(elapsed * 0.025 + index * 1.6) * 3.8;
-    shadow.position.z = baseZ + Math.cos(elapsed * 0.022 + index * 1.1) * 2.4;
+    const driftX = (shadow.userData.driftX as number | undefined) ?? 5;
+    const driftZ = (shadow.userData.driftZ as number | undefined) ?? 3;
+    const driftSpeed = (shadow.userData.driftSpeed as number | undefined) ?? 0.02;
+    shadow.position.x = baseX + Math.sin(elapsed * driftSpeed + index * 1.6) * driftX;
+    shadow.position.z = baseZ + Math.cos(elapsed * driftSpeed * 0.84 + index * 1.1) * driftZ;
     shadow.position.y = sampleTerrainHeight(shadow.position.x, shadow.position.z) + 0.08;
     const material = shadow.material as MeshBasicMaterial;
-    material.opacity = ((shadow.userData.baseOpacity as number | undefined) ?? 0.12) *
-      (0.78 + Math.sin(elapsed * 0.18 + index * 0.9) * 0.22);
+    material.opacity =
+      ((shadow.userData.baseOpacity as number | undefined) ?? 0.1) *
+      (0.5 + Math.sin(elapsed * 0.12 + index * 0.9) * 0.14);
   });
 
   system.staticLayer.children.forEach((belt: Object3D, beltIndex: number) => {

@@ -1,6 +1,8 @@
 import {
+  createRenderQualityRuntime,
   createRenderResolutionPolicy,
   getRenderResolutionSnapshot,
+  sampleAdaptivePixelRatio,
 } from "../../src/render/app/appRenderQuality";
 import { assert } from "./testHarness";
 
@@ -17,7 +19,18 @@ export function runRenderQualityContracts() {
   });
   assert(desktop.preferredWidth === 1600 && desktop.preferredHeight === 900, "normal play prefers a 1600x900 internal target");
   assertNear(desktop.initialPixelRatio, 1, 0.001, "normal desktop starts at 1x CSS pixels");
+  assertNear(desktop.minPixelRatio, 0.62, 0.001, "normal desktop does not collapse to a blurry low-DPR floor");
   assert(desktop.maxPixelRatio > 1 && desktop.maxPixelRatio <= 1.1, "normal desktop can upscale slightly when frame time allows");
+
+  const runtime = createRenderQualityRuntime();
+  let sampledPixelRatio: number | null = null;
+  for (let i = 0; i < 40 && sampledPixelRatio === null; i += 1) {
+    sampledPixelRatio = sampleAdaptivePixelRatio(runtime, 1 / 60, 1, desktop.minPixelRatio, desktop.maxPixelRatio);
+  }
+  assert(
+    sampledPixelRatio === null || sampledPixelRatio >= 1,
+    "steady 60Hz rendering should not downshift below the initial pixel ratio",
+  );
 
   const highRes = createRenderResolutionPolicy({
     qualityLow: false,

@@ -1,6 +1,26 @@
 Original prompt: lets keep improving the UI for the game and interactivlity
 
-Current wrap-up status:
+Current snapshot (2026-05-02):
+
+- Repo state before this implementation wave: `master` at `0ecc21b`, matching `origin/master`, with a clean worktree. The working tree now includes the sun/progression/docs pass, the anime/painterly visual pass, the sky/water anime follow-up pass, the crispness pass, and the focused Ghibli/anime detail plus tech-cleanup pass.
+- Current shippable status: healthy after the latest presentation/performance/sun/Titan cleanup pass, the follow-up save/progression reset pass, the anime/painterly visual pass, the sky/water anime follow-up pass, the crispness pass, and the focused route-readability/detail pass. Current verification evidence: `npm run qa`, `npm run lint`, `npm run format:check`, `npm run test:e2e:smoke`, `npm run test:e2e:visual`, headed `npm run perf:guard`, and `git diff --check` all passed. The immediately preceding full-health pass also included `npm run perf:guard:headless`, `npm audit --audit-level=high`, and `node --check scripts/perfGuard.mjs`.
+- Latest visible direction: Mossu is a polished cozy Three.js route slice with aqua/handbook UI, staged world startup, perf-guard tooling, a 3D orbiting sun that drives the scene lighting envelope, light god-ray bands in the sky shader, warm watercolor sun haze, soft cloud layers, subtle moving cloud-shadow patches, a subtle anime color grade, soft Mossu/Karu outlines, painterly terrain/grass/water banding, and the Mossback Titan removed from active play. Recent focused polish sharpened tree silhouettes, strengthened warm path/clearing reads, added hand-painted grass/brush clumps near route edges, softened fog farther out, reduced glow in camera-critical areas, and kept the cute anime look less blurry through lighter final-image pixel blocking, bloom, paper softening, sky haze, cloud opacity, and milky water edges.
+- Latest small route-readability pass: widened route clearing masks around Fir Gate, Whisper Pass, Highland Basin, and Ridge Saddle; added subtle signpost/rock/brush cues near decision points; reduced decision-window haze/glow response; and softened screen-space god rays so they stay light instead of washing over gameplay views.
+- Latest save/progression status: local save state now has an explicit fresh-start reset path through the pause menu and `window.mossuDebug.resetProgress()`. The pause menu summarizes trail progress and save persistence, and smoke coverage now confirms a reset clears collected route state back to the Burrow Hollow baseline.
+- Latest small progression pass: route discovery stamps now give more rewarding flavor pings, Moss Crown Shrine arrival claims a simple Summit Circuit reward, the character screen tracks a 3-sample forage goal, and recruited Karu IDs persist through local save while reset/debug replay clear them cleanly.
+- Latest debug-jump status: `?qaDebug=1` now exposes `mossuDebug.jumpTo("fir-gate" | "highland-basin" | "ridge-saddle" | "shrine")` for instant route inspection. The highland, ridge, and shrine jumps land on authored readable bank/clearing positions instead of requiring a full replay.
+- Latest crispness/art polish status: a headed browser pass showed the adaptive renderer could collapse to unreadably low DPR, so the normal desktop floor now holds at 0.62, 60Hz rendering no longer downshifts unnecessarily, and Highland Basin/Ridge Saddle/Moss Crown get targeted fog relief while keeping the watercolor distance atmosphere.
+- Latest real-browser evidence: headed `npm run perf:guard` passed the full Burrow Hollow -> Moss Crown Shrine route at 150.2fps average / 9.7ms p95 / 13.4ms p99 with 12/12 checkpoints and refreshed route screenshots under `output/perf-guard/route/`. A normal headed Chrome pass at `http://127.0.0.1:8000/?qaDebug=1` captured the final sky/water anime pass at `output/web-game/sky-water-anime-pass-gameplay.png` with zero console warnings/errors.
+- Latest progression/debug verification: `npm run qa`, `npm run test:e2e:smoke`, and headed Chromium visualProbe captures passed after the progression/debug-jump/art polish pass. Route screenshots are in `output/progression-visual-check/highland-basin.png`, `ridge-saddle.png`, and `moss-crown-shrine.png`; the headed pass reported no page or console errors.
+- Latest checkpoint baseline: `npm run qa` passed on May 2, 2026, then a headed Chrome `?qaDebug=1` browser sweep used `mossuDebug.jumpTo()` for Highland Basin, Ridge Saddle, and Moss Crown Shrine. The browser sweep landed all three jumps in `third_person`, matched the expected landmarks, reported no warnings/errors beyond normal Vite debug/info logs, and wrote checkpoint screenshots under `output/checkpoint-browser/`.
+- Latest Titan status: inactive by design. The preserved implementation lives under `src/simulation/unused/giantMossCreature.ts` and `src/render/objects/unused/MossbackTitanAvatar.ts`; active `src`, `tests`, and built runtime checks should not reference `model=titan` or active Titan state.
+- Latest tech-cleanup status: `npm prune` removed the extraneous Next/React/Sharp-related local packages and reduced `node_modules` from roughly 463M to 140M. Playwright/perf browser temp output now defaults to `.codex-tmp/playwright-tmp`, Playwright e2e scripts now unset inherited `NO_COLOR` while forcing plain output so Node color warnings no longer hide browser failures, and the known Three vendor chunk is isolated with a project-appropriate Vite warning threshold so `npm run qa` no longer emits the large-chunk warning.
+- Latest perf/QA note: the green headless perf guard reached all 12 checkpoints at roughly 193fps average / 7.2ms p95 in the save/progression follow-up pass, the anime/painterly headed guard reached 179.8fps average / 7.6ms p95, the sky/water headed guard reached 163.9fps average / 7.8ms p95, and the focused detail headed guard reached 150.2fps average / 9.7ms p95. Real-browser review is still preferred for final visual judgement because deterministic/headless WebGL screenshots can be softer or flaky.
+- Latest route-readability verification: `npm run qa`, `npm run lint`, `npm run format:check`, escalated `npm run test:e2e:visual`, and headed `npm run perf:guard` pass. Final headed route guard reached 12/12 checkpoints at 156fps average / 8.8ms p95 / 11.1ms p99 and refreshed route screenshots in `output/perf-guard/route/`.
+- Active watchlist: true WebGPU remains diagnostic because Three `ShaderMaterial` paths are incompatible there, local Playwright preview binding may still need sandbox approval, and final art judgement should still happen in a normal desktop browser after major lighting/fog changes.
+- Documentation pass completed here: added a docs index, a known-issues/watchlist doc, and an asset-parking doc so future agents do not have to reverse-engineer current state from this long chronological log.
+
+Historical log:
 
 - Big-world perf baseline pass: tightened `?renderer=webgpu` fallback so Three's internal `webgpu-webgl2` backend is rejected in favor of Mossu's normal WebGLRenderer path with an explicit fallback reason, moved the Silver Bend visual-perf anchor out of the underwater overlay and onto the river bank, and captured the current route/stress baseline in `docs/PERF_BASELINE.md`. Verification: `npm run lint`, `npm run format:check`, `npm run qa`, `npm run test:e2e:smoke`, `npm run test:e2e:visual`, `npm run perf:guard:baseline`, `npm run perf:guard:coop`, and `git diff --check` pass. Fresh artifacts: `output/perf-guard/baseline.json` (114.9fps avg / 12.2ms p95 / 12 of 12 checkpoints), `output/perf-guard/coop-stress.json` (136.9fps avg / 10.0ms p95 / `coopStress` on), `output/perf-guard/renderer-fallback-forced.json` (requested WebGPU -> active WebGL fallback, zero console errors), and `output/perf-guard/big-world-baseline-summary.json`. Active real WebGPU remains diagnostic-only: `output/perf-guard/webgpu.json` reaches 12 of 12 checkpoints but fails because Chrome logs six `NodeMaterial: Material "ShaderMaterial" is not compatible.` errors.
 
@@ -50,7 +70,7 @@ Current wrap-up status:
 
 - Deeper-water swim-feel pass: made the Windstep/highland waterfall runoff resolve as a true swimmable creek pocket, added a small surface lift when Mossu first enters deep water so entry reads as bobbing into a swim instead of sinking under, and added HUD copy for shallow shelf / deep water / underwater states. Verification: `npm run qa` and `git diff --check` passed; a random-port production browser probe against `dist/` reached gameplay and confirmed spawn water state still reports wading. `npm run test:e2e:smoke` is blocked by an existing Playwright visual run reusing the configured `127.0.0.1:4173` preview server and reporting unrelated `ERR_CONNECTION_REFUSED` resource errors in the first smoke test.
 
-Mossback Titan hostile creature pass in progress:
+Historical Mossback Titan hostile creature pass (superseded and parked):
 
 - Added a simulation-owned giant moss creature state that patrols authored waypoints, stalks Mossu when nearby, charges at close range, and respawns Mossu back to the burrow when caught.
 - Added a large low-poly in-world Mossback Titan rig with stone shell, moss blanket, crystal back growths, clawed legs, predator eyes, walking motion, alert animation, and water ripples.
@@ -248,6 +268,7 @@ Old Pokemon-inspired UI pass:
 - `npm run build` should be rerun after the retro UI restyle.
 
 Original prompt: PLEASE IMPLEMENT THIS PLAN:
+
 # Full-Map Lookdown Mode On `M` + Slight Gameplay Camera Pullback
 
 - Added `ViewMode` runtime state and one-shot `M` / `Esc` input events.
@@ -286,6 +307,7 @@ Original prompt: PLEASE IMPLEMENT THIS PLAN:
 - Walking speed is now slower than rolling speed so the two forms feel mechanically distinct.
 
 Inventory / interact pass:
+
 - Added `E` as a context action and `Tab` as an explicit satchel toggle in `src/simulation/input.ts`.
 - Landmarks now carry keepsake metadata in `src/simulation/world.ts`, with per-landmark interaction radii and satchel copy.
 - `src/simulation/gameState.ts` now tracks nearby interactables, cataloged landmark ids, the last cataloged keepsake, and exposes `getInventoryEntries()` for the HUD.
@@ -293,12 +315,14 @@ Inventory / interact pass:
 - `src/styles.css` now includes satchel/prompt styling that matches the existing field-journal HUD treatment.
 
 Verification:
+
 - `npm run build` passes after the inventory/interact changes.
 - Attempted to run the required Playwright web-game client from an in-process static server so it could reach the built app in this sandbox. The client repeatedly hung with no artifacts written, even after removing the canvas click path.
 - Follow-up direct Playwright probes also stalled once the built page was live in headless Chromium: navigation completed and WebGL warnings appeared, but the first `page.evaluate(...)` call never returned.
 - Because of that runtime issue, this turn only has build verification plus code-path inspection; the next agent should debug the headless Chromium hang before relying on automated gameplay screenshots for `mossu`.
 
 Character screen pass:
+
 - Replaced the old satchel UI with a dedicated character screen opened by `E` or `Tab`, with `Esc` to close and gameplay paused while it is visible.
 - Animal Crossing-inspired UI pass:
 - Restyled the persistent HUD and resident handbook in `src/styles.css` toward a softer life-sim presentation with rounded paper panels, wood-and-leaf accents, stitched badges, and warmer cozy copy.
@@ -314,6 +338,7 @@ Character screen pass:
 - The character screen shows real current traversal stats, `Breeze Float` as the active upgrade, three locked placeholder upgrades, and discovered vs undiscovered keepsakes.
 
 Verification follow-up:
+
 - `npm run build` still passes after the character-screen refactor.
 - The required bundled Playwright client now reaches the browser but still exits with `Target page, context or browser has been closed` and produces no artifacts in this environment.
 - An escalated direct Playwright pass was attempted to validate `E` / `Tab` / `Esc`, map-to-profile transition, and automatic collection discovery, but it appears to hang before writing screenshots or JSON.
@@ -323,6 +348,7 @@ Verification follow-up:
 - Added a lightweight animated water shader pass with moving shimmer, center-depth tinting, and softer bank fade.
 
 Mountain-route worldbuilding slice:
+
 - Re-authored the current floating-island slice around a clearer climb: Burrow Hollow -> Silver Bend -> Fir Gate / Whisper Pass -> Mistfall Cascade / Basin -> Windstep Shelf -> Cloudback Ridge -> Moss Crown Shrine.
 - Extended `world.ts` with new upper-route scenic pockets and landmarks, rebalanced the 14 orb placements so the first 8 naturally guide the lower climb, and kept the last 6 on the alpine/ridge route after `Breeze Float`.
 - Strengthened terrain staging with small authored shelves/rises along the intended mountain route while keeping the overall island footprint intact.
@@ -396,12 +422,14 @@ UI interactivity follow-up:
 - Safari + Computer Use verification against `http://127.0.0.1:4179/?spiritCloseup=1` now shows the staged spirits in-frame near Mossu; the pale fluffy silhouette and larger dark eyes read correctly in-context.
 
 Map readability pass:
+
 - Reworked `M` map mode in `src/render/app/GameApp.ts` from a mostly-camera-based overview into a dedicated illustrated HUD map board built from real world data.
 - Added a stylized floating-island silhouette, river path, climb route line, compass, labeled landmarks, route-step sidebar, live player marker, shrine marker, and discovered/unvisited landmark states.
 - Kept the existing `map_lookdown` camera as the background path, but the useful readability now comes from the map overlay rather than from the raw 3D terrain alone.
 - `src/styles.css` now includes a full map-board presentation with parchment shell, legend, route-step states, and landmark/marker styling.
 
 Verification:
+
 - `npm run build` passes after the map overlay work.
 - Live headless Playwright state check against `http://127.0.0.1:4178/` confirmed `mode` switches from `third_person` to `map_lookdown` after pressing `M`.
 
@@ -472,6 +500,7 @@ Subtle bloom pass:
 - `npm run build` passes after the coordinator refactor pass.
 
 Foraging loop pickup pass:
+
 - Reworked the existing forageable scaffold from auto-gathered fruit/plants into explicit pouch pickups: seeds, shells, moss tufts, berries, smooth stones, and feathers.
 - `E` now gathers the nearest ungathered forageable instead of collecting it automatically just by walking near it.
 - Added a nearby forage prompt, pouch state in `render_game_to_text`, and updated gathered-good binder cards to use the new item kinds.
@@ -479,6 +508,7 @@ Foraging loop pickup pass:
 - `npm run build` passes after this pass.
 
 Riparian forest-pocket pass:
+
 - Kept this automation run scoped to water-bank / forest-transition composition in `src/render/world/terrainDecorations.ts`.
 - Added guarded riparian pockets to the existing water-bank accent layer: soft canopy-shadow washes, moss pads, grass clumps, lip pebbles, and lowland/foothill saplings at selected lake, river, and braid transition anchors.
 - The new pockets use wetness, slope, and playable-bound checks before placement, so they should decorate bank edges without changing controls, route checkpoints, or water simulation.
@@ -491,6 +521,7 @@ Riparian forest-pocket pass:
 - Next visual check: inspect the opening lake rim, Silver Bend bank, Fir Gate braid, and Windstep / ridge river pockets in Safari or Dia before adding more density.
 
 Water-bank / forest threshold polish:
+
 - Added small sedge, moss, pebble, and wash accents along the meadow, fir-gate, and alpine branch channels so side rivers read with the same bank language as the main river and starting pools.
 - Added a few pool-rim sedge patches around the opening lake and starting shoals to soften the water-to-grass transition.
 - Added subtle canopy-ground shadow patches at authored biome-transition anchors so forest edges feel more grounded and scaled without changing the playable route.
@@ -502,6 +533,7 @@ Water-bank / forest threshold polish:
 - The temporary Vite server for this run is still listening on `127.0.0.1:4193` because sandboxed `kill 4264` returned `operation not permitted`.
 
 Pouch HUD pass:
+
 - Added a compact live pouch strip to the gameplay HUD that shows gathered forage counts by kind.
 - The pouch stays hidden until Mossu is near a forageable or has just gathered one, then lingers briefly after pickup.
 - The strip highlights the nearby forageable category even before the count is nonzero, so the player can read what `E` will add to the pouch.
@@ -509,12 +541,14 @@ Pouch HUD pass:
 - `npm run build` and `git diff --check` pass after this pass.
 
 Interactive pouch follow-up:
+
 - Converted pouch count chips into stable interactive buttons instead of passive rebuilt labels.
 - Hovering, focusing, or clicking a pouch category now selects it and opens a small detail tray.
 - Nearby forageable categories explain the `Press E` action, while gathered categories summarize stored counts and point to the binder.
 - `npm run build` and `git diff --check` pass after this pass.
 
 Overnight world polish shoreline/forest-edge pass:
+
 - Added translucent silty shoreline wash patches around the main river and starting-water pools so bank rims have a clearer dry-to-wet read before reeds/pebbles.
 - Added a few forest-edge understory patches using existing moss, bush, and grass primitives to make lowland-to-foothill forest transitions feel less abrupt without changing the playable route.
 - Kept the pass scoped to `src/render/world/terrainDecorations.ts`.
@@ -522,6 +556,7 @@ Overnight world polish shoreline/forest-edge pass:
 - Playwright follow-up: the repo-local symlinked `develop-web-game` client still cannot launch Chromium in this sandbox because `MachPortRendezvousServer` registration is denied. The temporary Vite server on `http://127.0.0.1:4190/` could not be killed from this sandbox (`Operation not permitted`) and was still listening at the end of the run.
 
 Overnight pool-rim / forest-scale follow-up:
+
 - Added a subtle procedural bank-lip lift around starting-water pools in `src/simulation/world.ts`, strongest around the opening lake, so pools have a clearer raised dry rim instead of blending straight into flat grass.
 - Added narrow pebble-trail lip markers to the main river, branch channels, and starting pools in `src/render/world/terrainDecorations.ts` to make the water-bank edge easier to read from the gameplay camera.
 - Added four authored forest scale ramps at lowland and foothill edges, stepping from saplings into larger trees so the forest boundary reads less abrupt without touching route checkpoints or controls.
@@ -532,6 +567,7 @@ Overnight pool-rim / forest-scale follow-up:
 - Playwright follow-up: the skill client was retried against `http://127.0.0.1:4191/`. The first run hit the known skill-path `playwright` resolution issue; the repo-local symlink with `--preserve-symlinks` reached Chromium but Chromium still failed with `MachPortRendezvousServer ... Permission denied`. The temporary Vite server was stopped cleanly with Ctrl-C.
 
 Overall QA pass:
+
 - No gameplay/world code changes were made in this pass; this was a verification sweep over the current local worktree.
 - Static verification passed: `npm run build`, `npm run test:contracts`, and `git diff --check`.
 - Code-search sanity check found no conflict markers, debuggers, TODO/FIXME items, or unexpected source errors in `src`, `tests`, `package.json`, or `index.html`.
@@ -541,6 +577,7 @@ Overall QA pass:
 - Remaining risks: the existing Vite large chunk warning remains, and the handbook should get a dedicated responsive-height check because the non-fullscreen Safari smoke view showed inner scrolling near the bottom of the panel.
 
 Visual anchor scene polish implementation:
+
 - Added a dedicated `anchor-scene-accents` visual layer for the six review anchors: opening meadow, opening lake shore, Silver Bend, Fir Gate forest edge, highland creek/waterfalls, and shrine approach.
 - The new layer uses the existing instanced small-prop batching for clover, flowers, reeds, moss, grass clumps, pebbles, and shrubs, while only adding a few authored mature trees, rock accents, shadows, and side waterfall ribbons.
 - Tuned water profiles to reduce milky shoreline glare and sparkle washout while preserving readable shallow/deep bands.
@@ -554,6 +591,7 @@ Visual anchor scene polish implementation:
 - Temporary Vite and Python preview servers were stopped after QA.
 
 Roll mode / Karu mimic pass:
+
 - Shift rolling is now stamina-free. The stamina meter is reserved for Breeze Float, and the character screen copy now says that explicitly.
 - Added simulation state for `rollHoldSeconds` and `rollModeReady`; holding Shift for about 3 seconds now drives a small Roll Mode HUD indicator.
 - Roll jump still preserves forward momentum, and holding Space after the roll jump can transition into Breeze Float while consuming stamina only for the float.
@@ -570,6 +608,7 @@ Roll mode / Karu mimic pass:
 - Required `develop-web-game` browser smoke was attempted against `http://127.0.0.1:8002/`, but headless Chromium timed out before `domcontentloaded`. A custom Shift-specific Playwright probe was also attempted and hit the same headless initialization problem before `render_game_to_text` became available. The temporary server and hung probe were stopped.
 
 Karu true-roll follow-up:
+
 - Promoted Karu rolling from a visual-only mimic blend into explicit `blob.rolling` state.
 - Recruited Karu now enter that state with a tiny per-slot stagger when Mossu is rolling, stay out of roll state while floating or bank-waiting, and use stronger catch-up movement while rolling.
 - The Karu roll pose now keys off their own rolling state, and `render_game_to_text` reports `fauna.rollingCount` so QA can tell whether the herd is actually rolling.
@@ -580,6 +619,7 @@ Karu true-roll follow-up:
 - `git diff --check` passes.
 
 Mossu/Karu soft collision pass:
+
 - Added lightweight planar collisions between Mossu and Karu without introducing a full physics engine.
 - Karu now use slightly different collision radii for idle, recruited, and rolling states, so rolling herd members feel rounder and less ghost-like.
 - Overlaps are resolved mostly by nudging Karu away, with a smaller Mossu nudge while grounded and not swimming; both sides also get a small velocity response when they run into each other.
@@ -592,6 +632,7 @@ Mossu/Karu soft collision pass:
 - The required `develop-web-game` client loaded a built static preview on `http://127.0.0.1:8003/`, entered gameplay, and captured `output/karu-collision-smoke/shot-0.png` plus `state-0.json`.
 
 Experimental WebGPU renderer pass:
+
 - Added an async app bootstrap so the normal game path still starts on the existing WebGL renderer while `?renderer=webgpu` or `?webgpu` lazy-loads Three's WebGPU renderer chunk.
 - Added renderer backend reporting to `render_game_to_text` and the `?perfDebug=1` overlay: requested backend, active backend, WebGPU browser availability, and fallback reason if WebGPU initialization fails.
 - Kept the current EffectComposer bloom on the WebGL path only. WebGPU skips the WebGL postprocessing stack for now, because the current bloom pass is tied to `WebGLRenderer`.
@@ -603,6 +644,7 @@ Experimental WebGPU renderer pass:
 - Headless browser caveat: the WebGPU smoke is enough to confirm startup/backend selection, but real Chrome performance and visual parity still need a human pass because Mossu's water/grass/tree animation shaders are still WebGL-style `onBeforeCompile` hooks.
 
 Reference UI + shader polish pass:
+
 - Restyled the live HUD toward the provided storybook/Pokemon/Animal Crossing reference: cream cards, navy outlines, separated top-right status pills, keyboard-card controls, a warmer Roll Mode card, and a small illustrated route map inside the Trail Note.
 - Tightened the bottom quick-action labels so they read more like game UI (`Click camera`, `Tab inventory`) instead of dev labels.
 - Improved shader/art direction details: grass now uses stronger painterly root/mid/tip bands, water clamps glare/sparkle brightness with more controlled contour lines, and distant/highland tree flutter is damped while broad sway remains.
@@ -613,6 +655,7 @@ Reference UI + shader polish pass:
 - Remaining visual note: the shader polish is still mostly on the WebGL material path. WebGPU startup works from the previous pass, but full visual parity would need porting the custom grass/water/tree shader hooks to WebGPU-compatible node/TSL materials.
 
 Karu little-spirit visual pass:
+
 - Reworked the Karu rig in `src/render/world/ambientBlobs.ts` toward the provided "Little Spirit" reference: lighter cloud-blue fur texture, horizontal fluffy body, larger glossy eyes, rounded snout, tiny nose/mouth, blush cheeks, tail puff, and four paws instead of two front nubs.
 - Preserved existing Karu behavior, recruitment, rolling, collision, and herd state; this was a visual rig pass only.
 - Updated Karu idle/roll animation scaling so the new body, tail, paws, and fur puffs keep their intended proportions while still bobbing, sniffing, hopping, and tucking during roll mimic.
@@ -622,6 +665,7 @@ Karu little-spirit visual pass:
 - Required `develop-web-game` client ran against `http://127.0.0.1:8005/?spiritCloseup=1` and captured `output/karu-spirit-redesign-final/shot-0.png` plus `state-0.json`. The client still reports the known start-button click timeout, but gameplay state and screenshot are captured after entering the game.
 
 Compact HUD pass:
+
 - Added a compact override in `src/styles.css` so the storybook HUD keeps the same visual style but leaves more gameplay visible.
 - Reduced the Trail Note card, top status pills, bottom quick-action buttons, prompt chips, pouch card, pickup card, ability pill, and Roll Mode card by roughly 10-15% depending on component.
 - Verification:
@@ -631,6 +675,7 @@ Compact HUD pass:
 - Required `develop-web-game` client ran against `http://127.0.0.1:8005/` and captured `output/ui-compact-pass/shot-0.png` plus `state-0.json`. The client still reports the known start-button click timeout, but gameplay state and screenshot are captured after entering the game.
 
 Mossu eye-readability pass:
+
 - Kept the character-face change scoped to eyes only: no nose or mouth marks were added.
 - Enlarged Mossu's glossy oval eyes, added small white catchlight meshes, and added a simple periodic blink/squint response that also reacts to landing, rolling, jumping, and Karu-call pulses.
 - Verification:
@@ -640,6 +685,7 @@ Mossu eye-readability pass:
 - Required `develop-web-game` client initially failed from its installed path because `playwright` resolved relative to `~/.codex`; rerunning the same client through `.codex-tmp/web_game_playwright_client.js` with `--preserve-symlinks-main` captured `output/mossu-eye-readability/shot-0.png` and `state-0.json` from `http://127.0.0.1:8007/?modelViewer=1`.
 
 Mossu secondary-motion pass:
+
 - Added a small spring layer for Mossu's fluff puffs and top tufts: each keeps its authored base offset, trails behind local movement, compresses/rebounds on landing, lifts on jump/call/swim pulses, and gets a little extra side sway during roll/call states.
 - Kept the motion scoped to `MossuAvatar.ts`; no gameplay constants, controls, or model-viewer UI were changed.
 - Verification:
@@ -649,6 +695,7 @@ Mossu secondary-motion pass:
 - A targeted force-click Roll probe confirmed the roll pose state path before timing out during WebGL screenshot capture; treat the required client screenshot as the reliable visual artifact for this pass.
 
 Model viewer lag fix:
+
 - The model viewer was laggier than gameplay because it capped pixel ratio at 1.7, kept shadow maps enabled, and called full `updateUiState()` DOM queries/writes every render frame.
 - Matched the viewer closer to gameplay performance policy by capping pixel ratio at 1.1, disabling model-viewer shadows, and moving timeline scrub updates out of the full per-frame UI refresh path.
 - Verification:
@@ -658,6 +705,7 @@ Model viewer lag fix:
 - Reopened Dia at `http://127.0.0.1:8008/?modelViewer=1&perf=1` so the browser loads the rebuilt model-viewer chunk.
 
 Model viewer Mossu ground-height fix:
+
 - Fixed Mossu clipping through the model-viewer platform by adding a preview-only ground lift before feeding the synthetic `PlayerState` into `MossuAvatar.update()`.
 - Gameplay height/simulation code was left untouched; the issue was specific to the model-viewer preview player being authored at `y = 0`.
 - Verification:
@@ -667,6 +715,7 @@ Model viewer Mossu ground-height fix:
 - Reopened Dia at `http://127.0.0.1:8008/?modelViewer=1&groundfix=1` so the browser loads the rebuilt model-viewer chunk.
 
 Three.js geometry / shader / lighting focus pass:
+
 - Used the installed `threejs-geometry`, `threejs-shaders`, and `threejs-lighting` project skills as references for a focused scene-readability pass.
 - Added a single instanced `terrain-form-strokes` layer that places 96 low-opacity brush/contour ellipses along the authored route to clarify terrain shelves and clearings without many individual prop meshes.
 - Tuned the grass shader so gust fronts add a subtle darker wind-combed band plus brighter tip sheen, making wind movement read better without adding instances.
@@ -679,6 +728,7 @@ Three.js geometry / shader / lighting focus pass:
 - `git diff --check` passes.
 
 Opening sequence + first map/water overhaul pass:
+
 - Added a short visual-only wake-up sequence after the title screen: Mossu starts in the meadow nest, the HUD stays hidden, input is paused, the camera pans from the nest toward the river route, and movement/jump/interact/menu inputs can skip after the first beat.
 - Staged nearby and distant Karu groups around the opening meadow so the first view establishes the herd fantasy instead of relying on random scatter.
 - Added an opening shoreline composition layer with damp painted ground patches, sand/wet-sand rims, reeds, reed tips, stepping stones, and small bank accents around the starting pools.
@@ -690,6 +740,7 @@ Opening sequence + first map/water overhaul pass:
 - Required `develop-web-game` client captured `output/opening-water-sequence-smoke-2/shot-0.png` and `state-0.json`; the screenshot shows the wake-up overlay, Mossu, staged Karu, and start-area water/shoreline accents. A custom no-screenshot Playwright state probe was inconclusive in this environment because headless startup did not expose `window.render_game_to_text()` before timeout, so the game-client artifact remains the reliable visual QA result for this pass.
 
 Dual UI click sound pass:
+
 - Added `public/audio/destiny-ui-click.mp3` from the provided download while keeping the existing `menu-ui-click.mp3`.
 - Reworked `InterfaceAudio` to use two UI click variants with a small per-variant audio pool, alternating between the original Mossu click and the new Destiny-like click so repeated UI interactions feel less identical.
 - Verification:
@@ -699,6 +750,7 @@ Dual UI click sound pass:
 - Required `develop-web-game` client captured `output/ui-click-dual-sound/shot-0.png` and `state-0.json` from the built app; server logs confirmed both `/audio/menu-ui-click.mp3` and `/audio/destiny-ui-click.mp3` were requested.
 
 Water ambience audio pass:
+
 - Added `public/audio/water-river-loop.mp3` from the provided river sound.
 - Added `sampleWaterAmbience()` in `src/simulation/world.ts` so water audio proximity is driven by the actual world water resources: main river, branch rivers, highland creek paths, and starting pools.
 - Added `AmbientWaterAudio` with a looping river bed that unlocks on the title-screen Play gesture, fades in only near water, fades out away from water, and reports proximity/source state through `render_game_to_text()`.
@@ -710,6 +762,7 @@ Water ambience audio pass:
 - Required `develop-web-game` client captured `output/water-ambient-audio/shot-0.png` and `state-0.json`; state showed `audio.waterAmbience.active: true`, `proximity: 1`, and server logs confirmed `/audio/water-river-loop.mp3` was requested after pressing Play.
 
 Breeze Float animation polish pass:
+
 - Added an explicit `player.floating` runtime state, fed by the existing Breeze Float movement result, reset on void/respawn, and exposed through `render_game_to_text()` for QA.
 - Upgraded `MossuAvatar` so Breeze Float now has its own blend: hover lift, fluff and top-tuft spread, softer body stretch, brighter alert eyes, tucked legs, and a small landing recovery after ending the float.
 - Updated the model viewer Glide pose to drive the same runtime float state, so the workshop pose now previews the gameplay silhouette instead of only using generic airborne movement.
@@ -722,15 +775,18 @@ Breeze Float animation polish pass:
 - Browser QA caveat: Vite preview still fails with `ENOSPC` while writing its temp config, the required `develop-web-game` client still cannot resolve Playwright from its skill folder, and custom headless Chrome probes remained unstable in this environment. The deterministic contract now verifies the new floating state; final visual judgment should be done in real Chrome.
 
 Floating island shell read pass (WorldRenderer `buildFloatingIslandShell`):
+
 - Named group `floating-island-shell`; split lower mass into upper taper + darker lower taper + cool underbelly sphere; rim torus lip; three horizontal mist discs under the break; ten small downward cones for hanging rock read; cliff bulges nudged outward; moss band slightly thicker with subtle emissive.
 - Verification: `npm run qa` passed.
 
 Ghibli-style tree pass (`terrainDecorations`):
+
 - Instanced round forest: more canopy blobs, puff clusters, roots/branches, blossom reads; pine stack split into rotated tiers + top hip sphere; shared wind material gains `vFoliage` sun-tint, soft light lift, stronger sway/gust, cache key `mossu-instanced-tree-wind-ghibli`.
 - `makeRoundTree` / `makePineTree` / saplings aligned with the same design language; landmark trees: extra lobes, emissive leaves, slightly softer trunk, more sphere segments.
 - Verification: `npm run qa` passed.
 
 Animation curves + environment response pass:
+
 - Added reusable motion curves in `src/render/motionCurves.ts` and routed Mossu's movement pulses through ease-out/back/elastic curves so roll start/end, jump, landing, swim, and Breeze Float reactions stop feeling linear.
 - Curved major camera blends: opening vista handoff, map lookdown blend, idle orbit distance/polar movement, and landing/roll settle now use smoother easing on top of the existing damping.
 - Gave unrecruited Karu a small first-encounter look-at blend so they pause and turn toward Mossu instead of snapping from idle motion.
@@ -743,6 +799,7 @@ Animation curves + environment response pass:
 - Browser smoke is still pending: the required `develop-web-game` client resolved after symlinking the skill script into `.codex-tmp`, but the old dev server was gone and starting a new local Vite server failed under sandbox networking with `listen EPERM`.
 
 Cinematic co-op + Spore UI/perf guard pass:
+
 - Added `?coopStress=1` shared-world stress coverage with remote Mossu avatars, remote grass/water wakes, and shared collection events surfaced through the debug/perf payloads.
 - Added the Spore-like organic membrane UI skin across the title, HUD, map, binder/card, popup, and menu surfaces; the title now uses the ambient green/blue blurred background, cream/gold plaque, three orbs, and `Mossu`-only logo treatment.
 - Tightened the black-flash guard path with explicit renderer/backend debug state and render-path suppression logging, then softened the terrain dark palette without adding shader cost.
@@ -757,63 +814,75 @@ Cinematic co-op + Spore UI/perf guard pass:
 - Visual captures are under `output/ui-spore-check/` for title, gameplay, and map; direct binder screenshot capture stayed flaky, but the binder/card UI is covered by the CSS pass plus the normal QA/smoke route.
 
 Mossback Titan creature pass:
+
 - Shared the detailed Mossback Titan rig between the model viewer and in-world wandering threat, replacing the older duplicate world mesh path.
 - Restyled the Titan toward the living-island reference: smaller raised meadow back, trees, crystal peaks, pond/waterfall, visible lower jaw teeth, claws, and a clearer head-forward silhouette.
 - Added stronger rig animation states for mouth opening, jaw drop, body breathing, leg stepping/lift, eye/crystal alert pulses, and threat poses (`idle`, `sniff`, `roll`, `hop`, `rest`).
 - Verification: `npm run qa` passes; `git diff --check` passes; model viewer render capture passes at `output/mossback-titan/model-viewer-titan-island.png`.
 
 Tiny refactor pass:
+
 - Cleared the current ESLint warning set by removing unused imports/parameters, prefixing parked helper builders, and eliminating one unused material binding without changing gameplay behavior.
 - Moved `GameApp`'s static runtime constants, paused input snapshot, debug save payload type, quality flag helper, control-activity helper, and perf-number formatter into `src/render/app/appRuntimeConfig.ts`.
 - Extracted `WorldRenderer.syncMapLookdownVisibility()` so the main world update path no longer owns the map-mode visibility toggle block inline.
 - Verification: `npm run lint`, `npm run qa`, `npm run test:e2e:smoke`, and `git diff --check` pass. Vite still reports the existing large Three.js chunk warning during production build.
 
 Tiny perf/debug refactor pass:
+
 - Added `src/render/app/appPerformance.ts` for perf capture constants, rolling frame sample helpers, performance snapshot shaping, perf-capture payload creation, and compact/full perf debug panel text.
 - Kept `GameApp` responsible for collecting renderer/world/camera state and debug hotkey timing, but removed inline perf panel formatting and percentile/sample buffer logic from the class body.
 - Verification: `npm run lint`, `npm run build`, `npm run qa`, `npm run test:e2e:smoke`, and `git diff --check` pass. Vite still reports the existing large Three.js chunk warning during production build.
 
 Tiny title/opening DOM refactor pass:
+
 - Added `src/render/app/appTitleScreen.ts` for the title-screen DOM and opening-sequence overlay DOM construction.
 - Kept `GameApp` responsible for title state, Play/start transitions, keyboard handling, opening-sequence progress, pointer focus, audio unlock, and postprocessing suppression.
 - Verification: `npm run lint`, `npm run build`, `npm run qa`, `npm run test:e2e:smoke`, and `git diff --check` pass. Vite still reports the existing large Three.js chunk warning during production build.
 
 Tiny save-state refactor pass:
+
 - Added `src/render/app/appSaveState.ts` for local save runtime state, restore/persist signature checks, stored payload application, and local-storage writes.
 - Kept `GameApp` responsible for deciding when persistence is enabled, applying the paused update after restore, and triggering save persistence from debug replay and frame ticks.
 - Verification: `npm run lint`, `npm run build`, `npm run qa`, `npm run test:e2e:smoke`, and `git diff --check` pass. Vite still reports the existing large Three.js chunk warning during production build.
 
 Tiny text-state refactor pass:
+
 - Added `src/render/app/appTextState.ts` for the compact e2e and full `render_game_to_text` JSON serializers, including player, save, Titan, co-op, character-screen, fauna, audio, performance, water debug, and QA payload shaping.
 - Kept `GameApp` responsible for collecting live snapshots from state, camera, audio, world, performance, and overlay timing, then passing them into the serializer.
 - Verification: `npm run lint`, `npm run build`, `npm run qa`, `npm run test:e2e:smoke`, and `git diff --check` pass. Vite still reports the existing large Three.js chunk warning during production build.
 
 Tiny map-drag refactor pass:
+
 - Added `src/render/app/appMapDrag.ts` for map pointer capture, drag delta tracking, release, and cancel behavior.
 - Kept `GameApp` responsible for map-mode gating, wheel zoom, and passing drag deltas into `FollowCamera.panMapViewFromDrag()`.
 - Verification: `npm run lint`, `npm run build`, `npm run qa`, `npm run test:e2e:smoke`, and `git diff --check` pass. Vite still reports the existing large Three.js chunk warning during production build.
 
 Tiny debug-replay refactor pass:
+
 - Added `src/render/app/appDebugReplay.ts` for QA/debug player teleport, replay-position application, player movement reset, and debug save payload application.
 - Kept `GameApp` responsible for camera snapping, perf-debug world flushing, Titan reset placement, state update/persistence, and HUD sync after debug replay.
 - Verification: `npm run lint`, `npm run build`, `npm run qa`, `npm run test:e2e:smoke`, and `git diff --check` pass. Vite still reports the existing large Three.js chunk warning during production build.
 
 Tiny postprocessing-runtime refactor pass:
+
 - Added `src/render/app/appPostProcessing.ts` for postprocessing runtime state, schedule gating, suppression timing, render-path transitions, retro-texture uniform updates, and compact suppressed-ms calculation.
 - Kept `GameApp` responsible for composer/pass construction, renderer/composer rendering, context-loss event handling, and render-path logging payloads.
 - Verification: `npm run lint`, `npm run build`, `npm run qa`, `npm run test:e2e:smoke`, and `git diff --check` pass. Vite still reports the existing large Three.js chunk warning during production build.
 
 Tiny render-quality refactor pass:
+
 - Added `src/render/app/appRenderQuality.ts` for adaptive pixel-ratio sampling, frame/sample accumulation, and the latest quality sample frame time.
 - Kept `GameApp` responsible for applying the chosen pixel ratio to the renderer, composer, and underwater overlay.
 - Verification: `npm run lint`, `npm run build`, `npm run qa`, `npm run test:e2e:smoke`, and `git diff --check` pass. Vite still reports the existing large Three.js chunk warning during production build.
 
 Tiny underwater-effect refactor pass:
+
 - Added `src/render/app/appUnderwaterEffect.ts` for camera/player underwater target-intensity calculation.
 - Kept `GameApp` responsible for ticking the `UnderwaterEffect` instance with `dt`, `elapsed`, and the computed target intensity.
 - Verification: `npm run lint`, `npm run build`, `npm run qa`, `npm run test:e2e:smoke`, and `git diff --check` pass. Vite still reports the existing large Three.js chunk warning during production build.
 
 Preferred render-resolution policy pass:
+
 - Made Mossu's preferred render resolution explicit as an internal pixel budget instead of a fixed browser window size: normal play targets roughly `1600x900`, while low-quality/stress paths target roughly `1280x720`.
 - `appRenderQuality.ts` now computes min/max/initial DPR from viewport size, device DPR, quality mode, and the preferred pixel budget, so 1440p/4K displays stop rendering unnecessary extra internal pixels while still filling the whole browser window.
 - Resize now refreshes the render-resolution policy and clamps active DPR immediately if the viewport changes; the adaptive scaler can still step down/up inside the current policy.
@@ -821,6 +890,7 @@ Preferred render-resolution policy pass:
 - Verification: `npm run lint`, `npm run build`, `npm run qa`, `npm run test:e2e:smoke`, escalated `npm run test:e2e:visual`, and `git diff --check` pass. The first non-escalated visual guard attempt hit the known local preview `listen EPERM` sandbox failure on `127.0.0.1:4173`.
 
 UI readability scale follow-up:
+
 - Raised the late HUD micro-scale values in `src/styles.css` a notch so the status strip, prompts, quick actions, stamina/roll widgets, pouch HUD, pickup card, and small metadata read less tiny while preserving the compact field-gadget layout.
 - Follow-up screenshot review showed the broad layout fit, but the top status labels and quick-action captions were still too fine; bumped those text/tap-target values one more step while keeping the HUD compact.
 - Mobile HUD overrides were bumped proportionally so narrow screens keep the same hierarchy without shrinking the text back to the previous too-small values.

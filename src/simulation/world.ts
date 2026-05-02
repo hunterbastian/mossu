@@ -25,24 +25,11 @@ const FORAGEABLE_INTERACTION_RADIUS = 8.5;
 
 export type AbilityId = "breeze_float";
 
-export type BiomeZone =
-  | "plains"
-  | "hills"
-  | "foothills"
-  | "alpine"
-  | "ridge"
-  | "peak_shrine";
+export type BiomeZone = "plains" | "hills" | "foothills" | "alpine" | "ridge" | "peak_shrine";
 
 export type HabitatZone = "shore" | "meadow" | "forest";
 
-export type WorldRegionKind =
-  | "meadow"
-  | "shore"
-  | "lake"
-  | "forest"
-  | "highland"
-  | "ridge"
-  | "shrine";
+export type WorldRegionKind = "meadow" | "shore" | "lake" | "forest" | "highland" | "ridge" | "shrine";
 
 export type WorldSurfaceMaterial =
   | "meadow_grass"
@@ -238,12 +225,8 @@ export interface StartingWaterPool {
   edgeSoftness: number;
 }
 
-const riverCenter = (z: number) => (
-  Math.sin(z * 0.014) * 44 +
-  Math.sin((z + 120) * 0.007) * 15 -
-  18 +
-  Math.exp(-(((z + 112) / 44) ** 2)) * 28
-);
+const riverCenter = (z: number) =>
+  Math.sin(z * 0.014) * 44 + Math.sin((z + 120) * 0.007) * 15 - 18 + Math.exp(-(((z + 112) / 44) ** 2)) * 28;
 export const RIVER_BRANCH_SEGMENTS: readonly RiverBranchSegment[] = [
   { id: "silver-braid", startZ: -126, endZ: -52, offset: -84, width: 13.5, depthScale: 0.54, flowStrength: 0.28 },
   { id: "meadow-braid", startZ: -82, endZ: 22, offset: 70, width: 25, depthScale: 0.66, flowStrength: 0.34 },
@@ -381,11 +364,17 @@ function smootherStep(edge0: number, edge1: number, x: number) {
 function sampleRiverBranchEnvelope(segment: RiverBranchSegment, z: number) {
   const length = segment.endZ - segment.startZ;
   const feather = Math.min(28, Math.max(12, length * 0.24));
-  return smootherStep(segment.startZ, segment.startZ + feather, z) *
-    (1 - smootherStep(segment.endZ - feather, segment.endZ, z));
+  return (
+    smootherStep(segment.startZ, segment.startZ + feather, z) *
+    (1 - smootherStep(segment.endZ - feather, segment.endZ, z))
+  );
 }
 
-function sampleRiverBranchCenter(segment: RiverBranchSegment, z: number, envelope = sampleRiverBranchEnvelope(segment, z)) {
+function sampleRiverBranchCenter(
+  segment: RiverBranchSegment,
+  z: number,
+  envelope = sampleRiverBranchEnvelope(segment, z),
+) {
   const sway = 0.9 + Math.sin(z * 0.032 + segment.offset * 0.08) * 0.06;
   return riverCenter(z) + segment.offset * envelope * sway;
 }
@@ -406,11 +395,8 @@ function sampleRiverBedCut(x: number, z: number) {
         ? (1 - smootherStep(0.5, 0.9, annulusT)) * (0.5 + channel.width * 0.012)
         : 0;
     const highlandCut = 1 + smootherStep(28, 165, z) * 0.22;
-    const depth = (
-      coreFalloff * (8.8 + channel.width * 0.17) +
-      shelfFalloff * (1.5 + channel.width * 0.035) +
-      annulus
-    ) *
+    const depth =
+      (coreFalloff * (8.8 + channel.width * 0.17) + shelfFalloff * (1.5 + channel.width * 0.035) + annulus) *
       highlandCut *
       channel.depthScale *
       channel.envelope;
@@ -540,14 +526,17 @@ function sampleRiverBankShape(x: number, z: number) {
     const side = x >= channel.centerX ? 1 : -1;
     const halfWidth = sampleRiverSurfaceHalfWidth(channel);
     const bankWidth = channel.width * (channel.id === "main" ? 0.86 : 0.68);
-    const bankNoise = fbmNoise(z * 0.026 + side * 8.7 + channel.width * 0.01, channel.centerX * 0.018 + side * 4.1, 3) * 0.5 + 0.5;
+    const bankNoise =
+      fbmNoise(z * 0.026 + side * 8.7 + channel.width * 0.01, channel.centerX * 0.018 + side * 4.1, 3) * 0.5 + 0.5;
     const scallop = Math.sin(z * 0.082 + side * 1.9 + channel.centerX * 0.018) * 0.5 + 0.5;
     const coveCenter = halfWidth * (1.08 + bankNoise * 0.2 + scallop * 0.1);
     const shelfCenter = halfWidth * (0.94 + bankNoise * 0.08);
     const rimCenter = halfWidth * (1.42 + bankNoise * 0.18);
     const coveRing = Math.exp(-(((distance - coveCenter) / Math.max(4.2, bankWidth * 0.24)) ** 2));
     const shelfRing = Math.exp(-(((distance - shelfCenter) / Math.max(4.5, bankWidth * 0.3)) ** 2));
-    const sandbarRing = Math.exp(-(((distance - halfWidth * (0.72 + scallop * 0.12)) / Math.max(3.8, bankWidth * 0.18)) ** 2));
+    const sandbarRing = Math.exp(
+      -(((distance - halfWidth * (0.72 + scallop * 0.12)) / Math.max(3.8, bankWidth * 0.18)) ** 2),
+    );
     const rimRing = Math.exp(-(((distance - rimCenter) / Math.max(3.6, bankWidth * 0.18)) ** 2));
     const outerFade = 1 - smootherStep(halfWidth * 2.1, halfWidth * 2.72, distance);
     const innerWaterFade = 1 - sampleRiverSurfaceMask(x, z) * 0.5;
@@ -574,7 +563,8 @@ function samplePoolBankShape(x: number, z: number) {
     }
 
     const angle = Math.atan2((z - pool.z) / pool.radiusZ, (x - pool.x) / pool.radiusX);
-    const edgeNoise = fbmNoise(Math.cos(angle) * 1.8 + pool.x * 0.015, Math.sin(angle) * 1.8 + pool.z * 0.015, 3) * 0.5 + 0.5;
+    const edgeNoise =
+      fbmNoise(Math.cos(angle) * 1.8 + pool.x * 0.015, Math.sin(angle) * 1.8 + pool.z * 0.015, 3) * 0.5 + 0.5;
     const scallop = Math.sin(angle * 5.0 + pool.x * 0.02 - pool.z * 0.01) * 0.5 + 0.5;
     const coveCenter = 0.98 + edgeNoise * 0.11 - scallop * 0.05;
     const shelfRing = Math.exp(-(((distance - 0.88) / 0.18) ** 2));
@@ -629,14 +619,7 @@ function quantize(value: number, steps: number) {
   return Math.round(value * steps) / steps;
 }
 
-function distanceToSegment2D(
-  px: number,
-  pz: number,
-  ax: number,
-  az: number,
-  bx: number,
-  bz: number,
-) {
+function distanceToSegment2D(px: number, pz: number, ax: number, az: number, bx: number, bz: number) {
   const abx = bx - ax;
   const abz = bz - az;
   const abLengthSq = abx * abx + abz * abz;
@@ -775,7 +758,8 @@ function sampleRouteTerraceLift(x: number, z: number) {
     const routeWidth = width * ROUTE_TERRACE_WIDTH_SCALE;
     const segment = distanceToSegment2D(x, z, ax, az, bx, bz);
     const core = 1 - smootherStep(routeWidth * 0.16, routeWidth * 0.54, segment.distance);
-    const shoulder = smootherStep(routeWidth * 0.42, routeWidth * 0.76, segment.distance) *
+    const shoulder =
+      smootherStep(routeWidth * 0.42, routeWidth * 0.76, segment.distance) *
       (1 - smootherStep(routeWidth * 0.86, routeWidth * 1.34, segment.distance));
     const stepRhythm = Math.sin(segment.t * Math.PI * 1.7 + index * 0.58) * 0.5 + 0.5;
     const terrace = core * lift * 0.52 + shoulder * lift * (0.48 + stepRhythm * 0.14);
@@ -787,9 +771,7 @@ function sampleStartingWaterBasinCut(x: number, z: number) {
   return STARTING_WATER_POOLS.reduce((best, pool) => {
     const basin = ellipticalDepressionCut(x, z, pool.x, pool.z, pool.radiusX, pool.radiusZ, pool.basinDepth);
     const shoreDistance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX * 1.42, pool.radiusZ * 1.42);
-    const shoreCut = shoreDistance < 1
-      ? (1 - smootherStep(0.62, 1, shoreDistance)) * pool.shoreDepth
-      : 0;
+    const shoreCut = shoreDistance < 1 ? (1 - smootherStep(0.62, 1, shoreDistance)) * pool.shoreDepth : 0;
     return Math.max(best, basin + shoreCut);
   }, 0);
 }
@@ -831,7 +813,10 @@ export function sampleStartingWaterWetness(x: number, z: number) {
 
 export function sampleStartingWaterDampBankMask(x: number, z: number) {
   const bankShape = samplePoolBankShape(x, z);
-  return Math.max(sampleStartingWaterWetness(x, z) * (1 - sampleStartingWaterSurfaceMask(x, z)), bankShape.dampBand * 0.5);
+  return Math.max(
+    sampleStartingWaterWetness(x, z) * (1 - sampleStartingWaterSurfaceMask(x, z)),
+    bankShape.dampBand * 0.5,
+  );
 }
 
 function sampleStartingWaterBankLipLift(x: number, z: number) {
@@ -898,35 +883,46 @@ const ROUTE_TRANSITION_CLEARINGS = [
   [2, 214, 88, 0.66],
 ] as const;
 
+const ROUTE_NOISY_SPOT_CLEARINGS = [
+  [24, 88, 64, 0.12],
+  [20, 108, 68, 0.12],
+  [42, 134, 66, 0.1],
+  [16, 186, 62, 0.1],
+] as const;
+
 function sampleRoutePathInfo(x: number, z: number) {
-  return ROUTE_TERRACE_SEGMENTS.reduce((best, [ax, az, bx, bz, width], index) => {
-    const routeWidth = width * ROUTE_TERRACE_WIDTH_SCALE;
-    const segment = distanceToSegment2D(x, z, ax, az, bx, bz);
-    const core = 1 - smootherStep(routeWidth * 0.18, routeWidth * 0.54, segment.distance);
-    const paint = 1 - smootherStep(routeWidth * 0.36, routeWidth * 1.02, segment.distance);
-    const shoulder = smootherStep(routeWidth * 0.46, routeWidth * 0.76, segment.distance) *
-      (1 - smootherStep(routeWidth * 0.9, routeWidth * 1.36, segment.distance));
-    const score = paint + core * 0.35 + shoulder * 0.16;
-    return score > best.score
-      ? {
-        score,
-        core,
-        paint,
-        shoulder,
-        distance: segment.distance,
-        t: segment.t,
-        segmentIndex: index,
-      }
-      : best;
-  }, {
-    score: 0,
-    core: 0,
-    paint: 0,
-    shoulder: 0,
-    distance: Infinity,
-    t: 0,
-    segmentIndex: -1,
-  });
+  return ROUTE_TERRACE_SEGMENTS.reduce(
+    (best, [ax, az, bx, bz, width], index) => {
+      const routeWidth = width * ROUTE_TERRACE_WIDTH_SCALE;
+      const segment = distanceToSegment2D(x, z, ax, az, bx, bz);
+      const core = 1 - smootherStep(routeWidth * 0.18, routeWidth * 0.54, segment.distance);
+      const paint = 1 - smootherStep(routeWidth * 0.36, routeWidth * 1.02, segment.distance);
+      const shoulder =
+        smootherStep(routeWidth * 0.46, routeWidth * 0.76, segment.distance) *
+        (1 - smootherStep(routeWidth * 0.9, routeWidth * 1.36, segment.distance));
+      const score = paint + core * 0.35 + shoulder * 0.16;
+      return score > best.score
+        ? {
+            score,
+            core,
+            paint,
+            shoulder,
+            distance: segment.distance,
+            t: segment.t,
+            segmentIndex: index,
+          }
+        : best;
+    },
+    {
+      score: 0,
+      core: 0,
+      paint: 0,
+      shoulder: 0,
+      distance: Infinity,
+      t: 0,
+      segmentIndex: -1,
+    },
+  );
 }
 
 function sampleRouteSmoothMask(x: number, z: number) {
@@ -944,7 +940,8 @@ export function samplePaintedGroundMask(x: number, z: number) {
     return Math.max(best, clear * Math.min(0.72, strength * 1.04));
   }, 0);
   const bankShape = sampleWaterBankShape(x, z);
-  const shoreWear = Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z), bankShape.dampBand) * 0.46;
+  const shoreWear =
+    Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z), bankShape.dampBand) * 0.46;
   return saturate(route.paint * routeBreakup + route.shoulder * 0.36 + pocketClear + shoreWear);
 }
 
@@ -956,8 +953,13 @@ export function sampleRouteReadabilityClearing(x: number, z: number) {
     const clear = 1 - smootherStep(radius * 0.28, radius * ROUTE_TRANSITION_GLADE_RADIUS_SCALE, distance);
     return Math.max(best, clear * Math.min(0.88, strength * ROUTE_TRANSITION_GLADE_STRENGTH_SCALE));
   }, 0);
+  const noisySpotWindow = ROUTE_NOISY_SPOT_CLEARINGS.reduce((best, [cx, cz, radius, strength]) => {
+    const distance = Math.hypot(x - cx, z - cz);
+    const clear = 1 - smootherStep(radius * 0.44, radius * 1.08, distance);
+    return Math.max(best, clear * strength);
+  }, 0);
   const shoreWindow = Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z)) * 0.28;
-  return saturate(Math.max(ribbon, transitionGlade) + shoreWindow);
+  return saturate(Math.max(ribbon, transitionGlade) + noisySpotWindow + shoreWindow);
 }
 
 /**
@@ -973,7 +975,7 @@ export function sampleRouteDirtPathMask(x: number, z: number) {
   const raw = warmTread + readableShoulder;
   const waterBlock = saturate(
     sampleRiverSurfaceMask(x, z) * 0.98 +
-    Math.max(sampleStartingWaterSurfaceMask(x, z), sampleStartingWaterRenderSurfaceMask(x, z) * 0.96) * 0.99,
+      Math.max(sampleStartingWaterSurfaceMask(x, z), sampleStartingWaterRenderSurfaceMask(x, z) * 0.96) * 0.99,
   );
   return saturate(raw * (1 - waterBlock));
 }
@@ -1026,7 +1028,8 @@ export function sampleBaseTerrainHeight(x: number, z: number) {
   const rolling = terrainNoise(x, z) * (7.2 + highlandMask * 2.4) * (1 - routeSmooth * 0.36) * t;
   const ridgeTexture = mountainRidgeNoise(x, z) * highlandMask;
   const peakCarve = (ridgeTexture - 0.34) * 24 * smootherStep(90, 214, z) * (1 - routeSmooth * 0.42) * t;
-  const fineSurface = fbmNoise(x * 0.045 - 3.4, z * 0.045 + 5.2, 3) * (0.9 + highlandMask * 1.9) * (1 - routeSmooth * 0.78) * t;
+  const fineSurface =
+    fbmNoise(x * 0.045 - 3.4, z * 0.045 + 5.2, 3) * (0.9 + highlandMask * 1.9) * (1 - routeSmooth * 0.78) * t;
   const meadowLift = 13.5 + Math.sin(z * 0.01) * 2.85;
   const riverCut = sampleRiverBedCut(x, z);
   const riverNookLift = sampleRiverNookMask(x, z) * 4.2;
@@ -1044,88 +1047,85 @@ export function sampleBaseTerrainHeight(x: number, z: number) {
   const sandbarLift = bankShape.sandbarLift * (0.46 + highlandMask * 0.18);
   const routeTerraceLift = sampleRouteTerraceLift(x, z) * (1 - sampleStartingWaterSurfaceMask(x, z) * 0.5);
   const routeDirtRead = sampleRouteDirtPathMask(x, z);
-  const routeSurfacePress = samplePaintedGroundMask(x, z) * (0.34 + highlandMask * 0.28) * (1 - sampleStartingWaterSurfaceMask(x, z) * 0.72);
+  const routeSurfacePress =
+    samplePaintedGroundMask(x, z) * (0.34 + highlandMask * 0.28) * (1 - sampleStartingWaterSurfaceMask(x, z) * 0.72);
   const hillBand = smootherStep(-170, 10, z) * 10 * t;
   const foothillBand = smootherStep(-10, 95, z) * 18 * t;
   const mountainMass =
-    (Math.exp(-(((x + 12) / 110) ** 2) - (((z - 174) / 92) ** 2)) * 100 +
-      Math.exp(-(((x - 84) / 90) ** 2) - (((z - 140) / 88) ** 2)) * 48 +
-      Math.exp(-(((x + 118) / 72) ** 2) - (((z - 118) / 78) ** 2)) * 34 +
-      Math.exp(-(((x + 72) / 74) ** 2) - (((z - 226) / 58) ** 2)) * 54 +
-      Math.exp(-(((x - 116) / 78) ** 2) - (((z - 210) / 64) ** 2)) * 46) *
+    (Math.exp(-(((x + 12) / 110) ** 2) - ((z - 174) / 92) ** 2) * 100 +
+      Math.exp(-(((x - 84) / 90) ** 2) - ((z - 140) / 88) ** 2) * 48 +
+      Math.exp(-(((x + 118) / 72) ** 2) - ((z - 118) / 78) ** 2) * 34 +
+      Math.exp(-(((x + 72) / 74) ** 2) - ((z - 226) / 58) ** 2) * 54 +
+      Math.exp(-(((x - 116) / 78) ** 2) - ((z - 210) / 64) ** 2) * 46) *
     t;
   const distantFoothillShoulders =
-    (Math.exp(-(((x + 322) / 210) ** 2) - (((z - 96) / 306) ** 2)) * 34 +
-      Math.exp(-(((x - 336) / 218) ** 2) - (((z - 126) / 316) ** 2)) * 38 +
-      Math.exp(-(((x + 34) / 330) ** 2) - (((z - 282) / 150) ** 2)) * 34) *
+    (Math.exp(-(((x + 322) / 210) ** 2) - ((z - 96) / 306) ** 2) * 34 +
+      Math.exp(-(((x - 336) / 218) ** 2) - ((z - 126) / 316) ** 2) * 38 +
+      Math.exp(-(((x + 34) / 330) ** 2) - ((z - 282) / 150) ** 2) * 34) *
     smootherStep(24, 212, z) *
     (1 - routeSmooth * 0.2) *
     t;
   const broadValleyDepth =
-    (Math.exp(-(((x + 10) / 360) ** 2) - (((z - 42) / 380) ** 2)) * 11.4 +
-      Math.exp(-(((x - 8) / 292) ** 2) - (((z - 132) / 260) ** 2)) * 9.8) *
+    (Math.exp(-(((x + 10) / 360) ** 2) - ((z - 42) / 380) ** 2) * 11.4 +
+      Math.exp(-(((x - 8) / 292) ** 2) - ((z - 132) / 260) ** 2) * 9.8) *
     (0.55 + highlandMask * 0.45) *
     (1 - routeSmooth * 0.48) *
     t;
   const roundedHighlandHills =
-    (Math.exp(-(((x - 14) / 132) ** 2) - (((z - 118) / 104) ** 2)) * 20 +
-      Math.exp(-(((x + 138) / 152) ** 2) - (((z - 152) / 126) ** 2)) * 19 +
-      Math.exp(-(((x - 166) / 148) ** 2) - (((z - 160) / 136) ** 2)) * 20) *
+    (Math.exp(-(((x - 14) / 132) ** 2) - ((z - 118) / 104) ** 2) * 20 +
+      Math.exp(-(((x + 138) / 152) ** 2) - ((z - 152) / 126) ** 2) * 19 +
+      Math.exp(-(((x - 166) / 148) ** 2) - ((z - 160) / 136) ** 2) * 20) *
     smootherStep(72, 184, z) *
     (1 - routeSmooth * 0.34) *
     t;
   const highlandSlopeShoulders =
-    (Math.exp(-(((x + 176) / 102) ** 2) - (((z - 178) / 132) ** 2)) * 10 +
-      Math.exp(-(((x - 198) / 96) ** 2) - (((z - 178) / 126) ** 2)) * 13) *
+    (Math.exp(-(((x + 176) / 102) ** 2) - ((z - 178) / 132) ** 2) * 10 +
+      Math.exp(-(((x - 198) / 96) ** 2) - ((z - 178) / 126) ** 2) * 13) *
     smootherStep(96, 208, z) *
     (1 - routeSmooth * 0.18) *
     t;
   const meadowRightPlateau =
-    Math.exp(-(((x - 186) / 176) ** 2) - (((z - 54) / 178) ** 2)) *
+    Math.exp(-(((x - 186) / 176) ** 2) - ((z - 54) / 178) ** 2) *
     smootherStep(-44, 84, z) *
     (1 - routeSmooth * 0.34) *
     15 *
     t;
   const meadowLeftRoll =
-    Math.exp(-(((x + 206) / 182) ** 2) - (((z + 64) / 186) ** 2)) *
+    Math.exp(-(((x + 206) / 182) ** 2) - ((z + 64) / 186) ** 2) *
     (1 - sampleStartingWaterWetness(x, z) * 0.62) *
     6.2 *
     t;
   const ridgeWall = smootherStep(78, 182, z) * 40 * (1 - ridgePassCenter(x)) * t;
   const sideRidgeSilhouettes =
-    (Math.exp(-(((x + 362) / 82) ** 2) - (((z - 126) / 260) ** 2)) * 34 +
-      Math.exp(-(((x - 374) / 88) ** 2) - (((z - 142) / 272) ** 2)) * 38) *
+    (Math.exp(-(((x + 362) / 82) ** 2) - ((z - 126) / 260) ** 2) * 34 +
+      Math.exp(-(((x - 374) / 88) ** 2) - ((z - 142) / 272) ** 2) * 38) *
     smootherStep(52, 214, z) *
     (1 - routeSmooth * 0.12) *
     t;
-  const shrineShelf = Math.exp(-(((x - 18) / 30) ** 2) - (((z - 214) / 22) ** 2)) * 18 * t;
+  const shrineShelf = Math.exp(-(((x - 18) / 30) ** 2) - ((z - 214) / 22) ** 2) * 18 * t;
   const paintedSteps = quantize(Math.sin((x - z) * 0.028) * 0.5 + 0.5, 7) * 2.4 * t;
   const alpineShelf = smootherStep(118, 195, z) * paintedSteps * (1 - routeSmooth * 0.62);
   const startBurrow = bowlDepression(x, z, -44, -134, 15, 12 * 1.18);
   const startingWaterBasin = sampleStartingWaterBasinCut(x, z);
   const mountainHollow = bowlDepression(x, z, 38, 128, 20, 10 * 1.2);
-  const pineGateRise = Math.exp(-(((x - 24) / 34) ** 2) - (((z - 88) / 28) ** 2)) * 9 * t;
-  const passShelf = Math.exp(-(((x - 20) / 30) ** 2) - (((z - 108) / 24) ** 2)) * 11 * t;
-  const cascadeShelf = Math.exp(-(((x - 34) / 28) ** 2) - (((z - 130) / 22) ** 2)) * 14 * t;
-  const traverseShelf = Math.exp(-(((x - 10) / 34) ** 2) - (((z - 154) / 26) ** 2)) * 11 * t;
-  const ridgeLead = Math.exp(-(((x - 14) / 24) ** 2) - (((z - 186) / 18) ** 2)) * 8 * t;
+  const pineGateRise = Math.exp(-(((x - 24) / 34) ** 2) - ((z - 88) / 28) ** 2) * 9 * t;
+  const passShelf = Math.exp(-(((x - 20) / 30) ** 2) - ((z - 108) / 24) ** 2) * 11 * t;
+  const cascadeShelf = Math.exp(-(((x - 34) / 28) ** 2) - ((z - 130) / 22) ** 2) * 14 * t;
+  const traverseShelf = Math.exp(-(((x - 10) / 34) ** 2) - ((z - 154) / 26) ** 2) * 11 * t;
+  const ridgeLead = Math.exp(-(((x - 14) / 24) ** 2) - ((z - 186) / 18) ** 2) * 8 * t;
   const highlandPathCarve = routeDirtRead * smootherStep(78, 208, z) * (1.2 + highlandMask * 1.35) * t;
   const islandContour = sampleIslandContour(x, z);
-  const beachShelf = smootherStep(0.68, 0.82, islandContour) *
-    (1 - smootherStep(0.91, 1.0, islandContour)) *
-    (1 - highlandMask * 0.22);
-  const coastalBeachShelf =
-    beachShelf *
-    (9.2 + (fbmNoise(x * 0.028 - 2.4, z * 0.028 + 3.7, 2) * 0.5 + 0.5) * 3.2) *
-    t;
+  const beachShelf =
+    smootherStep(0.68, 0.82, islandContour) * (1 - smootherStep(0.91, 1.0, islandContour)) * (1 - highlandMask * 0.22);
+  const coastalBeachShelf = beachShelf * (9.2 + (fbmNoise(x * 0.028 - 2.4, z * 0.028 + 3.7, 2) * 0.5 + 0.5) * 3.2) * t;
   const coastalSandCut =
-    beachShelf *
-    (2.4 + (Math.sin(x * 0.035 + z * 0.018) * 0.5 + 0.5) * 0.8) *
-    (1 - routeSmooth * 0.24) *
-    t;
+    beachShelf * (2.4 + (Math.sin(x * 0.035 + z * 0.018) * 0.5 + 0.5) * 0.8) * (1 - routeSmooth * 0.24) * t;
   const edgeF = sampleIslandEdgeFactor(x, z);
   const coastHeadland =
-    smootherStep(0.18, 0.48, edgeF) * (1 - smootherStep(0.78, 0.98, edgeF)) * (7.2 + fbmNoise(x * 0.02, z * 0.02, 2) * 2.1) * t;
+    smootherStep(0.18, 0.48, edgeF) *
+    (1 - smootherStep(0.78, 0.98, edgeF)) *
+    (7.2 + fbmNoise(x * 0.02, z * 0.02, 2) * 2.1) *
+    t;
   return (
     meadowLift +
     rolling +
@@ -1210,7 +1210,15 @@ export function sampleRiverWidth(z: number) {
   const centralValley = smootherStep(-72, 44, z) * (1 - smootherStep(154, 224, z));
   const foothillBroad = smootherStep(36, 108, z) * (1 - smootherStep(142, 204, z));
   const alpineTaper = smootherStep(166, 236, z);
-  return 18 + (Math.sin(z * 0.019) * 0.5 + 0.5) * 5 + lowerMeadow * 2.4 + lowerWaterscape * 5.2 + centralValley * 3.2 + foothillBroad * 3 - alpineTaper * 3;
+  return (
+    18 +
+    (Math.sin(z * 0.019) * 0.5 + 0.5) * 5 +
+    lowerMeadow * 2.4 +
+    lowerWaterscape * 5.2 +
+    centralValley * 3.2 +
+    foothillBroad * 3 -
+    alpineTaper * 3
+  );
 }
 
 interface CreekPath {
@@ -1437,9 +1445,7 @@ export function sampleWaterAmbience(x: number, z: number): WaterAmbienceSample {
     weight = 1,
   ) => {
     const distanceToWater = Math.max(0, edgeDistance);
-    const proximity = edgeDistance <= 0
-      ? 1
-      : (1 - smootherStep(0, audibleRadius, edgeDistance)) * weight;
+    const proximity = edgeDistance <= 0 ? 1 : (1 - smootherStep(0, audibleRadius, edgeDistance)) * weight;
     if (proximity <= best.proximity) {
       return;
     }
@@ -1472,7 +1478,13 @@ export function sampleWaterAmbience(x: number, z: number): WaterAmbienceSample {
   for (const pool of STARTING_WATER_POOLS) {
     const distance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX, pool.radiusZ);
     const edgeDistance = (distance - 1) * Math.min(pool.radiusX, pool.radiusZ);
-    consider("pool", edgeDistance, pool.id === "opening-lake" ? 38 : 28, pool.flowStrength, pool.id === "opening-lake" ? 0.9 : 0.72);
+    consider(
+      "pool",
+      edgeDistance,
+      pool.id === "opening-lake" ? 38 : 28,
+      pool.flowStrength,
+      pool.id === "opening-lake" ? 0.9 : 0.72,
+    );
   }
 
   const currentWater = sampleWaterState(x, z);
@@ -1499,11 +1511,7 @@ export function sampleRiverEdgeState(x: number, z: number): RiverEdgeSample {
   const dampBankMask = Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z));
   const wetness = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
   const nookMask = sampleRiverNookMask(x, z);
-  const zone =
-    water?.swimAllowed ? "swim_water" :
-    water ? "shallow_water" :
-    dampBankMask > 0.08 ? "damp_bank" :
-    "dry";
+  const zone = water?.swimAllowed ? "swim_water" : water ? "shallow_water" : dampBankMask > 0.08 ? "damp_bank" : "dry";
 
   return {
     zone,
@@ -1578,15 +1586,21 @@ function sampleScenicMeadowMask(x: number, z: number) {
     const distance = Math.hypot(x - pocket.position.x, z - pocket.position.z);
     const openRadius = pocket.radius * SCENIC_POCKET_OPEN_RADIUS_SCALE;
     const feather =
-      pocket.kind === "meadow_clearing" ? 1.72 :
-      pocket.kind === "moss_hollow" ? 1.12 :
-      pocket.kind === "stream_bend" ? 0.92 :
-      0.78;
+      pocket.kind === "meadow_clearing"
+        ? 1.72
+        : pocket.kind === "moss_hollow"
+          ? 1.12
+          : pocket.kind === "stream_bend"
+            ? 0.92
+            : 0.78;
     const strength =
-      pocket.kind === "meadow_clearing" ? 1.06 :
-      pocket.kind === "moss_hollow" ? 0.38 :
-      pocket.kind === "stream_bend" ? 0.22 :
-      0.18;
+      pocket.kind === "meadow_clearing"
+        ? 1.06
+        : pocket.kind === "moss_hollow"
+          ? 0.38
+          : pocket.kind === "stream_bend"
+            ? 0.22
+            : 0.18;
     const mask = 1 - smootherStep(openRadius * 0.34, openRadius * feather, distance);
     return Math.max(best, mask * strength);
   }, 0);
@@ -1601,127 +1615,131 @@ export function sampleHabitatLayer(x: number, z: number, height = sampleTerrainH
   const edgeState = sampleRiverEdgeState(x, z);
   const bankShape = sampleWaterBankShape(x, z);
   const pocketMeadow = sampleScenicMeadowMask(x, z);
-  const openingMeadow = Math.exp(-(((x + 44) / 76) ** 2) - (((z + 112) / 72) ** 2));
-  const lowlandGroveCore = Math.exp(-(((x + 126) / 46) ** 2) - (((z + 84) / 50) ** 2));
-  const foothillTravelBand = Math.exp(-(((x - 24) / 268) ** 2) - (((z - 118) / 226) ** 2));
-  const ridgeTravelBand = Math.exp(-(((x + 2) / 282) ** 2) - (((z - 176) / 238) ** 2));
-  const isleCentralField = Math.exp(-(((x + 6) / ISLE_FIELD_VISTA_RADIUS_X) ** 2) - (((z - 52) / ISLE_FIELD_VISTA_RADIUS_Z) ** 2));
-  const isleLowerField = Math.exp(-(((x + 22) / 340) ** 2) - (((z + 120) / 230) ** 2));
-  const travelTransitionBand = Math.max(foothillTravelBand, ridgeTravelBand, isleCentralField * 0.94, isleLowerField * 0.72);
-  const travelBiomeOpen = biomeTransitionOpen * saturate(
-    routeReadability * 0.52 +
-    travelTransitionBand * 0.52 +
-    pocketMeadow * 0.18,
+  const openingMeadow = Math.exp(-(((x + 44) / 76) ** 2) - ((z + 112) / 72) ** 2);
+  const lowlandGroveCore = Math.exp(-(((x + 126) / 46) ** 2) - ((z + 84) / 50) ** 2);
+  const foothillTravelBand = Math.exp(-(((x - 24) / 268) ** 2) - ((z - 118) / 226) ** 2);
+  const ridgeTravelBand = Math.exp(-(((x + 2) / 282) ** 2) - ((z - 176) / 238) ** 2);
+  const isleCentralField = Math.exp(
+    -(((x + 6) / ISLE_FIELD_VISTA_RADIUS_X) ** 2) - ((z - 52) / ISLE_FIELD_VISTA_RADIUS_Z) ** 2,
   );
+  const isleLowerField = Math.exp(-(((x + 22) / 340) ** 2) - ((z + 120) / 230) ** 2);
+  const travelTransitionBand = Math.max(
+    foothillTravelBand,
+    ridgeTravelBand,
+    isleCentralField * 0.94,
+    isleLowerField * 0.72,
+  );
+  const travelBiomeOpen =
+    biomeTransitionOpen * saturate(routeReadability * 0.52 + travelTransitionBand * 0.52 + pocketMeadow * 0.18);
   const routeTravelOpen = saturate(routeReadability * 0.58 + travelTransitionBand * 0.52 + travelBiomeOpen * 0.34);
   const lowlandOpen =
-    biome === "plains" ? 0.74 :
-    biome === "hills" ? 0.66 :
-    biome === "foothills" ? 0.44 :
-    biome === "alpine" ? 0.22 :
-    0.14;
+    biome === "plains"
+      ? 0.74
+      : biome === "hills"
+        ? 0.66
+        : biome === "foothills"
+          ? 0.44
+          : biome === "alpine"
+            ? 0.22
+            : 0.14;
   const shore = saturate(
-    (
-      edgeState.surfaceMask * 0.34 +
+    (edgeState.surfaceMask * 0.34 +
       edgeState.dampBankMask * 0.76 +
       edgeState.wetness * 0.48 +
       edgeState.nookMask * 0.26 +
       bankShape.dampBand * 0.48 +
-      bankShape.sandbarLift * 0.24
-    ) * (1 - lowlandGroveCore * 0.86),
+      bankShape.sandbarLift * 0.24) *
+      (1 - lowlandGroveCore * 0.86),
   );
 
   const meadowNoise = fbmNoise(x * 0.028 + 5.7, z * 0.028 - 3.1, 3) * 0.5 + 0.5;
   const meadow = saturate(
     pocketMeadow * 0.9 +
-    openingMeadow * 0.52 +
-    route.paint * 0.28 +
-    route.shoulder * 0.2 +
-    routeReadability * 0.22 +
-    travelBiomeOpen * 0.34 +
-    travelTransitionBand * 0.56 +
-    routeTravelOpen * 0.26 +
-    isleCentralField * 0.32 +
-    isleLowerField * 0.22 +
-    lowlandOpen * (0.3 + meadowNoise * 0.18) -
-    lowlandGroveCore * 1.46 -
-    shore * 0.42 -
-    slope * 0.5,
+      openingMeadow * 0.52 +
+      route.paint * 0.28 +
+      route.shoulder * 0.2 +
+      routeReadability * 0.22 +
+      travelBiomeOpen * 0.34 +
+      travelTransitionBand * 0.56 +
+      routeTravelOpen * 0.26 +
+      isleCentralField * 0.32 +
+      isleLowerField * 0.22 +
+      lowlandOpen * (0.3 + meadowNoise * 0.18) -
+      lowlandGroveCore * 1.46 -
+      shore * 0.42 -
+      slope * 0.5,
   );
 
   const forestNoise = fbmNoise(x * 0.018 - 9.4, z * 0.018 + 2.3, 4) * 0.5 + 0.5;
   const forestBreakup = fbmNoise(x * 0.06 + 11.2, z * 0.06 - 7.8, 2) * 0.5 + 0.5;
   const lowlandRim = smootherStep(58, 148, Math.abs(x)) * smootherStep(-134, 44, z) * (1 - smootherStep(52, 96, z));
   const firGate = smootherStep(34, 138, z) * (1 - smootherStep(206, 236, z));
-  const highlandPocket = Math.exp(-(((x + 2) / 104) ** 2) - (((z - 148) / 112) ** 2));
+  const highlandPocket = Math.exp(-(((x + 2) / 104) ** 2) - ((z - 148) / 112) ** 2);
   const deepWoods = Math.max(
-    Math.exp(-(((x + 122) / 52) ** 2) - (((z + 66) / 58) ** 2)),
-    Math.exp(-(((x - 94) / 56) ** 2) - (((z - 22) / 64) ** 2)),
-    Math.exp(-(((x - 54) / 50) ** 2) - (((z - 96) / 54) ** 2)),
+    Math.exp(-(((x + 122) / 52) ** 2) - ((z + 66) / 58) ** 2),
+    Math.exp(-(((x - 94) / 56) ** 2) - ((z - 22) / 64) ** 2),
+    Math.exp(-(((x - 54) / 50) ** 2) - ((z - 96) / 54) ** 2),
   );
   const peacefulGroves = Math.max(
-    Math.exp(-(((x + 88) / 66) ** 2) - (((z + 112) / 48) ** 2)),
-    Math.exp(-(((x - 108) / 62) ** 2) - (((z + 34) / 54) ** 2)),
-    Math.exp(-(((x + 26) / 58) ** 2) - (((z - 76) / 50) ** 2)),
+    Math.exp(-(((x + 88) / 66) ** 2) - ((z + 112) / 48) ** 2),
+    Math.exp(-(((x - 108) / 62) ** 2) - ((z + 34) / 54) ** 2),
+    Math.exp(-(((x + 26) / 58) ** 2) - ((z - 76) / 50) ** 2),
   );
   const ancientGrounds = Math.max(
-    Math.exp(-(((x + 90) / 58) ** 2) - (((z - 132) / 58) ** 2)),
-    Math.exp(-(((x - 84) / 62) ** 2) - (((z - 148) / 62) ** 2)),
+    Math.exp(-(((x + 90) / 58) ** 2) - ((z - 132) / 58) ** 2),
+    Math.exp(-(((x - 84) / 62) ** 2) - ((z - 148) / 62) ** 2),
   );
   const authoredGroves = Math.max(
-    Math.exp(-(((x + 126) / 58) ** 2) - (((z + 78) / 62) ** 2)),
-    Math.exp(-(((x - 108) / 62) ** 2) - (((z - 40) / 70) ** 2)),
-    Math.exp(-(((x + 86) / 70) ** 2) - (((z - 132) / 78) ** 2)),
-    Math.exp(-(((x - 84) / 68) ** 2) - (((z - 144) / 78) ** 2)),
+    Math.exp(-(((x + 126) / 58) ** 2) - ((z + 78) / 62) ** 2),
+    Math.exp(-(((x - 108) / 62) ** 2) - ((z - 40) / 70) ** 2),
+    Math.exp(-(((x + 86) / 70) ** 2) - ((z - 132) / 78) ** 2),
+    Math.exp(-(((x - 84) / 68) ** 2) - ((z - 144) / 78) ** 2),
   );
   const clearing = saturate(
     meadow * 0.72 +
-    shore * 0.44 +
-    route.core * 0.56 +
-    route.paint * 0.18 +
-    routeReadability * 0.72 +
-    travelBiomeOpen * 0.78 +
-    travelTransitionBand * 0.86 +
-    routeTravelOpen * 0.58 +
-    isleCentralField * 0.52 +
-    isleLowerField * 0.32 +
-    peacefulGroves * 0.3 +
-    ancientGrounds * 0.08 -
-    lowlandGroveCore * 0.74,
+      shore * 0.44 +
+      route.core * 0.56 +
+      route.paint * 0.18 +
+      routeReadability * 0.72 +
+      travelBiomeOpen * 0.78 +
+      travelTransitionBand * 0.86 +
+      routeTravelOpen * 0.58 +
+      isleCentralField * 0.52 +
+      isleLowerField * 0.32 +
+      peacefulGroves * 0.3 +
+      ancientGrounds * 0.08 -
+      lowlandGroveCore * 0.74,
   );
   const forest = saturate(
     Math.max(lowlandRim * 0.56, firGate * 0.38, highlandPocket * 0.42, authoredGroves * 1.02) +
-    lowlandGroveCore * 1.38 +
-    deepWoods * 0.34 +
-    ancientGrounds * 0.22 +
-    peacefulGroves * 0.08 +
-    smootherStep(0.46, 0.72, forestNoise) * 0.42 +
-    travelTransitionBand * 0.01 +
-    forestBreakup * 0.12 -
-    clearing * (0.84 - authoredGroves * 0.28) -
-    routeReadability * 0.72 -
-    routeTravelOpen * 0.58 -
-    travelBiomeOpen * 0.44 -
-    isleCentralField * 0.56 -
-    isleLowerField * 0.28 -
-    openingMeadow * 0.4 -
-    shore * 0.52 -
-    slope * 0.18,
+      lowlandGroveCore * 1.38 +
+      deepWoods * 0.34 +
+      ancientGrounds * 0.22 +
+      peacefulGroves * 0.08 +
+      smootherStep(0.46, 0.72, forestNoise) * 0.42 +
+      travelTransitionBand * 0.01 +
+      forestBreakup * 0.12 -
+      clearing * (0.84 - authoredGroves * 0.28) -
+      routeReadability * 0.72 -
+      routeTravelOpen * 0.58 -
+      travelBiomeOpen * 0.44 -
+      isleCentralField * 0.56 -
+      isleLowerField * 0.28 -
+      openingMeadow * 0.4 -
+      shore * 0.52 -
+      slope * 0.18,
   );
   const edge = saturate(
     (1 - Math.abs(forest - 0.48) * 2.2) * smootherStep(0.18, 0.42, forest) +
-    meadow * forest * 0.42 +
-    travelBiomeOpen * 0.34 +
-    travelTransitionBand * 0.3 +
-    routeTravelOpen * 0.24 +
-    peacefulGroves * 0.22 +
-    ancientGrounds * 0.16 +
-    route.shoulder * 0.24,
+      meadow * forest * 0.42 +
+      travelBiomeOpen * 0.34 +
+      travelTransitionBand * 0.3 +
+      routeTravelOpen * 0.24 +
+      peacefulGroves * 0.22 +
+      ancientGrounds * 0.16 +
+      route.shoulder * 0.24,
   );
-  const zone =
-    shore > 0.48 ? "shore" :
-    forest > Math.max(0.32, meadow + 0.08) ? "forest" :
-    "meadow";
+  const zone = shore > 0.48 ? "shore" : forest > Math.max(0.32, meadow + 0.08) ? "forest" : "meadow";
 
   return { zone, shore, meadow, forest, clearing, edge };
 }
@@ -1731,41 +1749,48 @@ export function sampleWorldRegion(x: number, z: number, height = sampleTerrainHe
   const biome = sampleBiomeZone(x, z, height);
   const contour = sampleIslandContour(x, z);
   const beachRim = smootherStep(0.74, 0.88, contour) * (1 - smootherStep(0.96, 1.02, contour));
-  const openingMeadowDryCore = Math.exp(-(((x + 44) / 34) ** 2) - (((z + 134) / 28) ** 2));
+  const openingMeadowDryCore = Math.exp(-(((x + 44) / 34) ** 2) - ((z + 134) / 28) ** 2);
   const lowlandRiverWater = sampleRiverSurfaceMask(x, z) * (1 - smootherStep(48, 78, z));
   const lake = saturate(
-    Math.max(lowlandRiverWater, sampleStartingWaterSurfaceMask(x, z)) *
-    (1 - openingMeadowDryCore * 0.85),
+    Math.max(lowlandRiverWater, sampleStartingWaterSurfaceMask(x, z)) * (1 - openingMeadowDryCore * 0.85),
   );
   const shore = saturate(
     Math.max(habitat.shore, beachRim * 0.96, sampleWaterBankShape(x, z).dampBand * 0.58) *
-    (1 - openingMeadowDryCore * 0.72),
+      (1 - openingMeadowDryCore * 0.72),
   );
   const groveAnchors = Math.max(
-    Math.exp(-(((x + 126) / 58) ** 2) - (((z + 84) / 62) ** 2)),
-    Math.exp(-(((x - 24) / 88) ** 2) - (((z - 88) / 78) ** 2)) * 0.82,
-    Math.exp(-(((x - 104) / 84) ** 2) - (((z - 34) / 74) ** 2)) * 0.72,
+    Math.exp(-(((x + 126) / 58) ** 2) - ((z + 84) / 62) ** 2),
+    Math.exp(-(((x - 24) / 88) ** 2) - ((z - 88) / 78) ** 2) * 0.82,
+    Math.exp(-(((x - 104) / 84) ** 2) - ((z - 34) / 74) ** 2) * 0.72,
   );
   const forest = saturate(Math.max(habitat.forest, groveAnchors) * (1 - lake * 0.32) * (1 - beachRim * 0.68));
   const highlandBand = smootherStep(82, 144, z) * (1 - smootherStep(166, 204, z));
-  const highlandBasinAnchor = Math.exp(-(((x - 42) / 74) ** 2) - (((z - 134) / 54) ** 2));
-  const highland = saturate(Math.max(
-    highlandBand * (0.58 + smootherStep(46, 118, height) * 0.36),
-    highlandBasinAnchor * 0.72,
-    biome === "alpine" || biome === "foothills" ? 0.56 : 0,
-  ) * (1 - lake * 0.32) * (1 - forest * 0.22));
-  const ridgeBand = smootherStep(150, 190, z) * (0.78 + smootherStep(70, 142, height) * 0.3);
-  const ridgeSaddleAnchor = Math.exp(-(((x - 16) / 68) ** 2) - (((z - 186) / 44) ** 2));
-  const ridge = saturate(Math.max(ridgeBand, ridgeSaddleAnchor * 0.76, biome === "ridge" && z > 154 ? 0.78 : 0) * (1 - lake * 0.22));
-  const shrine = saturate(
-    Math.exp(-(((x - 18) / 46) ** 2) - (((z - 214) / 42) ** 2)) *
-    smootherStep(196, 212, z) *
-    (0.82 + smootherStep(78, 152, height) * 0.18),
+  const highlandBasinAnchor = Math.exp(-(((x - 42) / 74) ** 2) - ((z - 134) / 54) ** 2);
+  const highland = saturate(
+    Math.max(
+      highlandBand * (0.58 + smootherStep(46, 118, height) * 0.36),
+      highlandBasinAnchor * 0.72,
+      biome === "alpine" || biome === "foothills" ? 0.56 : 0,
+    ) *
+      (1 - lake * 0.32) *
+      (1 - forest * 0.22),
   );
-  const meadow = saturate(Math.max(
-    habitat.meadow,
-    0.42 + (1 - sampleBiomeJourney(x, z, height)) * 0.28,
-  ) * (1 - lake * 0.82) * (1 - forest * 0.42) * (1 - beachRim * 0.44));
+  const ridgeBand = smootherStep(150, 190, z) * (0.78 + smootherStep(70, 142, height) * 0.3);
+  const ridgeSaddleAnchor = Math.exp(-(((x - 16) / 68) ** 2) - ((z - 186) / 44) ** 2);
+  const ridge = saturate(
+    Math.max(ridgeBand, ridgeSaddleAnchor * 0.76, biome === "ridge" && z > 154 ? 0.78 : 0) * (1 - lake * 0.22),
+  );
+  const shrine = saturate(
+    Math.exp(-(((x - 18) / 46) ** 2) - ((z - 214) / 42) ** 2) *
+      smootherStep(196, 212, z) *
+      (0.82 + smootherStep(78, 152, height) * 0.18),
+  );
+  const meadow = saturate(
+    Math.max(habitat.meadow, 0.42 + (1 - sampleBiomeJourney(x, z, height)) * 0.28) *
+      (1 - lake * 0.82) *
+      (1 - forest * 0.42) *
+      (1 - beachRim * 0.44),
+  );
 
   let region: WorldRegionKind = "meadow";
   let material: WorldSurfaceMaterial = "meadow_grass";
@@ -1853,47 +1878,46 @@ export function sampleGrassDensity(x: number, z: number) {
   const routeClearing = sampleRouteReadabilityClearing(x, z);
   const biomeTransitionOpen = sampleBiomeTransitionOpen(x, z, height);
   const base =
-    zone === "plains" ? 1.16 :
-    zone === "hills" ? 1.08 :
-    zone === "foothills" ? 0.9 :
-    zone === "alpine" ? 0.52 :
-    zone === "ridge" ? 0.32 :
-    0.08;
+    zone === "plains"
+      ? 1.16
+      : zone === "hills"
+        ? 1.08
+        : zone === "foothills"
+          ? 0.9
+          : zone === "alpine"
+            ? 0.52
+            : zone === "ridge"
+              ? 0.32
+              : 0.08;
 
-  const startClear = Math.exp(-(((x + 58) / 32) ** 2) - (((z + 150) / 24) ** 2)) * 0.34;
-  const passClear = Math.exp(-(((x - 18) / 26) ** 2) - (((z - 106) / 28) ** 2)) * 0.18;
-  const meadowLushness =
-    zone === "plains" ? 1 :
-    zone === "hills" ? 0.9 :
-    zone === "foothills" ? 0.64 :
-    0.3;
+  const startClear = Math.exp(-(((x + 58) / 32) ** 2) - ((z + 150) / 24) ** 2) * 0.34;
+  const passClear = Math.exp(-(((x - 18) / 26) ** 2) - ((z - 106) / 28) ** 2) * 0.18;
+  const meadowLushness = zone === "plains" ? 1 : zone === "hills" ? 0.9 : zone === "foothills" ? 0.64 : 0.3;
   const patchNoise = fbmNoise(x * 0.032 + 4.2, z * 0.032 - 1.4, 4) * 0.5 + 0.5;
   const finePatchNoise = fbmNoise(x * 0.076 - 2.8, z * 0.076 + 5.1, 2) * 0.5 + 0.5;
   const clumpMask = smootherStep(0.42, 0.66, patchNoise);
   const openGapMask = 1 - smootherStep(0.18, 0.38, patchNoise);
   const patchMultiplier =
-    0.64 +
-    clumpMask * (0.74 + meadowLushness * 0.12 + habitat.meadow * 0.12) +
-    finePatchNoise * 0.16;
+    0.64 + clumpMask * (0.74 + meadowLushness * 0.12 + habitat.meadow * 0.12) + finePatchNoise * 0.16;
   return Math.max(
     0,
     base * patchMultiplier +
-    clumpMask * meadowLushness * 0.22 -
-    openGapMask * meadowLushness * 0.06 +
-    habitat.meadow * (0.22 + clumpMask * 0.1) +
-    habitat.edge * 0.08 +
-    biomeTransitionOpen * (0.08 + meadowLushness * 0.05) -
-    habitat.forest * 0.16 -
-    habitat.shore * 0.38 +
-    riverNook * (0.48 + meadowLushness * 0.16) +
-    riverBank * (0.16 + riverNook * 0.18) -
-    riverGap * 1.18 -
-    lakeGap * 1.04 -
-    slope * 0.72 -
-    startClear -
-    passClear -
-    routeClearing * 0.08 * (1 - habitat.meadow * 0.6) -
-    routeDirt * 0.28,
+      clumpMask * meadowLushness * 0.22 -
+      openGapMask * meadowLushness * 0.06 +
+      habitat.meadow * (0.22 + clumpMask * 0.1) +
+      habitat.edge * 0.08 +
+      biomeTransitionOpen * (0.08 + meadowLushness * 0.05) -
+      habitat.forest * 0.16 -
+      habitat.shore * 0.38 +
+      riverNook * (0.48 + meadowLushness * 0.16) +
+      riverBank * (0.16 + riverNook * 0.18) -
+      riverGap * 1.18 -
+      lakeGap * 1.04 -
+      slope * 0.72 -
+      startClear -
+      passClear -
+      routeClearing * 0.08 * (1 - habitat.meadow * 0.6) -
+      routeDirt * 0.28,
   );
 }
 
@@ -1907,7 +1931,8 @@ export const worldLandmarks: WorldLandmark[] = [
     interactionRadius: 16,
     inventoryEntry: {
       title: "Moss Quilt Scrap",
-      summary: "A warm scrap of burrow lining. Mossu keeps it to remember the first hollow that made the floating island feel safe.",
+      summary:
+        "A warm scrap of burrow lining. Mossu keeps it to remember the first hollow that made the floating island feel safe.",
     },
   },
   {
@@ -1919,7 +1944,8 @@ export const worldLandmarks: WorldLandmark[] = [
     interactionRadius: 15,
     inventoryEntry: {
       title: "Amber Seed",
-      summary: "A smooth orange seed tucked under the lone tree. It smells sun-warm and marks the first open lookout above the meadow.",
+      summary:
+        "A smooth orange seed tucked under the lone tree. It smells sun-warm and marks the first open lookout above the meadow.",
     },
   },
   {
@@ -1931,7 +1957,8 @@ export const worldLandmarks: WorldLandmark[] = [
     interactionRadius: 15,
     inventoryEntry: {
       title: "River Glass",
-      summary: "A polished shard of pale blue glass from the bend. It catches the same color as the calmer water channels below the pass.",
+      summary:
+        "A polished shard of pale blue glass from the bend. It catches the same color as the calmer water channels below the pass.",
     },
   },
   {
@@ -1943,7 +1970,8 @@ export const worldLandmarks: WorldLandmark[] = [
     interactionRadius: 15,
     inventoryEntry: {
       title: "Fir Tassel",
-      summary: "A tassel of soft fir needles tied with grass. Mossu keeps it as a marker for the point where the gentle hills start turning into a climb.",
+      summary:
+        "A tassel of soft fir needles tied with grass. Mossu keeps it as a marker for the point where the gentle hills start turning into a climb.",
     },
   },
   {
@@ -1955,7 +1983,8 @@ export const worldLandmarks: WorldLandmark[] = [
     interactionRadius: 15,
     inventoryEntry: {
       title: "Pass Thread",
-      summary: "A braided trail thread caught on a stone lip. It feels like a reminder to keep following the river wind toward the high shelves.",
+      summary:
+        "A braided trail thread caught on a stone lip. It feels like a reminder to keep following the river wind toward the high shelves.",
     },
   },
   {
@@ -1967,7 +1996,8 @@ export const worldLandmarks: WorldLandmark[] = [
     interactionRadius: 15,
     inventoryEntry: {
       title: "Basin Vial",
-      summary: "A tiny glass vial beaded with basin spray. The satchel note says the air starts tasting colder here, even before the ridge proper.",
+      summary:
+        "A tiny glass vial beaded with basin spray. The satchel note says the air starts tasting colder here, even before the ridge proper.",
     },
   },
   {
@@ -1979,7 +2009,8 @@ export const worldLandmarks: WorldLandmark[] = [
     interactionRadius: 15,
     inventoryEntry: {
       title: "Shelf Chime",
-      summary: "A bent ribbon chime that hums whenever the updraft hits it. Mossu files it away as proof that the airy route is real.",
+      summary:
+        "A bent ribbon chime that hums whenever the updraft hits it. Mossu files it away as proof that the airy route is real.",
     },
   },
   {
@@ -1991,7 +2022,8 @@ export const worldLandmarks: WorldLandmark[] = [
     interactionRadius: 15,
     inventoryEntry: {
       title: "Cloudback Feather",
-      summary: "A long pale feather caught against the overlook rocks. It turns the ridge from a destination into a place worth lingering in.",
+      summary:
+        "A long pale feather caught against the overlook rocks. It turns the ridge from a destination into a place worth lingering in.",
     },
   },
   {
@@ -2003,7 +2035,8 @@ export const worldLandmarks: WorldLandmark[] = [
     interactionRadius: 16,
     inventoryEntry: {
       title: "Skyward Moss Strand",
-      summary: "A silver-tipped strand of cliff moss found along the ledge lip. It marks the moment the route turns into real overhead air.",
+      summary:
+        "A silver-tipped strand of cliff moss found along the ledge lip. It marks the moment the route turns into real overhead air.",
     },
   },
   {
@@ -2015,7 +2048,8 @@ export const worldLandmarks: WorldLandmark[] = [
     interactionRadius: 15,
     inventoryEntry: {
       title: "Lichen Knot",
-      summary: "A springy knot of alpine lichen. It feels like something gathered from the seam between the last traverse and the shrine approach.",
+      summary:
+        "A springy knot of alpine lichen. It feels like something gathered from the seam between the last traverse and the shrine approach.",
     },
   },
   {
@@ -2027,7 +2061,8 @@ export const worldLandmarks: WorldLandmark[] = [
     interactionRadius: 18,
     inventoryEntry: {
       title: "Shrine Crown Moss",
-      summary: "A bright crown of moss from the summit stones. Mossu tucks it away like a soft proof that the climb actually happened.",
+      summary:
+        "A bright crown of moss from the summit stones. Mossu tucks it away like a soft proof that the climb actually happened.",
     },
   },
 ];

@@ -62,4 +62,7 @@ export function applyDebugSaveSnapshot(
   if (payload?.gatheredForageableIds) {
     save.gatheredForageableIds = new Set(payload.gatheredForageableIds);
   }
+  if (payload?.recruitedKaruIds) {
+    save.recruitedKaruIds = new Set(payload.recruitedKaruIds);
+  }
 }

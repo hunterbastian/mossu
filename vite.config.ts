@@ -35,6 +35,8 @@ export default defineConfig({
     port: 4173,
   },
   build: {
+    // Three core is isolated into its own vendor chunk below; warn only if it grows beyond the known baseline.
+    chunkSizeWarningLimit: 1400,
     rollupOptions: {
       output: {
         manualChunks(id) {

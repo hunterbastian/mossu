@@ -317,7 +317,13 @@ function findNearestRecruitable(blobs: AmbientBlob[], playerPosition: Vector3) {
 }
 
 /** One press recruits the nearest Karu plus same-herd mates nearby (small-cluster). */
-function recruitNearbyBlobs(blobs: AmbientBlob[], sourceBlob: AmbientBlob, playerPosition: Vector3, elapsed: number) {
+function recruitNearbyBlobs(
+  blobs: AmbientBlob[],
+  sourceBlob: AmbientBlob,
+  playerPosition: Vector3,
+  elapsed: number,
+  recruitedKaruIds: Set<string>,
+) {
   let recruitedCount = 0;
 
   blobs.forEach((blob) => {
@@ -334,6 +340,7 @@ function recruitNearbyBlobs(blobs: AmbientBlob[], sourceBlob: AmbientBlob, playe
     }
 
     blob.recruited = true;
+    recruitedKaruIds.add(blob.id);
     blob.recruitedAt = elapsed;
     blob.regroupUntil = elapsed + 1.6;
     blob.callRespondUntil = elapsed + 0.3;
@@ -347,6 +354,39 @@ function recruitNearbyBlobs(blobs: AmbientBlob[], sourceBlob: AmbientBlob, playe
   });
 
   return recruitedCount;
+}
+
+function syncAmbientBlobRecruitmentFromSave(
+  blobs: AmbientBlob[],
+  recruitedKaruIds: ReadonlySet<string>,
+  elapsed: number,
+) {
+  blobs.forEach((blob) => {
+    const savedRecruitment = recruitedKaruIds.has(blob.id);
+    if (blob.recruited === savedRecruitment) {
+      return;
+    }
+
+    blob.recruited = savedRecruitment;
+    if (savedRecruitment) {
+      blob.recruitedAt = elapsed - 1.2;
+      blob.regroupUntil = Math.max(blob.regroupUntil, elapsed + 0.5);
+      blob.callRespondUntil = Math.max(blob.callRespondUntil, elapsed + 0.2);
+      blob.callWaveStartAt = Math.max(blob.callWaveStartAt, elapsed + 0.05 + blob.leaderSlot * 0.02);
+      blob.mode = "curious";
+      blob.avoidPlayerUntil = 0;
+      blob.restUntil = Math.min(blob.restUntil, elapsed + 0.12);
+      return;
+    }
+
+    blob.recruitedAt = 0;
+    blob.regroupUntil = 0;
+    blob.callRespondUntil = 0;
+    blob.callWaveStartAt = 0;
+    blob.rolling = false;
+    blob.mode = "rest";
+    blob.target.copy(blob.home);
+  });
 }
 
 function stageAmbientBlobCloseup(blobs: AmbientBlob[]) {
@@ -652,6 +692,7 @@ export function updateAmbientBlobs(
   regroupPressed = false,
 ): AmbientBlobUpdateStats {
   ambientBlobGroup.visible = !mapLookdown;
+  syncAmbientBlobRecruitmentFromSave(blobs, frame.save.recruitedKaruIds, elapsed);
   if (mapLookdown) {
     return {
       speciesName: AMBIENT_BLOB_SPECIES_NAME,
@@ -678,7 +719,7 @@ export function updateAmbientBlobs(
     nearestBeforeRecruit.blob &&
     nearestBeforeRecruit.distance !== null &&
     nearestBeforeRecruit.distance <= FAUNA_RECRUIT_RADIUS
-      ? recruitNearbyBlobs(blobs, nearestBeforeRecruit.blob, playerPosition, elapsed)
+      ? recruitNearbyBlobs(blobs, nearestBeforeRecruit.blob, playerPosition, elapsed, frame.save.recruitedKaruIds)
       : 0;
   let mossuCollisionCount = 0;
   let firstEncounterActive = false;

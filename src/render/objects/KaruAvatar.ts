@@ -1,4 +1,5 @@
 import {
+  BackSide,
   CanvasTexture,
   Group,
   Mesh,
@@ -24,6 +25,24 @@ export interface AmbientBlobRig {
 }
 
 let karuTexture: CanvasTexture | null = null;
+
+function addSoftAnimeOutline(mesh: Mesh, color = "#3f625c", scale = 1.05, opacity = 0.28) {
+  const outline = new Mesh(
+    mesh.geometry,
+    new MeshBasicMaterial({
+      color,
+      side: BackSide,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+  );
+  outline.name = `${mesh.name || "karu-part"}-soft-anime-outline`;
+  outline.scale.setScalar(scale);
+  outline.renderOrder = -1;
+  mesh.add(outline);
+}
 
 function getKaruTexture() {
   if (karuTexture) {
@@ -53,9 +72,10 @@ function getKaruTexture() {
     const radius = 1 + ((i * 19) % 10) * 0.15;
     const alpha = 0.045 + ((i * 23) % 8) * 0.01;
     context.beginPath();
-    context.fillStyle = i % 4 === 0
-      ? `rgba(${karuTextureArt.speckleWarmRgb}, ${alpha + 0.1})`
-      : `rgba(${karuTextureArt.speckleCoolRgb}, ${alpha})`;
+    context.fillStyle =
+      i % 4 === 0
+        ? `rgba(${karuTextureArt.speckleWarmRgb}, ${alpha + 0.1})`
+        : `rgba(${karuTextureArt.speckleCoolRgb}, ${alpha})`;
     context.arc(x, y, radius, 0, Math.PI * 2);
     context.fill();
   }
@@ -171,6 +191,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
   const body = new Mesh(new SphereGeometry(0.58 * scale, 22, 16), bodyMaterial);
   body.scale.set(1.18, 1.02, 1.12);
   body.position.y = 0.62 * scale;
+  addSoftAnimeOutline(body, "#3f635d", 1.05, 0.28);
   root.add(body);
 
   const glow = new Mesh(new SphereGeometry(0.59 * scale, 16, 12), glowMaterial);
@@ -195,6 +216,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
     puff.position.set(x * scale, y * scale, z * scale);
     puff.scale.set(sx * scale, sy * scale, sz * scale);
     puff.userData.baseScale = { x: sx * scale, y: sy * scale, z: sz * scale };
+    addSoftAnimeOutline(puff, "#4e6a5f", 1.06, 0.22);
     root.add(puff);
     fluffPuffs.push(puff);
   });
@@ -240,6 +262,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
     foot.userData.homeX = spec.x;
     foot.userData.homeZ = spec.z;
     foot.userData.front = spec.front;
+    addSoftAnimeOutline(foot, "#70684d", 1.045, 0.2);
     root.add(foot);
     return foot;
   }) as unknown as [Mesh, Mesh, Mesh, Mesh];
@@ -247,6 +270,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
   const tail = new Mesh(new SphereGeometry(0.2 * scale, 12, 8), fluffMaterial);
   tail.scale.set(0.54, 0.46, 0.86);
   tail.position.set(0, 0.46 * scale, -0.72 * scale);
+  addSoftAnimeOutline(tail, "#4e6a5f", 1.06, 0.22);
   root.add(tail);
 
   return {

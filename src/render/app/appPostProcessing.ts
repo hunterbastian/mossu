@@ -32,11 +32,7 @@ export function markPostProcessingScheduled(
   return true;
 }
 
-export function suppressPostProcessing(
-  runtime: PostProcessingRuntime,
-  elapsed: number,
-  seconds: number,
-) {
+export function suppressPostProcessing(runtime: PostProcessingRuntime, elapsed: number, seconds: number) {
   runtime.suppressedUntil = Math.max(runtime.suppressedUntil, elapsed + seconds);
 }
 
@@ -85,17 +81,29 @@ export function updateRenderPath(runtime: PostProcessingRuntime, renderPath: Ren
   return true;
 }
 
-export function updateRetroTexturePass(
-  retroTexturePass: ShaderPass | null,
-  elapsed: number,
-  activePixelRatio: number,
-) {
+export function updateRetroTexturePass(retroTexturePass: ShaderPass | null, elapsed: number, activePixelRatio: number) {
   if (!retroTexturePass) {
     return;
   }
 
   retroTexturePass.uniforms.uTime.value = elapsed;
   retroTexturePass.uniforms.uResolution.value.set(
+    window.innerWidth * activePixelRatio,
+    window.innerHeight * activePixelRatio,
+  );
+}
+
+export function updateAnimeColorGradePass(
+  animeColorGradePass: ShaderPass | null,
+  elapsed: number,
+  activePixelRatio: number,
+) {
+  if (!animeColorGradePass) {
+    return;
+  }
+
+  animeColorGradePass.uniforms.uTime.value = elapsed;
+  animeColorGradePass.uniforms.uResolution.value.set(
     window.innerWidth * activePixelRatio,
     window.innerHeight * activePixelRatio,
   );

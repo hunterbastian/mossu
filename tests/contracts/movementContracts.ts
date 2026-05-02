@@ -80,6 +80,7 @@ function simulatePlanarVelocity(input: InputSnapshot, cameraYaw: number, frames 
     unlockedAbilities: new Set(["breeze_float"]),
     catalogedLandmarkIds: new Set(),
     gatheredForageableIds: new Set(),
+    recruitedKaruIds: new Set(),
   };
   const player = makePlayer();
   const runtime = createPlayerSimulationRuntime();
@@ -97,6 +98,7 @@ export function runMovementContracts() {
     unlockedAbilities: new Set(["breeze_float"]),
     catalogedLandmarkIds: new Set(),
     gatheredForageableIds: new Set(),
+    recruitedKaruIds: new Set(),
   };
 
   const leftStrafe = simulatePlanarVelocity({ ...baseInput, moveX: -1 }, Math.PI);

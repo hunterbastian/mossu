@@ -2,6 +2,7 @@ import type { SaveState } from "../../simulation/gameState";
 import {
   applyStoredSaveState,
   buildStoredSaveStatePayload,
+  clearStoredSaveState,
   getSaveSignature,
   readStoredSaveState,
   writeStoredSaveState,
@@ -47,6 +48,17 @@ export function persistLocalSaveState(save: SaveState, runtime: LocalSaveRuntime
     return true;
   } catch (error) {
     console.warn("Mossu save persist failed", error);
+    return false;
+  }
+}
+
+export function clearLocalSaveState(save: SaveState, runtime: LocalSaveRuntime) {
+  try {
+    clearStoredSaveState();
+    runtime.lastPersistedSaveSignature = getSaveSignature(save);
+    return true;
+  } catch (error) {
+    console.warn("Mossu save clear failed", error);
     return false;
   }
 }

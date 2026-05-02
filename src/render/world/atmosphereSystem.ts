@@ -51,8 +51,8 @@ function makeSkySunCircle(color: string, opacity: number, radius: number, additi
     depthWrite: false,
     depthTest: false,
     fog: false,
-    blending: additive ? AdditiveBlending : undefined,
     side: DoubleSide,
+    ...(additive ? { blending: AdditiveBlending } : {}),
   });
   material.toneMapped = false;
 
@@ -241,7 +241,14 @@ function makeSkySunRay(length: number, width: number, color: string, opacity: nu
   return ray;
 }
 
-function makeSkySunGodRay(length: number, width: number, color: string, opacity: number, angle: number, distance: number) {
+function makeSkySunGodRay(
+  length: number,
+  width: number,
+  color: string,
+  opacity: number,
+  angle: number,
+  distance: number,
+) {
   const ray = makeSkySunRay(length, width, color, opacity, angle, distance);
   ray.renderOrder = SKY_SUN_RENDER_ORDER - 2;
   ray.userData.isGodRay = true;
@@ -275,29 +282,33 @@ export function buildStylizedSkySun() {
   lowerGlow.scale.set(1.28, 0.68, 1);
 
   const godRays = [
-    [-0.72, 108, 13, "#fff5bc", 0.044, 93],
-    [-0.34, 154, 17, "#ffe090", 0.038, 100],
-    [0.08, 196, 22, "#fff8d2", 0.032, 114],
-    [0.45, 142, 15, "#ffe4a0", 0.034, 101],
-    [0.84, 118, 12, "#fff6cb", 0.03, 92],
-  ].map(([angle, length, width, color, opacity, distance]) => makeSkySunGodRay(
-    length as number,
-    width as number,
-    color as string,
-    opacity as number,
-    angle as number,
-    distance as number,
-  ));
+    [-0.72, 108, 13, "#fff5bc", 0.017, 93],
+    [-0.34, 154, 17, "#ffe090", 0.015, 100],
+    [0.08, 196, 22, "#fff8d2", 0.012, 114],
+    [0.45, 142, 15, "#ffe4a0", 0.014, 101],
+    [0.84, 118, 12, "#fff6cb", 0.012, 92],
+  ].map(([angle, length, width, color, opacity, distance]) =>
+    makeSkySunGodRay(
+      length as number,
+      width as number,
+      color as string,
+      opacity as number,
+      angle as number,
+      distance as number,
+    ),
+  );
 
   const rayAngles = [-0.34, 0.3, 0.92, 1.58, 2.28, 2.92, 3.66, 4.34, 5.08, 5.74];
-  const rays = rayAngles.map((angle, index) => makeSkySunRay(
-    index % 3 === 0 ? 82 : index % 2 === 0 ? 62 : 48,
-    index % 3 === 0 ? 10.5 : 7.2,
-    index % 2 === 0 ? "#fff7c9" : "#ffd56d",
-    index % 3 === 0 ? 0.12 : 0.085,
-    angle,
-    index % 3 === 0 ? 76 : 66,
-  ));
+  const rays = rayAngles.map((angle, index) =>
+    makeSkySunRay(
+      index % 3 === 0 ? 82 : index % 2 === 0 ? 62 : 48,
+      index % 3 === 0 ? 10.5 : 7.2,
+      index % 2 === 0 ? "#fff7c9" : "#ffd56d",
+      index % 3 === 0 ? 0.12 : 0.085,
+      angle,
+      index % 3 === 0 ? 76 : 66,
+    ),
+  );
 
   const flecks = [
     [-48, 24, 3.6, "#fff7c6", 0.42],
@@ -348,9 +359,9 @@ export function buildStylizedSkySun() {
 
 function createCloudPuffMaterial() {
   const material = new MeshBasicMaterial({
-    color: "#f5fdff",
+    color: "#fffaf0",
     transparent: true,
-    opacity: 0.26,
+    opacity: 0.2,
     depthWrite: false,
     fog: true,
   });
@@ -374,11 +385,7 @@ function makeCloudCluster(position: Vector3, scale: number, puffMaterial: MeshBa
     const geom = baseSphere.clone();
     const puff = new Mesh(geom, puffMaterial);
     puff.position.set(x, y, z);
-    puff.scale.set(
-      (size * sx) * scale,
-      (size * sy) * scale,
-      (size * sz) * scale,
-    );
+    puff.scale.set(size * sx * scale, size * sy * scale, size * sz * scale);
     puff.userData.baseY = puff.position.y;
     group.add(puff);
   });
@@ -413,16 +420,19 @@ export function buildClouds() {
     new Vector3(306, 188, -116),
     new Vector3(-276, 214, 126),
     new Vector3(282, 228, 246),
+    new Vector3(-118, 242, -18),
+    new Vector3(156, 256, 132),
   ];
 
   sets.forEach((position, index) => {
-    const cluster = makeCloudCluster(position, 2.85 + index * 0.24, puffMaterial);
+    const layerScale = index >= 4 ? 2.2 + (index - 4) * 0.18 : 2.85 + index * 0.24;
+    const cluster = makeCloudCluster(position, layerScale, puffMaterial);
     cluster.name = `clean-sky-cloud-${index}`;
     cluster.rotation.y = index * 0.42 + 0.18;
-    cluster.userData.driftRangeX = 10 + index * 1.8;
-    cluster.userData.driftRangeZ = 4 + index * 0.7;
+    cluster.userData.driftRangeX = 10 + index * 1.8 + (index >= 4 ? 6 : 0);
+    cluster.userData.driftRangeZ = 4 + index * 0.7 + (index >= 4 ? 3 : 0);
     cluster.userData.bobRange = 1.2 + index * 0.14;
-    cluster.userData.driftSpeed = 0.018 + index * 0.003;
+    cluster.userData.driftSpeed = (index >= 4 ? 0.012 : 0.018) + index * 0.002;
     clouds.add(cluster);
   });
 
@@ -497,7 +507,7 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
         vec3 dir = normalize(vWorldDirection);
         float mood = clamp(uElevationMood, 0.0, 1.0);
         // Cozy lowland → cooler alpine: zenith and mid band shift with elevation mood.
-        vec3 horizonColor = vec3(0.985, 0.992, 0.95);
+        vec3 horizonColor = vec3(1.0, 0.975, 0.82);
         vec3 midColor = mix(vec3(0.70, 0.90, 0.965), vec3(0.66, 0.83, 0.955), mood);
         vec3 zenithColor = mix(vec3(0.52, 0.77, 0.965), vec3(0.47, 0.67, 0.94), mood);
         vec3 color = mix(horizonColor, midColor, smoothstep(-0.08, 0.18, dir.y));
@@ -505,29 +515,38 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
 
         vec3 sunDir = normalize(uSunDir);
         float sunDot = max(dot(dir, sunDir), 0.0);
-        float sunBloom = pow(sunDot, 3.15);
-        float sunCorona = pow(sunDot, 1.34) * (1.0 - pow(sunDot, 8.0) * 0.7);
+        float sunBloom = pow(sunDot, 2.92);
+        float sunCorona = pow(sunDot, 1.08) * (1.0 - pow(sunDot, 8.0) * 0.64);
+        float rayNoise = fbm(vec2(atan(dir.z, dir.x) * 1.7, dir.y * 3.2) + vec2(uElevationMood * 0.8, 0.0));
+        float rayBands = smoothstep(0.54, 0.88, rayNoise) * smoothstep(0.2, 0.98, sunDot);
+        float lightShaft = rayBands * pow(sunDot, 4.4) * smoothstep(-0.04, 0.48, dir.y);
         float sunDisk = smoothstep(0.982, 0.993, sunDot);
         float sunCore = smoothstep(0.993, 0.9985, sunDot);
         vec3 sunTint = uSunColor * 1.1;
         vec3 sunApricot = mix(vec3(1.0, 0.66, 0.25), sunTint, 0.48);
         vec3 sunCream = mix(vec3(1.0, 0.96, 0.66), sunTint, 0.58);
+        vec3 warmHaze = mix(vec3(1.0, 0.76, 0.36), sunCream, 0.46);
         vec3 coolBloom = vec3(0.58, 0.82, 0.96) * (0.09 + mood * 0.045);
         color += coolBloom * sunBloom;
-        color += sunApricot * sunBloom * 0.34;
-        color += mix(vec3(1.0, 0.84, 0.5), sunTint, 0.48) * sunCorona * 0.24;
+        color += sunApricot * sunBloom * 0.3;
+        color += warmHaze * sunCorona * (0.23 + (1.0 - mood) * 0.05);
+        color += sunCream * lightShaft * (0.012 + (1.0 - mood) * 0.007);
         color = mix(color, sunApricot, sunDisk * 0.58);
         color = mix(color, sunCream, sunCore * 0.78);
         color += sunCream * sunCore * 0.32;
 
         vec2 skyUv = dir.xz * (2.05 / max(0.26, dir.y + 0.38));
         float highWisp = fbm(skyUv * vec2(0.62, 0.26) + vec2(8.0, 3.0));
-        float veil = smoothstep(0.68, 0.9, highWisp) * smoothstep(0.16, 0.74, dir.y);
-        vec3 veilColor = mix(vec3(0.9, 0.975, 0.995), vec3(1.0, 0.978, 0.895), 0.44 + sunBloom * 0.22);
-        color = mix(color, veilColor, veil * 0.08);
+        float softWash = fbm(skyUv * vec2(0.32, 0.14) + vec2(-4.0, 6.2));
+        float veil = smoothstep(0.6, 0.88, highWisp) * smoothstep(0.12, 0.74, dir.y);
+        float upperWash = smoothstep(0.42, 0.82, softWash) * smoothstep(0.04, 0.62, dir.y);
+        vec3 veilColor = mix(vec3(0.9, 0.975, 0.995), vec3(1.0, 0.97, 0.84), 0.54 + sunBloom * 0.22);
+        color = mix(color, veilColor, veil * 0.085 + upperWash * 0.024);
 
         float horizonHaze = smoothstep(-0.14, 0.12, dir.y) * (1.0 - smoothstep(0.16, 0.44, dir.y));
-        color = mix(color, vec3(0.94, 0.985, 0.99), horizonHaze * 0.38);
+        float paperBloom = fbm(vec2(atan(dir.z, dir.x) * 0.9, dir.y * 2.6) + vec2(2.4, 11.2));
+        vec3 watercolorFog = mix(vec3(0.94, 0.985, 0.99), vec3(1.0, 0.95, 0.76), 0.34 + sunBloom * 0.26);
+        color = mix(color, watercolorFog, horizonHaze * (0.34 + paperBloom * 0.055));
 
         float aquaLift = smoothstep(0.08, 0.72, dir.y) * (1.0 - smoothstep(0.76, 1.0, dir.y));
         color += vec3(0.075, 0.26, 0.24) * aquaLift * (0.046 - mood * 0.01);
@@ -561,8 +580,12 @@ export function syncAtmosphereLighting(
     (skyMat.uniforms.uSunColor.value as Color).copy(sun.color);
     skyMat.uniforms.uElevationMood.value = mood;
   }
-  const cloudMat = clouds.userData.cloudMaterial as ShaderMaterial | undefined;
-  if (cloudMat?.uniforms?.uSunDirView) {
+  const cloudMat = clouds.userData.cloudMaterial as ShaderMaterial | MeshBasicMaterial | undefined;
+  if (cloudMat instanceof MeshBasicMaterial) {
+    getAtmosphereHorizonTints(mood, _horizonTintScratch, _horizonHazeScratch, _cloudBrightScratch, _cloudShadowScratch);
+    cloudMat.color.copy(_cloudBrightScratch).lerp(sun.color, 0.08 + (1 - mood) * 0.04);
+    cloudMat.opacity = MathUtils.lerp(0.22, 0.18, mood);
+  } else if (cloudMat?.uniforms?.uSunDirView) {
     _sunDirViewScratch.copy(_sunDirScratch).transformDirection(camera.matrixWorldInverse);
     cloudMat.uniforms.uSunDirView.value.copy(_sunDirViewScratch);
     (cloudMat.uniforms.uSunColor.value as Color).copy(sun.color);
@@ -571,13 +594,7 @@ export function syncAtmosphereLighting(
     cloudMat.uniforms.uElevationMood.value = mood;
 
     // Ghibli-ish: warm paper/cream at horizon, cooler cel highlights aloft; ties to sky + elevation.
-    getAtmosphereHorizonTints(
-      mood,
-      _horizonTintScratch,
-      _horizonHazeScratch,
-      _cloudBrightScratch,
-      _cloudShadowScratch,
-    );
+    getAtmosphereHorizonTints(mood, _horizonTintScratch, _horizonHazeScratch, _cloudBrightScratch, _cloudShadowScratch);
     (cloudMat.uniforms.uHorizonTint.value as Color).copy(_horizonTintScratch);
     (cloudMat.uniforms.uHorizonHaze.value as Color).copy(_horizonHazeScratch);
     (cloudMat.uniforms.uCloudBright.value as Color).copy(_cloudBrightScratch);
@@ -593,6 +610,9 @@ export function syncStylizedSkySun(
   timeSeconds = 0,
 ) {
   const mood = MathUtils.clamp(elevationMood, 0, 1);
+  const lowAngleWarmth =
+    typeof sun.userData.lowAngleWarmth === "number" ? MathUtils.clamp(sun.userData.lowAngleWarmth, 0, 1) : 0;
+  const rayLift = MathUtils.lerp(0.48, 0.82, lowAngleWarmth);
   _sunDirScratch.subVectors(sun.position, sun.target.position).normalize();
   _skySunPositionScratch.copy(camera.position).addScaledVector(_sunDirScratch, 520);
   skySun.position.copy(_skySunPositionScratch);
@@ -624,9 +644,9 @@ export function syncStylizedSkySun(
     }
   });
 
-  setOpacity(refs?.outerGlow, MathUtils.lerp(0.08, 0.05, mood));
-  setOpacity(refs?.warmHalo, MathUtils.lerp(0.12, 0.08, mood));
-  setOpacity(refs?.softCorona, MathUtils.lerp(0.1, 0.065, mood));
+  setOpacity(refs?.outerGlow, MathUtils.lerp(0.076, 0.05, mood) * MathUtils.lerp(0.95, 1.16, lowAngleWarmth));
+  setOpacity(refs?.warmHalo, MathUtils.lerp(0.118, 0.08, mood) * MathUtils.lerp(0.95, 1.18, lowAngleWarmth));
+  setOpacity(refs?.softCorona, MathUtils.lerp(0.098, 0.065, mood));
   setOpacity(refs?.amberRing, MathUtils.lerp(0.2, 0.13, mood));
   setOpacity(refs?.coronaShell, MathUtils.lerp(0.26, 0.18, mood));
   setOpacity(refs?.surfaceFace, MathUtils.lerp(0.66, 0.48, mood));
@@ -645,7 +665,10 @@ export function syncStylizedSkySun(
       Math.sin(baseAngle + drift * 0.4) * (baseDistance + pulse * 2.2),
       -0.08,
     );
-    setOpacity(ray, baseOpacity * MathUtils.lerp(1, 0.58, mood) * pulse);
+    setOpacity(
+      ray,
+      baseOpacity * MathUtils.lerp(0.92, 0.58, mood) * pulse * MathUtils.lerp(0.95, 1.16, lowAngleWarmth),
+    );
   });
 
   refs?.godRays.forEach((ray, index) => {
@@ -660,7 +683,7 @@ export function syncStylizedSkySun(
       Math.sin(baseAngle + slowDrift * 0.28) * (baseDistance + breathe * 5),
       -0.16,
     );
-    setOpacity(ray, baseOpacity * MathUtils.lerp(1.0, 0.48, mood) * breathe);
+    setOpacity(ray, baseOpacity * MathUtils.lerp(1.0, 0.48, mood) * breathe * rayLift);
   });
 
   refs?.flecks.forEach((fleck, index) => {

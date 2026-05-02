@@ -88,9 +88,7 @@ canvas.is-pointer-locked {
   padding: 0.72rem 0.84rem;
   border: 1px solid rgba(166, 225, 245, 0.78);
   border-radius: 0.8rem;
-  background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.82), transparent 30%),
-    rgba(230, 249, 255, 0.68);
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.82), transparent 30%), rgba(230, 249, 255, 0.68);
   backdrop-filter: blur(18px) saturate(1.14);
   box-shadow: var(--ui-shadow-soft);
   color: var(--ui-ink);
@@ -116,9 +114,7 @@ canvas.is-pointer-locked {
   max-width: min(18rem, calc(100vw - 2rem));
   padding: 0.62rem 0.72rem;
   border-radius: 0.65rem;
-  background:
-    linear-gradient(180deg, rgba(248, 254, 255, 0.82), rgba(224, 249, 255, 0.66)),
-    rgba(237, 252, 255, 0.7);
+  background: linear-gradient(180deg, rgba(248, 254, 255, 0.82), rgba(224, 249, 255, 0.66)), rgba(237, 252, 255, 0.7);
   font-size: 0.64rem;
   line-height: 1.38;
 }
@@ -209,7 +205,9 @@ canvas.is-pointer-locked {
   background:
     radial-gradient(circle at top, rgba(255, 255, 255, 0.92), transparent 46%),
     linear-gradient(165deg, rgba(255, 248, 248, 0.94) 0%, rgba(235, 249, 255, 0.88) 100%);
-  box-shadow: var(--ui-shadow), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  box-shadow:
+    var(--ui-shadow),
+    0 0 0 1px rgba(255, 255, 255, 0.5) inset;
   color: var(--ui-ink);
   font-family: var(--ui-sans);
 }
@@ -432,8 +430,8 @@ canvas.is-pointer-locked {
   height: 0.22rem;
   border-radius: 999px;
   background:
-    linear-gradient(90deg, rgba(92, 191, 175, 0.95), rgba(255, 210, 105, 0.9))
-      0 0 / calc(max(0.08, var(--opening-progress)) * 100%) 100% no-repeat,
+    linear-gradient(90deg, rgba(92, 191, 175, 0.95), rgba(255, 210, 105, 0.9)) 0 0 /
+      calc(max(0.08, var(--opening-progress)) * 100%) 100% no-repeat,
     rgba(128, 92, 44, 0.18);
 }
 
@@ -531,8 +529,13 @@ canvas.is-pointer-locked {
   width: clamp(6.4rem, 16vw, 12rem);
   height: clamp(6.4rem, 16vw, 12rem);
   border-radius: 999px;
-  background:
-    radial-gradient(circle, rgba(255, 255, 232, 0.98) 0 16%, rgba(255, 249, 178, 0.92) 17% 30%, rgba(255, 206, 101, 0.46) 31% 54%, rgba(255, 206, 101, 0) 68%);
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 232, 0.98) 0 16%,
+    rgba(255, 249, 178, 0.92) 17% 30%,
+    rgba(255, 206, 101, 0.46) 31% 54%,
+    rgba(255, 206, 101, 0) 68%
+  );
   filter: blur(0.2px);
   opacity: 0.86;
 }
@@ -544,7 +547,13 @@ canvas.is-pointer-locked {
   inset: -120%;
   pointer-events: none;
   background:
-    linear-gradient(180deg, transparent 47.6%, rgba(255, 250, 220, 0.78) 49%, rgba(255, 250, 220, 0) 50.4%, transparent),
+    linear-gradient(
+      180deg,
+      transparent 47.6%,
+      rgba(255, 250, 220, 0.78) 49%,
+      rgba(255, 250, 220, 0) 50.4%,
+      transparent
+    ),
     linear-gradient(90deg, transparent 47.6%, rgba(255, 250, 220, 0.78) 49%, rgba(255, 250, 220, 0) 50.4%, transparent);
   filter: blur(2px);
   mix-blend-mode: screen;
@@ -555,7 +564,13 @@ canvas.is-pointer-locked {
   inset: -90%;
   background:
     linear-gradient(45deg, transparent 47.6%, rgba(255, 240, 180, 0.62) 49%, rgba(255, 240, 180, 0) 50.4%, transparent),
-    linear-gradient(-45deg, transparent 47.6%, rgba(255, 240, 180, 0.62) 49%, rgba(255, 240, 180, 0) 50.4%, transparent),
+    linear-gradient(
+      -45deg,
+      transparent 47.6%,
+      rgba(255, 240, 180, 0.62) 49%,
+      rgba(255, 240, 180, 0) 50.4%,
+      transparent
+    ),
     radial-gradient(circle, rgba(255, 246, 196, 0.22) 0 12%, transparent 38%);
   filter: blur(1.5px);
   opacity: 0.7;
@@ -664,7 +679,14 @@ canvas.is-pointer-locked {
   border-radius: 1.6rem;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.32) 22%, rgba(255, 255, 255, 0.06) 49%, rgba(255, 255, 255, 0.02) 51%, rgba(178, 234, 223, 0.34) 100%),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.78) 0%,
+      rgba(255, 255, 255, 0.32) 22%,
+      rgba(255, 255, 255, 0.06) 49%,
+      rgba(255, 255, 255, 0.02) 51%,
+      rgba(178, 234, 223, 0.34) 100%
+    ),
     linear-gradient(135deg, rgba(143, 216, 219, 0.46), rgba(196, 234, 153, 0.4));
   backdrop-filter: blur(30px) saturate(1.5);
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
@@ -781,8 +803,7 @@ canvas.is-pointer-locked {
   transform: rotate(-1deg);
   border: 2px solid rgba(172, 116, 43, 0.58);
   border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(255, 246, 199, 0.96), rgba(236, 206, 130, 0.9));
+  background: linear-gradient(180deg, rgba(255, 246, 199, 0.96), rgba(236, 206, 130, 0.9));
   color: #69421f;
   font-family: var(--ui-sans);
   font-size: clamp(0.84rem, 2vw, 1.05rem);
@@ -805,7 +826,13 @@ canvas.is-pointer-locked {
   border-radius: 999px;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.08) 48%, rgba(255, 255, 255, 0) 50%, rgba(132, 202, 198, 0.34) 100%),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.5) 0%,
+      rgba(255, 255, 255, 0.08) 48%,
+      rgba(255, 255, 255, 0) 50%,
+      rgba(132, 202, 198, 0.34) 100%
+    ),
     linear-gradient(180deg, rgba(120, 210, 220, 0.95) 0%, rgba(86, 180, 196, 0.95) 56%, rgba(54, 138, 158, 0.95) 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.95),
@@ -818,8 +845,13 @@ canvas.is-pointer-locked {
   font-family: Georgia, "Palatino Linotype", var(--ui-sans);
   font-weight: 900;
   text-transform: none;
-  text-shadow: 0 1px 0 rgba(28, 78, 92, 0.6), 0 0 14px rgba(180, 240, 240, 0.4);
-  transition: transform 180ms ease, box-shadow 220ms ease, filter 180ms ease;
+  text-shadow:
+    0 1px 0 rgba(28, 78, 92, 0.6),
+    0 0 14px rgba(180, 240, 240, 0.4);
+  transition:
+    transform 180ms ease,
+    box-shadow 220ms ease,
+    filter 180ms ease;
 }
 
 .title-screen__button::before {
@@ -853,7 +885,13 @@ canvas.is-pointer-locked {
   outline: 2px solid rgba(255, 255, 255, 0.85);
   outline-offset: 4px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.12) 48%, rgba(255, 255, 255, 0) 50%, rgba(150, 220, 215, 0.42) 100%),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.6) 0%,
+      rgba(255, 255, 255, 0.12) 48%,
+      rgba(255, 255, 255, 0) 50%,
+      rgba(150, 220, 215, 0.42) 100%
+    ),
     linear-gradient(180deg, rgba(150, 224, 230, 0.96) 0%, rgba(108, 196, 210, 0.96) 56%, rgba(64, 152, 174, 0.96) 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 1),
@@ -937,7 +975,10 @@ canvas.is-pointer-locked {
   font-weight: 900;
   text-decoration: none;
   text-shadow: 0 1px 0 rgba(255, 251, 226, 0.7);
-  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease;
+  transition:
+    transform 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .title-screen__tool-step span {
@@ -1112,14 +1153,13 @@ canvas.is-pointer-locked {
 
 .title-screen::before {
   z-index: 4;
-  background:
-    repeating-linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.055) 0,
-      rgba(255, 255, 255, 0.055) 1px,
-      rgba(21, 54, 45, 0.055) 2px,
-      transparent 4px
-    );
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.055) 0,
+    rgba(255, 255, 255, 0.055) 1px,
+    rgba(21, 54, 45, 0.055) 2px,
+    transparent 4px
+  );
   opacity: 0.34;
 }
 
@@ -1171,8 +1211,12 @@ canvas.is-pointer-locked {
   position: absolute;
   display: block;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 34% 30%, rgba(255, 255, 241, 0.8), rgba(202, 255, 225, 0.26) 42%, rgba(133, 218, 221, 0.04) 70%);
+  background: radial-gradient(
+    circle at 34% 30%,
+    rgba(255, 255, 241, 0.8),
+    rgba(202, 255, 225, 0.26) 42%,
+    rgba(133, 218, 221, 0.04) 70%
+  );
   box-shadow: inset 0 0 1.8rem rgba(255, 255, 255, 0.16);
   filter: blur(1.8px);
   opacity: 0.48;
@@ -1246,7 +1290,9 @@ canvas.is-pointer-locked {
   font: inherit;
   text-align: center;
   text-shadow: none;
-  transition: transform 180ms ease, filter 180ms ease;
+  transition:
+    transform 180ms ease,
+    filter 180ms ease;
 }
 
 .title-screen__button:hover,
@@ -1299,7 +1345,9 @@ canvas.is-pointer-locked {
     0 1.4rem 3.2rem rgba(35, 77, 53, 0.34),
     0 0 4.8rem rgba(255, 238, 139, 0.22);
   overflow: hidden;
-  transition: transform 180ms ease, filter 180ms ease;
+  transition:
+    transform 180ms ease,
+    filter 180ms ease;
 }
 
 .title-screen__menu::before,
@@ -1631,8 +1679,7 @@ canvas.is-pointer-locked {
   place-items: center;
   border-radius: 999px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent),
-    linear-gradient(180deg, var(--ui-gold), #f1d59b);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent), linear-gradient(180deg, var(--ui-gold), #f1d59b);
   box-shadow:
     inset 0 0 0 1px rgba(120, 92, 31, 0.2),
     0 4px 10px rgba(68, 52, 17, 0.16);
@@ -1683,8 +1730,7 @@ canvas.is-pointer-locked {
   max-width: min(28rem, calc(100vw - 1.8rem));
   background:
     radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.94), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(225, 250, 255, 0.3)),
-    rgba(208, 245, 255, 0.4);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(225, 250, 255, 0.3)), rgba(208, 245, 255, 0.4);
 }
 
 .status-label {
@@ -1792,7 +1838,14 @@ canvas.is-pointer-locked {
   border-radius: 0.42rem;
   background:
     radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.98) 0 15%, transparent 16%),
-    conic-gradient(from 120deg, rgba(144, 231, 189, 0.92), rgba(124, 197, 255, 0.82), rgba(255, 211, 132, 0.72), rgba(247, 152, 174, 0.66), rgba(144, 231, 189, 0.92));
+    conic-gradient(
+      from 120deg,
+      rgba(144, 231, 189, 0.92),
+      rgba(124, 197, 255, 0.82),
+      rgba(255, 211, 132, 0.72),
+      rgba(247, 152, 174, 0.66),
+      rgba(144, 231, 189, 0.92)
+    );
   transform: rotate(-5deg);
 }
 
@@ -1899,9 +1952,7 @@ canvas.is-pointer-locked {
   padding: 0.22rem 0.34rem 0.22rem 0.46rem;
   border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.2)),
-    rgba(224, 243, 238, 0.52);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.2)), rgba(224, 243, 238, 0.52);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.7),
     0 0.3rem 0.62rem rgba(53, 86, 80, 0.08);
@@ -2172,9 +2223,7 @@ canvas.is-pointer-locked {
 .prompt-chip--ambient {
   padding: 0.44rem 0.62rem;
   max-width: min(17rem, calc(100vw - 1.8rem));
-  background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.7), transparent 30%),
-    rgba(231, 249, 255, 0.36);
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.7), transparent 30%), rgba(231, 249, 255, 0.36);
   border-color: rgba(179, 231, 245, 0.48);
   color: rgba(30, 70, 100, 0.78);
   box-shadow:
@@ -2333,8 +2382,7 @@ canvas.is-pointer-locked {
   padding: 0.18rem 0.38rem;
   border: 1px solid rgba(52, 72, 141, 0.46);
   border-radius: 0.5rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(216, 233, 255, 0.54));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(216, 233, 255, 0.54));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.92),
     0 4px 10px rgba(45, 61, 114, 0.08);
@@ -2376,8 +2424,12 @@ canvas.is-pointer-locked {
   padding: 0.48rem 0.62rem;
   border: 1px solid rgba(72, 113, 154, 0.24);
   border-radius: 0.72rem;
-  background:
-    linear-gradient(135deg, rgba(251, 255, 241, 0.96) 0%, rgba(226, 247, 232, 0.9) 54%, rgba(218, 239, 255, 0.9) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(251, 255, 241, 0.96) 0%,
+    rgba(226, 247, 232, 0.9) 54%,
+    rgba(218, 239, 255, 0.9) 100%
+  );
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.72),
     0 10px 24px rgba(42, 73, 91, 0.14);
@@ -2655,9 +2707,7 @@ canvas.is-pointer-locked {
   place-items: center;
   box-sizing: border-box;
   padding: clamp(1rem, 3vw, 2rem);
-  background:
-    linear-gradient(180deg, rgba(255, 249, 213, 0.08), rgba(35, 78, 58, 0.18)),
-    rgba(20, 54, 49, 0.22);
+  background: linear-gradient(180deg, rgba(255, 249, 213, 0.08), rgba(35, 78, 58, 0.18)), rgba(20, 54, 49, 0.22);
   backdrop-filter: blur(12px) saturate(1.08);
   opacity: 0;
   pointer-events: none;
@@ -2746,7 +2796,7 @@ canvas.is-pointer-locked {
 
 .pause-menu__status-grid {
   grid-column: 1 / -1;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
 }
 
 .pause-action,
@@ -2792,6 +2842,17 @@ canvas.is-pointer-locked {
 
 .pause-action:active {
   transform: translateY(0.06rem);
+}
+
+.pause-action--reset-progress .pause-action__key {
+  min-width: 3.4rem;
+  background: linear-gradient(180deg, #ffd774, #e6a04d);
+  color: #52351b;
+}
+
+.pause-action--reset-progress:hover,
+.pause-action--reset-progress:focus-visible {
+  border-color: rgba(227, 139, 74, 0.82);
 }
 
 .pause-action::after,
@@ -2859,9 +2920,7 @@ canvas.is-pointer-locked {
   display: grid;
   place-items: center;
   padding: 1.1rem;
-  background:
-    linear-gradient(180deg, rgba(255, 251, 219, 0.08), rgba(45, 89, 60, 0.16)),
-    rgba(22, 50, 48, 0.2);
+  background: linear-gradient(180deg, rgba(255, 251, 219, 0.08), rgba(45, 89, 60, 0.16)), rgba(22, 50, 48, 0.2);
   backdrop-filter: blur(12px) saturate(1.06);
   opacity: 0;
   pointer-events: none;
@@ -2887,7 +2946,13 @@ canvas.is-pointer-locked {
   border: 2px solid rgba(255, 246, 213, 0.9);
   border-radius: 1rem;
   background:
-    linear-gradient(90deg, rgba(255, 239, 184, 0.42) 0%, rgba(255, 248, 216, 0.68) 28%, rgba(255, 252, 238, 0.86) 28.4%, rgba(237, 251, 230, 0.78) 100%),
+    linear-gradient(
+      90deg,
+      rgba(255, 239, 184, 0.42) 0%,
+      rgba(255, 248, 216, 0.68) 28%,
+      rgba(255, 252, 238, 0.86) 28.4%,
+      rgba(237, 251, 230, 0.78) 100%
+    ),
     linear-gradient(145deg, rgba(255, 252, 231, 0.86) 0%, rgba(228, 250, 222, 0.72) 58%, rgba(202, 232, 255, 0.28) 100%);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.44) inset,
@@ -2916,13 +2981,12 @@ canvas.is-pointer-locked {
   left: calc(clamp(15.5rem, 28vw, 21rem) + 0.22rem);
   width: 0.82rem;
   border-radius: 999px;
-  background:
-    repeating-linear-gradient(
-      180deg,
-      rgba(43, 80, 139, 0.52) 0 0.32rem,
-      rgba(255, 255, 255, 0.8) 0.32rem 0.56rem,
-      transparent 0.56rem 2.22rem
-    );
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(43, 80, 139, 0.52) 0 0.32rem,
+    rgba(255, 255, 255, 0.8) 0.32rem 0.56rem,
+    transparent 0.56rem 2.22rem
+  );
   opacity: 0.72;
   pointer-events: none;
 }
@@ -2952,8 +3016,18 @@ canvas.is-pointer-locked {
   inset: 3rem 0.26rem;
   border-radius: 999px;
   background:
-    radial-gradient(circle, rgba(31, 77, 133, 0.48) 0 0.18rem, rgba(255, 255, 255, 0.8) 0.19rem 0.36rem, transparent 0.37rem),
-    repeating-linear-gradient(180deg, transparent 0 1.72rem, rgba(255, 255, 255, 0.48) 1.72rem 1.94rem, transparent 1.94rem 2.42rem);
+    radial-gradient(
+      circle,
+      rgba(31, 77, 133, 0.48) 0 0.18rem,
+      rgba(255, 255, 255, 0.8) 0.19rem 0.36rem,
+      transparent 0.37rem
+    ),
+    repeating-linear-gradient(
+      180deg,
+      transparent 0 1.72rem,
+      rgba(255, 255, 255, 0.48) 1.72rem 1.94rem,
+      transparent 1.94rem 2.42rem
+    );
   background-size:
     100% 2.42rem,
     100% 2.42rem;
@@ -3415,8 +3489,7 @@ canvas.is-pointer-locked {
   padding: 0.84rem;
   border: 1px solid rgba(118, 167, 107, 0.42);
   border-radius: 0.75rem;
-  background:
-    linear-gradient(180deg, rgba(255, 252, 229, 0.88), rgba(236, 249, 212, 0.72));
+  background: linear-gradient(180deg, rgba(255, 252, 229, 0.88), rgba(236, 249, 212, 0.72));
 }
 
 .model-viewer__spec-card h3 {
@@ -3522,8 +3595,7 @@ canvas.is-pointer-locked {
   border: 1px solid rgba(123, 166, 96, 0.42);
   border-bottom-color: rgba(255, 255, 255, 0.76);
   border-radius: 0.68rem 0.68rem 0.3rem 0.3rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 240, 0.78), rgba(228, 248, 205, 0.42));
+  background: linear-gradient(180deg, rgba(255, 255, 240, 0.78), rgba(228, 248, 205, 0.42));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.72),
     0 0.38rem 0.72rem rgba(60, 109, 151, 0.05);
@@ -3554,8 +3626,7 @@ canvas.is-pointer-locked {
 .character-screen__tab--active {
   padding-top: 0.6rem;
   color: #204f47;
-  background:
-    linear-gradient(180deg, rgba(255, 244, 184, 0.92), rgba(134, 207, 139, 0.54));
+  background: linear-gradient(180deg, rgba(255, 244, 184, 0.92), rgba(134, 207, 139, 0.54));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.78),
     0 0.5rem 0.9rem rgba(58, 114, 160, 0.08);
@@ -3769,8 +3840,7 @@ canvas.is-pointer-locked {
   background:
     radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.54), transparent 28%),
     linear-gradient(90deg, rgba(80, 119, 178, 0.07) 0 1px, transparent 1px 25%),
-    linear-gradient(180deg, rgba(80, 119, 178, 0.06) 0 1px, transparent 1px 12.5rem),
-    rgba(255, 255, 255, 0.2);
+    linear-gradient(180deg, rgba(80, 119, 178, 0.06) 0 1px, transparent 1px 12.5rem), rgba(255, 255, 255, 0.2);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 0 1.3rem rgba(78, 122, 167, 0.05);
@@ -3803,7 +3873,8 @@ canvas.is-pointer-locked {
     inset 0 -1px 0 rgba(70, 102, 125, 0.08),
     0 0.44rem 0 rgba(71, 112, 151, 0.045),
     0 0.8rem 1.3rem rgba(64, 105, 128, 0.08);
-  transform: perspective(900px) rotateX(var(--card-tilt-x, 0deg)) rotateY(var(--card-tilt-y, 0deg)) translateY(0) translateZ(0);
+  transform: perspective(900px) rotateX(var(--card-tilt-x, 0deg)) rotateY(var(--card-tilt-y, 0deg)) translateY(0)
+    translateZ(0);
   transform-style: preserve-3d;
 }
 
@@ -3969,8 +4040,7 @@ canvas.is-pointer-locked {
 
 .inventory-holo-card--owned .inventory-holo-card__binder-stamp {
   border-color: rgba(137, 178, 91, 0.42);
-  background:
-    linear-gradient(180deg, rgba(255, 247, 184, 0.84), rgba(224, 188, 92, 0.42));
+  background: linear-gradient(180deg, rgba(255, 247, 184, 0.84), rgba(224, 188, 92, 0.42));
   color: rgba(92, 68, 30, 0.92);
 }
 
@@ -4077,7 +4147,12 @@ canvas.is-pointer-locked {
   border: 1px solid rgba(255, 255, 255, 0.66);
   border-radius: 999px;
   background:
-    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.28) 58%, rgba(255, 255, 255, 0.12)),
+    radial-gradient(
+      circle at 50% 30%,
+      rgba(255, 255, 255, 0.92),
+      rgba(255, 255, 255, 0.28) 58%,
+      rgba(255, 255, 255, 0.12)
+    ),
     linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(190, 237, 255, 0.24));
   color: rgba(35, 74, 84, 0.9);
   font-family: var(--ui-sans);
@@ -4237,7 +4312,8 @@ canvas.is-pointer-locked {
       inset 0 -1px 0 rgba(70, 102, 125, 0.08),
       0 0.44rem 0 rgba(71, 112, 151, 0.06),
       0 0.76rem 1.5rem rgba(66, 140, 138, 0.14);
-    transform: perspective(900px) rotateX(calc(var(--card-tilt-x, 0deg) + 1deg)) rotateY(var(--card-tilt-y, 0deg)) translateY(-3px) translateZ(0);
+    transform: perspective(900px) rotateX(calc(var(--card-tilt-x, 0deg) + 1deg)) rotateY(var(--card-tilt-y, 0deg))
+      translateY(-3px) translateZ(0);
   }
 
   .inventory-holo-card:hover .inventory-holo-card__foil {
@@ -4924,7 +5000,9 @@ canvas.is-pointer-locked {
   color: #d99e37;
   font-size: 1.34rem;
   line-height: 1;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 0.18rem 0 rgba(103, 75, 35, 0.16);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0.18rem 0 rgba(103, 75, 35, 0.16);
 }
 
 .objective-chip__copy {
@@ -5093,9 +5171,7 @@ canvas.is-pointer-locked {
   padding: 0.5rem 0.78rem 0.52rem 0.52rem;
   border: 2px solid rgba(36, 82, 116, 0.86);
   border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 250, 0.98), rgba(255, 243, 209, 0.94)),
-    rgba(255, 248, 226, 0.94);
+  background: linear-gradient(180deg, rgba(255, 255, 250, 0.98), rgba(255, 243, 209, 0.94)), rgba(255, 248, 226, 0.94);
   box-shadow:
     inset 0 0 0 2px rgba(255, 255, 255, 0.9),
     0 0.2rem 0 rgba(25, 66, 98, 0.48),
@@ -5141,8 +5217,7 @@ canvas.is-pointer-locked {
   max-width: min(24rem, calc(100vw - 1.8rem));
   padding: 0.48rem 0.72rem;
   opacity: 0.96;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 250, 0.98), rgba(255, 244, 214, 0.94));
+  background: linear-gradient(180deg, rgba(255, 255, 250, 0.98), rgba(255, 244, 214, 0.94));
   border-color: var(--ui-line);
   box-shadow:
     inset 0 0 0 2px rgba(255, 255, 255, 0.82),
@@ -5176,8 +5251,7 @@ canvas.is-pointer-locked {
   padding: 0.44rem 0.86rem 0.46rem 0.44rem;
   border: 2px solid rgba(36, 82, 116, 0.82);
   border-radius: 0.86rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 250, 0.99), rgba(255, 244, 214, 0.95));
+  background: linear-gradient(180deg, rgba(255, 255, 250, 0.99), rgba(255, 244, 214, 0.95));
   box-shadow:
     inset 0 0 0 2px rgba(255, 255, 255, 0.86),
     0 0.18rem 0 rgba(35, 75, 105, 0.44),
@@ -5202,8 +5276,7 @@ canvas.is-pointer-locked {
   place-items: center;
   border: 2px solid rgba(38, 73, 101, 0.76);
   border-radius: 0.66rem;
-  background:
-    linear-gradient(180deg, #ffffff, #e8f1f4 72%, #d8e3e7);
+  background: linear-gradient(180deg, #ffffff, #e8f1f4 72%, #d8e3e7);
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.96),
     inset 0 -3px 0 rgba(78, 112, 132, 0.2),
@@ -5270,8 +5343,7 @@ canvas.is-pointer-locked {
 .world-map__figure,
 .world-map__card {
   border-color: var(--ui-line);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 250, 0.98), rgba(255, 244, 214, 0.95));
+  background: linear-gradient(180deg, rgba(255, 255, 250, 0.98), rgba(255, 244, 214, 0.95));
 }
 
 /* Compact HUD tuning: keep the storybook style but leave more game view visible. */
@@ -5690,8 +5762,7 @@ canvas.is-pointer-locked {
   padding: 0.34rem 0.56rem 0.36rem 0.34rem;
   border: 3px solid var(--ui-line);
   border-radius: 1rem;
-  background:
-    linear-gradient(180deg, rgba(255, 253, 226, 0.99), rgba(255, 236, 166, 0.95));
+  background: linear-gradient(180deg, rgba(255, 253, 226, 0.99), rgba(255, 236, 166, 0.95));
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.92),
     0 0.18rem 0 rgba(12, 75, 113, 0.58),
@@ -6000,8 +6071,7 @@ canvas.is-pointer-locked {
 .pickup-card {
   border-color: #0b4f77;
   background:
-    radial-gradient(circle at 10% 5%, #ffffff 0 12%, transparent 24%),
-    linear-gradient(180deg, #fff8bd 0%, #ffe07b 100%);
+    radial-gradient(circle at 10% 5%, #ffffff 0 12%, transparent 24%), linear-gradient(180deg, #fff8bd 0%, #ffe07b 100%);
   box-shadow:
     inset 0 2px 0 #fffdf0,
     inset 0 -0.24rem 0 rgba(177, 104, 24, 0.16),
@@ -6018,8 +6088,7 @@ canvas.is-pointer-locked {
 
 .ability-pill {
   background:
-    linear-gradient(90deg, #ff70bd 0 0.54rem, transparent 0.54rem),
-    linear-gradient(180deg, #fff8bd 0%, #ffe07b 100%);
+    linear-gradient(90deg, #ff70bd 0 0.54rem, transparent 0.54rem), linear-gradient(180deg, #fff8bd 0%, #ffe07b 100%);
 }
 
 .pouch-hud {
@@ -6329,9 +6398,7 @@ canvas.is-pointer-locked {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-dasharray: 2 20;
-  filter:
-    drop-shadow(0 0.1rem 0 rgba(255, 249, 217, 0.48))
-    drop-shadow(0 0.16rem 0 rgba(124, 92, 50, 0.18));
+  filter: drop-shadow(0 0.1rem 0 rgba(255, 249, 217, 0.48)) drop-shadow(0 0.16rem 0 rgba(124, 92, 50, 0.18));
 }
 
 .world-map__atlas-marker circle,
@@ -6529,18 +6596,14 @@ canvas.is-pointer-locked {
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.12) 0 1px, rgba(255, 255, 255, 0) 1px 4px),
     repeating-linear-gradient(90deg, rgba(8, 60, 96, 0.05) 0 1px, rgba(8, 60, 96, 0) 1px 6px);
   --ui-y2k-panel-fill:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.72) 0 0.26rem, rgba(255, 255, 245, 0) 0.26rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.72) 0 0.26rem, rgba(255, 255, 245, 0) 0.26rem), var(--ui-y2k-texture),
     linear-gradient(180deg, var(--ui-y2k-panel-top) 0%, var(--ui-y2k-panel-mid) 58%, var(--ui-y2k-panel-bottom) 100%);
   --ui-y2k-panel-fill-cool:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #eaffff 0%, var(--ui-y2k-panel-alt) 56%, #208dc8 100%);
   --ui-y2k-bevel-shadow:
-    inset 1px 1px 0 var(--ui-y2k-bevel-light),
-    inset -2px -2px 0 var(--ui-y2k-bevel-dark),
-    2px 2px 0 var(--ui-y2k-shadow),
-    0 0.72rem 1.1rem rgba(5, 47, 75, 0.2);
+    inset 1px 1px 0 var(--ui-y2k-bevel-light), inset -2px -2px 0 var(--ui-y2k-bevel-dark),
+    2px 2px 0 var(--ui-y2k-shadow), 0 0.72rem 1.1rem rgba(5, 47, 75, 0.2);
 }
 
 .hud {
@@ -6681,7 +6744,12 @@ canvas.is-pointer-locked {
     linear-gradient(var(--ui-y2k-line), var(--ui-y2k-line)) right 0.3rem bottom 0.3rem / 2px 0.62rem no-repeat,
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.12) 0 1px, rgba(255, 255, 255, 0) 1px 4px),
     repeating-linear-gradient(90deg, rgba(6, 60, 96, 0.045) 0 1px, rgba(6, 60, 96, 0) 1px 6px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0 0.22rem, rgba(255, 255, 255, 0) 0.22rem 68%, rgba(86, 50, 8, 0.12));
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.28) 0 0.22rem,
+      rgba(255, 255, 255, 0) 0.22rem 68%,
+      rgba(86, 50, 8, 0.12)
+    );
   opacity: 0.5;
   mix-blend-mode: normal;
   animation: none;
@@ -6700,8 +6768,7 @@ canvas.is-pointer-locked {
 .title-screen__menu {
   border-color: #082f4c;
   background:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.78) 0 0.32rem, rgba(255, 255, 245, 0) 0.32rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.78) 0 0.32rem, rgba(255, 255, 245, 0) 0.32rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #2078b7 0%, #0e4e7d 52%, #082f4c 100%);
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.62),
@@ -6724,8 +6791,7 @@ canvas.is-pointer-locked {
 
 .objective-chip {
   background:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.72) 0 0.28rem, rgba(255, 255, 245, 0) 0.28rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.72) 0 0.28rem, rgba(255, 255, 245, 0) 0.28rem), var(--ui-y2k-texture),
     linear-gradient(135deg, #ffe56d 0%, #ffbd45 58%, #d47a25 100%);
 }
 
@@ -6779,36 +6845,31 @@ canvas.is-pointer-locked {
 .hud--summit-complete .status-metric--cards .status-metric__icon,
 .hud--summit-complete .pickup-card {
   background:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.72) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.72) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #fffbe2 0%, #bde5a1 52%, #6aa96a 100%);
 }
 
 .status-metric--area .status-metric__icon {
   background:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #dff0ae 0%, #82b85f 58%, #447b45 100%);
 }
 
 .status-metric--landmark .status-metric__icon {
   background:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #fff1bf 0%, #d9b465 58%, #9b7041 100%);
 }
 
 .status-metric--breeze .status-metric__icon {
   background:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #e5fbff 0%, #9bd5f6 58%, #4e8fb0 100%);
 }
 
 .status-metric--cards .status-metric__icon {
   background:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #fff7c9 0%, #b8a3e0 54%, #668f83 100%);
 }
 
@@ -6852,14 +6913,12 @@ canvas.is-pointer-locked {
 
 .prompt-chip {
   background:
-    linear-gradient(90deg, var(--ui-y2k-panel-alt) 0 0.42rem, rgba(255, 255, 245, 0) 0.42rem),
-    var(--ui-y2k-panel-fill);
+    linear-gradient(90deg, var(--ui-y2k-panel-alt) 0 0.42rem, rgba(255, 255, 245, 0) 0.42rem), var(--ui-y2k-panel-fill);
 }
 
 .ability-pill {
   background:
-    linear-gradient(90deg, var(--ui-y2k-panel-pink) 0 0.46rem, rgba(255, 255, 245, 0) 0.46rem),
-    var(--ui-y2k-panel-fill);
+    linear-gradient(90deg, var(--ui-y2k-panel-pink) 0 0.46rem, rgba(255, 255, 245, 0) 0.46rem), var(--ui-y2k-panel-fill);
 }
 
 .quick-actions__item,
@@ -6870,45 +6929,32 @@ canvas.is-pointer-locked {
 .model-viewer__icon-button,
 .model-viewer__back-link {
   background:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.2rem, rgba(255, 255, 245, 0) 0.2rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.2rem, rgba(255, 255, 245, 0) 0.2rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #f9fdff 0%, #7de7f0 58%, #2799cc 100%);
 }
 
 .pouch-hud__item--seed {
-  background:
-    var(--ui-y2k-texture),
-    linear-gradient(180deg, #fff6c2 0%, #dba455 100%);
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fff6c2 0%, #dba455 100%);
 }
 
 .pouch-hud__item--shell {
-  background:
-    var(--ui-y2k-texture),
-    linear-gradient(180deg, #fff5e4 0%, #96ddeb 100%);
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fff5e4 0%, #96ddeb 100%);
 }
 
 .pouch-hud__item--moss_tuft {
-  background:
-    var(--ui-y2k-texture),
-    linear-gradient(180deg, #e9ffc1 0%, #5fc875 100%);
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #e9ffc1 0%, #5fc875 100%);
 }
 
 .pouch-hud__item--berry {
-  background:
-    var(--ui-y2k-texture),
-    linear-gradient(180deg, #ffe1a7 0%, #ef7158 100%);
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #ffe1a7 0%, #ef7158 100%);
 }
 
 .pouch-hud__item--smooth_stone {
-  background:
-    var(--ui-y2k-texture),
-    linear-gradient(180deg, #f3fbff 0%, #8fa8b4 100%);
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #f3fbff 0%, #8fa8b4 100%);
 }
 
 .pouch-hud__item--feather {
-  background:
-    var(--ui-y2k-texture),
-    linear-gradient(180deg, #fff4c8 0%, #91cde8 100%);
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fff4c8 0%, #91cde8 100%);
 }
 
 .pouch-hud__item:hover,
@@ -6945,8 +6991,7 @@ canvas.is-pointer-locked {
   border-width: 2px;
   border-color: var(--ui-y2k-line);
   background:
-    var(--ui-y2k-texture),
-    conic-gradient(from -90deg, #5eeaf3 calc(var(--stamina-ratio) * 1turn), #ffe072 0turn);
+    var(--ui-y2k-texture), conic-gradient(from -90deg, #5eeaf3 calc(var(--stamina-ratio) * 1turn), #ffe072 0turn);
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 245, 0.88),
     inset -2px -2px 0 rgba(6, 60, 96, 0.22),
@@ -6966,9 +7011,7 @@ canvas.is-pointer-locked {
   height: 0.58rem;
   border: 2px solid var(--ui-y2k-line);
   border-radius: var(--ui-y2k-radius-tight);
-  background:
-    repeating-linear-gradient(90deg, rgba(6, 60, 96, 0.18) 0 1px, transparent 1px 0.42rem),
-    #fff6a6;
+  background: repeating-linear-gradient(90deg, rgba(6, 60, 96, 0.18) 0 1px, transparent 1px 0.42rem), #fff6a6;
 }
 
 .roll-mode-hud__meter::after {
@@ -6983,8 +7026,7 @@ canvas.is-pointer-locked {
 .inventory-holo-card__art {
   border: 2px solid var(--ui-y2k-line);
   background:
-    radial-gradient(circle at 50% 22%, rgba(255, 255, 245, 0.65), transparent 22%),
-    var(--ui-y2k-texture),
+    radial-gradient(circle at 50% 22%, rgba(255, 255, 245, 0.65), transparent 22%), var(--ui-y2k-texture),
     linear-gradient(135deg, #7de7f0 0%, #ffe06b 52%, #ff82bc 100%);
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 245, 0.9),
@@ -6997,8 +7039,7 @@ canvas.is-pointer-locked {
   --holo-c: rgba(255, 218, 76, 0.34);
   --holo-d: rgba(118, 222, 115, 0.28);
   background:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #fff6a8 0%, #ffd55d 58%, #de9a31 100%);
 }
 
@@ -7014,7 +7055,13 @@ canvas.is-pointer-locked {
 .inventory-holo-card__sheen {
   opacity: 0.18;
   background:
-    linear-gradient(96deg, transparent 33%, rgba(255, 255, 255, 0.66) 45%, rgba(255, 255, 255, 0.18) 50%, transparent 60%),
+    linear-gradient(
+      96deg,
+      transparent 33%,
+      rgba(255, 255, 255, 0.66) 45%,
+      rgba(255, 255, 255, 0.18) 50%,
+      transparent 60%
+    ),
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.12) 0 1px, transparent 1px 5px);
 }
 
@@ -7023,9 +7070,7 @@ canvas.is-pointer-locked {
 .inventory-holo-card__binder-stamp {
   border: 2px solid rgba(6, 60, 96, 0.55);
   border-radius: var(--ui-y2k-radius-tight);
-  background:
-    var(--ui-y2k-texture),
-    linear-gradient(180deg, #fffde8, #ffd963);
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fffde8, #ffd963);
 }
 
 .inventory-holo-card__symbol {
@@ -7044,8 +7089,7 @@ canvas.is-pointer-locked {
 .collection-entry--highlighted {
   border-color: var(--ui-y2k-line);
   background:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #fff6a8 0%, #ffd55d 58%, #de9a31 100%);
   box-shadow: var(--ui-y2k-bevel-shadow);
 }
@@ -7053,8 +7097,7 @@ canvas.is-pointer-locked {
 .inventory-holo-card:is(.collection-entry--locked, .gathered-good--locked) {
   border-style: solid;
   background:
-    repeating-linear-gradient(135deg, rgba(6, 60, 96, 0.08) 0 2px, transparent 2px 0.42rem),
-    var(--ui-y2k-texture),
+    repeating-linear-gradient(135deg, rgba(6, 60, 96, 0.08) 0 2px, transparent 2px 0.42rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #edf0ef 0%, #b7c3c9 100%);
 }
 
@@ -7078,9 +7121,7 @@ canvas.is-pointer-locked {
 }
 
 .character-section--binder {
-  background:
-    var(--ui-y2k-texture),
-    linear-gradient(180deg, #fffde4 0%, #73e4ef 100%);
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fffde4 0%, #73e4ef 100%);
 }
 
 .collection-list,
@@ -7095,8 +7136,7 @@ canvas.is-pointer-locked {
   border-color: var(--ui-y2k-line);
   border-radius: var(--ui-y2k-radius);
   background:
-    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.26rem, rgba(255, 255, 245, 0) 0.26rem),
-    var(--ui-y2k-texture),
+    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.26rem, rgba(255, 255, 245, 0) 0.26rem), var(--ui-y2k-texture),
     linear-gradient(180deg, #fff7a8 0%, #ffd85d 62%, #d99a31 100%);
   box-shadow:
     inset 1px 1px 0 var(--ui-y2k-bevel-light),
@@ -7117,9 +7157,7 @@ canvas.is-pointer-locked {
 
 .world-map__route-step--current {
   border-color: var(--ui-y2k-line);
-  background:
-    linear-gradient(90deg, var(--ui-y2k-panel-alt) 0 0.32rem, transparent 0.32rem),
-    var(--ui-y2k-panel-fill);
+  background: linear-gradient(90deg, var(--ui-y2k-panel-alt) 0 0.32rem, transparent 0.32rem), var(--ui-y2k-panel-fill);
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.72),
     2px 2px 0 rgba(5, 47, 75, 0.26);
@@ -7134,9 +7172,7 @@ canvas.is-pointer-locked {
 .model-viewer__chip.is-active,
 .model-viewer__icon-button.is-active {
   border-color: #031f34;
-  background:
-    var(--ui-y2k-texture),
-    linear-gradient(180deg, #fff7a8 0%, #ffbd45 100%);
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fff7a8 0%, #ffbd45 100%);
   color: var(--ui-y2k-ink);
 }
 
@@ -7278,10 +7314,8 @@ canvas.is-pointer-locked {
     radial-gradient(ellipse at 76% 86%, rgba(109, 226, 220, 0.28), transparent 38%),
     linear-gradient(145deg, rgba(235, 255, 222, 0.88), rgba(124, 211, 169, 0.7) 54%, rgba(80, 176, 205, 0.62));
   --ui-spore-shadow:
-    inset 0 0.14rem 0.28rem rgba(255, 255, 255, 0.5),
-    inset 0 -0.2rem 0.5rem rgba(24, 90, 76, 0.12),
-    0 0.16rem 0 rgba(27, 98, 88, 0.2),
-    0 0.72rem 1.8rem rgba(14, 63, 69, 0.16);
+    inset 0 0.14rem 0.28rem rgba(255, 255, 255, 0.5), inset 0 -0.2rem 0.5rem rgba(24, 90, 76, 0.12),
+    0 0.16rem 0 rgba(27, 98, 88, 0.2), 0 0.72rem 1.8rem rgba(14, 63, 69, 0.16);
   --ui-spore-cell-radius: 1.55rem 2.2rem 1.45rem 2rem / 1.9rem 1.35rem 2.05rem 1.42rem;
   --ui-spore-cell-radius-tight: 1rem 1.35rem 0.95rem 1.28rem / 1.25rem 0.9rem 1.22rem 0.92rem;
 }
@@ -7421,7 +7455,12 @@ canvas.is-pointer-locked {
   border-radius: 999px;
   background:
     radial-gradient(circle at 33% 24%, rgba(255, 255, 255, 0.92), transparent 22%),
-    radial-gradient(circle at 58% 64%, rgba(151, 240, 114, 0.92), rgba(78, 174, 124, 0.94) 52%, rgba(38, 129, 143, 0.92) 100%);
+    radial-gradient(
+      circle at 58% 64%,
+      rgba(151, 240, 114, 0.92),
+      rgba(78, 174, 124, 0.94) 52%,
+      rgba(38, 129, 143, 0.92) 100%
+    );
   box-shadow:
     inset 0 -0.32rem 0.72rem rgba(18, 90, 82, 0.28),
     inset 0 0.2rem 0.48rem rgba(255, 255, 255, 0.52),
@@ -7565,7 +7604,13 @@ canvas.is-pointer-locked {
   background:
     radial-gradient(circle at 33% 22%, rgba(255, 255, 244, 0.84), transparent 20%),
     radial-gradient(circle at 70% 74%, rgba(253, 153, 98, 0.3), transparent 32%),
-    conic-gradient(from 120deg, rgba(99, 224, 219, 0.7), rgba(248, 210, 90, 0.72), rgba(144, 224, 100, 0.78), rgba(99, 224, 219, 0.7));
+    conic-gradient(
+      from 120deg,
+      rgba(99, 224, 219, 0.7),
+      rgba(248, 210, 90, 0.72),
+      rgba(144, 224, 100, 0.78),
+      rgba(99, 224, 219, 0.7)
+    );
 }
 
 .inventory-holo-card {
@@ -7594,8 +7639,7 @@ canvas.is-pointer-locked {
 .character-screen__shell {
   background:
     radial-gradient(ellipse at 15% 22%, rgba(255, 240, 150, 0.32), transparent 32%),
-    radial-gradient(ellipse at 86% 82%, rgba(86, 211, 213, 0.24), transparent 36%),
-    var(--ui-spore-membrane);
+    radial-gradient(ellipse at 86% 82%, rgba(86, 211, 213, 0.24), transparent 36%), var(--ui-spore-membrane);
 }
 
 .collection-list,
@@ -7632,10 +7676,8 @@ canvas.is-pointer-locked {
     radial-gradient(ellipse at 18% 16%, rgba(244, 255, 222, 0.72), transparent 32%),
     linear-gradient(150deg, rgba(230, 255, 220, 0.9), rgba(121, 208, 164, 0.76) 58%, rgba(76, 168, 199, 0.64));
   --ui-clarity-shadow:
-    inset 0 0.11rem 0.22rem rgba(255, 255, 244, 0.52),
-    inset 0 -0.16rem 0.4rem rgba(25, 88, 70, 0.13),
-    0 0.12rem 0 rgba(29, 93, 79, 0.18),
-    0 0.56rem 1.35rem rgba(14, 63, 69, 0.16);
+    inset 0 0.11rem 0.22rem rgba(255, 255, 244, 0.52), inset 0 -0.16rem 0.4rem rgba(25, 88, 70, 0.13),
+    0 0.12rem 0 rgba(29, 93, 79, 0.18), 0 0.56rem 1.35rem rgba(14, 63, 69, 0.16);
   --ui-clarity-radius: 1.08rem;
   --ui-clarity-radius-tight: 0.72rem;
 }
@@ -7778,8 +7820,12 @@ canvas.is-pointer-locked {
   position: absolute;
   inset: 0;
   clip-path: polygon(0 0, 100% 50%, 0 100%);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(255, 240, 160, 0.12) 36%, rgba(255, 224, 108, 0.92) 100%);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.82),
+    rgba(255, 240, 160, 0.12) 36%,
+    rgba(255, 224, 108, 0.92) 100%
+  );
   filter: drop-shadow(0 0.08rem 0 rgba(33, 83, 74, 0.45));
 }
 
@@ -7832,9 +7878,7 @@ canvas.is-pointer-locked {
 
 .prompt-chip--actionable {
   border-color: rgba(234, 174, 65, 0.82);
-  background:
-    linear-gradient(90deg, rgba(255, 207, 92, 0.5) 0 0.42rem, transparent 0.42rem),
-    var(--ui-clarity-panel);
+  background: linear-gradient(90deg, rgba(255, 207, 92, 0.5) 0 0.42rem, transparent 0.42rem), var(--ui-clarity-panel);
   box-shadow:
     inset 0 0.11rem 0.22rem rgba(255, 255, 244, 0.58),
     0 0 0 0.12rem rgba(255, 225, 129, 0.22),
@@ -7888,9 +7932,7 @@ canvas.is-pointer-locked {
 
 .world-map__route-step--current {
   border-color: rgba(222, 155, 50, 0.84);
-  background:
-    linear-gradient(90deg, rgba(255, 203, 80, 0.52) 0 0.38rem, transparent 0.38rem),
-    var(--ui-clarity-panel);
+  background: linear-gradient(90deg, rgba(255, 203, 80, 0.52) 0 0.38rem, transparent 0.38rem), var(--ui-clarity-panel);
 }
 
 .character-screen__shell,
@@ -8203,10 +8245,8 @@ canvas.is-pointer-locked {
     radial-gradient(circle at 84% 24%, rgba(143, 224, 102, 0.2), transparent 2.6rem),
     linear-gradient(145deg, rgba(237, 228, 148, 0.84), rgba(141, 195, 96, 0.54) 62%, rgba(68, 160, 124, 0.36));
   --bio-membrane:
-    inset 0 1px 0 rgba(255, 255, 225, 0.82),
-    inset 0 -0.34rem 0.76rem rgba(39, 85, 44, 0.18),
-    inset 0 0 0 1px rgba(54, 85, 39, 0.28),
-    var(--ui-shadow-soft);
+    inset 0 1px 0 rgba(255, 255, 225, 0.82), inset 0 -0.34rem 0.76rem rgba(39, 85, 44, 0.18),
+    inset 0 0 0 1px rgba(54, 85, 39, 0.28), var(--ui-shadow-soft);
   background:
     radial-gradient(circle at 18% 12%, rgba(255, 247, 173, 0.62), transparent 17rem),
     radial-gradient(circle at 78% 18%, rgba(120, 229, 179, 0.48), transparent 19rem),
@@ -8236,7 +8276,13 @@ body {
     radial-gradient(circle at 13% 25%, rgba(255, 255, 213, 0.32) 0 0.42rem, transparent 0.46rem),
     radial-gradient(circle at 78% 22%, rgba(225, 255, 139, 0.28) 0 0.58rem, transparent 0.62rem),
     radial-gradient(circle at 72% 74%, rgba(100, 224, 149, 0.24) 0 0.7rem, transparent 0.74rem),
-    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0, rgba(255, 255, 255, 0.045) 1px, rgba(23, 64, 40, 0.05) 2px, transparent 5px);
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.045) 0,
+      rgba(255, 255, 255, 0.045) 1px,
+      rgba(23, 64, 40, 0.05) 2px,
+      transparent 5px
+    );
   opacity: 0.42;
 }
 
@@ -8504,9 +8550,7 @@ body {
 
 .roll-mode-hud__meter,
 .character-screen__progress-track {
-  background:
-    linear-gradient(180deg, rgba(88, 110, 57, 0.5), rgba(46, 83, 45, 0.42)),
-    rgba(50, 89, 50, 0.26);
+  background: linear-gradient(180deg, rgba(88, 110, 57, 0.5), rgba(46, 83, 45, 0.42)), rgba(50, 89, 50, 0.26);
 }
 
 .roll-mode-hud__meter::after,
@@ -8742,16 +8786,11 @@ body {
     radial-gradient(circle at 31% 20%, rgba(255, 255, 255, 0.9), transparent 28%),
     linear-gradient(180deg, rgba(193, 255, 113, 0.98), rgba(71, 219, 90, 0.98) 58%, rgba(24, 151, 107, 0.96));
   --ui-aqua-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.86),
-    inset 0 -0.48rem 1rem rgba(0, 79, 128, 0.18),
-    0 0 0 1px rgba(255, 255, 255, 0.18),
-    0 0.46rem 0 rgba(8, 92, 148, 0.22),
-    0 1.35rem 3rem rgba(0, 63, 117, 0.22);
+    inset 0 1px 0 rgba(255, 255, 255, 0.86), inset 0 -0.48rem 1rem rgba(0, 79, 128, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.18), 0 0.46rem 0 rgba(8, 92, 148, 0.22), 0 1.35rem 3rem rgba(0, 63, 117, 0.22);
   --ui-aqua-shadow-soft:
-    inset 0 1px 0 rgba(255, 255, 255, 0.76),
-    inset 0 -0.28rem 0.74rem rgba(0, 86, 130, 0.14),
-    0 0 0 1px rgba(255, 255, 255, 0.14),
-    0 0.72rem 1.6rem rgba(0, 79, 126, 0.16);
+    inset 0 1px 0 rgba(255, 255, 255, 0.76), inset 0 -0.28rem 0.74rem rgba(0, 86, 130, 0.14),
+    0 0 0 1px rgba(255, 255, 255, 0.14), 0 0.72rem 1.6rem rgba(0, 79, 126, 0.16);
   --ui-shadow: var(--ui-aqua-shadow);
   --ui-shadow-soft: var(--ui-aqua-shadow-soft);
   --ui-radius-lg: 2.1rem;
@@ -8985,8 +9024,7 @@ body {
 .prompt-chip--actionable {
   border-color: rgba(255, 246, 139, 0.86);
   background:
-    linear-gradient(90deg, rgba(255, 235, 94, 0.58) 0 0.34rem, transparent 0.34rem),
-    var(--ui-aqua-panel-warm);
+    linear-gradient(90deg, rgba(255, 235, 94, 0.58) 0 0.34rem, transparent 0.34rem), var(--ui-aqua-panel-warm);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.86),
     0 0 0 2px rgba(255, 241, 98, 0.16),
@@ -8998,8 +9036,7 @@ body {
   border-color: rgba(255, 189, 146, 0.88);
   background:
     linear-gradient(90deg, rgba(255, 95, 80, 0.72) 0 0.4rem, transparent 0.4rem),
-    linear-gradient(180deg, rgba(255, 221, 189, 0.72), rgba(255, 116, 94, 0.44)),
-    var(--ui-aqua-panel-deep);
+    linear-gradient(180deg, rgba(255, 221, 189, 0.72), rgba(255, 116, 94, 0.44)), var(--ui-aqua-panel-deep);
   color: #fff8ee;
 }
 
@@ -9099,9 +9136,7 @@ body {
 
 .roll-mode-hud__meter,
 .character-screen__progress-track {
-  background:
-    linear-gradient(180deg, rgba(4, 80, 134, 0.42), rgba(8, 112, 153, 0.26)),
-    rgba(0, 87, 134, 0.24);
+  background: linear-gradient(180deg, rgba(4, 80, 134, 0.42), rgba(8, 112, 153, 0.26)), rgba(0, 87, 134, 0.24);
 }
 
 .roll-mode-hud__meter::after,
@@ -9128,7 +9163,13 @@ body {
   background:
     radial-gradient(circle at 33% 22%, rgba(255, 255, 255, 0.88), transparent 22%),
     radial-gradient(circle at 72% 74%, rgba(255, 240, 112, 0.28), transparent 34%),
-    conic-gradient(from 120deg, rgba(78, 232, 242, 0.72), rgba(204, 255, 92, 0.74), rgba(43, 180, 235, 0.72), rgba(78, 232, 242, 0.72));
+    conic-gradient(
+      from 120deg,
+      rgba(78, 232, 242, 0.72),
+      rgba(204, 255, 92, 0.74),
+      rgba(43, 180, 235, 0.72),
+      rgba(78, 232, 242, 0.72)
+    );
   box-shadow:
     inset 0 -0.28rem 0.65rem rgba(0, 88, 130, 0.18),
     0 0 1rem rgba(133, 245, 255, 0.28);
@@ -9168,9 +9209,7 @@ body {
 
 .character-screen__shell {
   border-radius: 2.35rem;
-  background:
-    linear-gradient(90deg, rgba(3, 97, 160, 0.28) 0 0.55rem, transparent 0.55rem),
-    var(--ui-aqua-panel);
+  background: linear-gradient(90deg, rgba(3, 97, 160, 0.28) 0 0.55rem, transparent 0.55rem), var(--ui-aqua-panel);
   box-shadow: var(--ui-aqua-shadow);
 }
 
@@ -9187,9 +9226,7 @@ body {
 .character-screen__aside,
 .character-screen__content {
   border-radius: 1.8rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.08)),
-    rgba(10, 121, 181, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.08)), rgba(10, 121, 181, 0.18);
 }
 
 .character-screen__tab {
@@ -10004,9 +10041,7 @@ body {
   padding: 0.32rem 0.78rem;
   border: 1px solid rgba(236, 255, 255, 0.82);
   border-radius: var(--ui-radius-pill);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(111, 223, 231, 0.32)),
-    rgba(40, 157, 184, 0.42);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(111, 223, 231, 0.32)), rgba(40, 157, 184, 0.42);
   color: #faffdf;
   font: inherit;
   font-size: 0.72rem;
@@ -10092,9 +10127,7 @@ body {
   padding: 0.58rem;
   border: 1px solid rgba(248, 255, 239, 0.56);
   border-radius: 1rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(223, 252, 226, 0.34)),
-    rgba(79, 208, 203, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(223, 252, 226, 0.34)), rgba(79, 208, 203, 0.2);
 }
 
 .pause-setting__orb {
@@ -10167,14 +10200,13 @@ body {
 }
 
 .title-screen::before {
-  background:
-    repeating-linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.08) 0,
-      rgba(255, 255, 255, 0.08) 1px,
-      rgba(15, 88, 108, 0.1) 2px,
-      rgba(15, 88, 108, 0.1) 3px
-    );
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08) 0,
+    rgba(255, 255, 255, 0.08) 1px,
+    rgba(15, 88, 108, 0.1) 2px,
+    rgba(15, 88, 108, 0.1) 3px
+  );
   opacity: 0.38;
   mix-blend-mode: soft-light;
 }
@@ -10323,10 +10355,8 @@ body {
     linear-gradient(180deg, rgba(255, 255, 244, 0.92), rgba(243, 252, 219, 0.8)),
     linear-gradient(145deg, rgba(255, 235, 145, 0.42), rgba(94, 207, 192, 0.48));
   --ui-readable-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    inset 0 -0.16rem 0.42rem rgba(8, 91, 92, 0.08),
-    0 0.1rem 0 rgba(3, 89, 99, 0.12),
-    0 0.72rem 1.7rem rgba(0, 66, 89, 0.15);
+    inset 0 1px 0 rgba(255, 255, 255, 0.82), inset 0 -0.16rem 0.42rem rgba(8, 91, 92, 0.08),
+    0 0.1rem 0 rgba(3, 89, 99, 0.12), 0 0.72rem 1.7rem rgba(0, 66, 89, 0.15);
 }
 
 html,
@@ -10420,9 +10450,7 @@ button {
 
 .status-metric {
   min-height: 2.72rem;
-  background:
-    radial-gradient(circle at 18% 15%, rgba(255, 255, 255, 0.78), transparent 45%),
-    rgba(247, 255, 246, 0.64);
+  background: radial-gradient(circle at 18% 15%, rgba(255, 255, 255, 0.78), transparent 45%), rgba(247, 255, 246, 0.64);
 }
 
 .status-label,
@@ -10513,8 +10541,7 @@ button {
 .prompt-chip--actionable {
   border-color: rgba(220, 175, 38, 0.78);
   background:
-    linear-gradient(90deg, rgba(245, 190, 54, 0.64) 0 0.34rem, transparent 0.34rem),
-    var(--ui-readable-panel-warm);
+    linear-gradient(90deg, rgba(245, 190, 54, 0.64) 0 0.34rem, transparent 0.34rem), var(--ui-readable-panel-warm);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.86),
     0 0 0 2px rgba(241, 208, 81, 0.14),
@@ -10553,8 +10580,7 @@ button {
 .pouch-hud__count,
 .world-map__filter-icon {
   border-color: rgba(18, 111, 110, 0.4);
-  background:
-    linear-gradient(180deg, rgba(255, 252, 217, 0.94), rgba(172, 224, 174, 0.8));
+  background: linear-gradient(180deg, rgba(255, 252, 217, 0.94), rgba(172, 224, 174, 0.8));
   color: #064047;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.74),
@@ -10619,9 +10645,7 @@ button {
 .character-screen__content,
 .collection-list,
 .gathered-goods-list {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(233, 255, 247, 0.44)),
-    rgba(98, 188, 185, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(233, 255, 247, 0.44)), rgba(98, 188, 185, 0.16);
 }
 
 .inventory-holo-card {
@@ -10635,8 +10659,7 @@ button {
 }
 
 .inventory-holo-card:is(.collection-entry--locked, .gathered-good--locked) {
-  background:
-    linear-gradient(180deg, rgba(240, 248, 244, 0.7), rgba(153, 184, 178, 0.34));
+  background: linear-gradient(180deg, rgba(240, 248, 244, 0.7), rgba(153, 184, 178, 0.34));
 }
 
 .world-map__figure {
