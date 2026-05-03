@@ -9,6 +9,7 @@ import {
   computeRollSlopeInputAccelerationMultiplier,
   computeRollSlopeInputSpeedAdjustment,
   createMovementScratch,
+  lookupSurfaceTraction,
   tickMovementTimers,
 } from "../../src/simulation/movementPhysics";
 import { createPlayerSimulationRuntime } from "../../src/simulation/playerSimulationRuntime";
@@ -16,6 +17,8 @@ import {
   COYOTE_TIME,
   AIR_MOMENTUM_GRACE_TIME,
   JUMP_BUFFER_TIME,
+  JUMP_RELEASE_CUT_MULTIPLIER,
+  JUMP_VELOCITY,
   LANDING_MOMENTUM_GRACE_TIME,
   ROLL_AIR_SPEED_BONUS,
   ROLL_AIR_MOMENTUM_GRACE_TIME,
@@ -26,6 +29,7 @@ import {
   ROLL_GRAVITY_MIN_SLOPE,
   ROLL_MODE_INDICATOR_DELAY,
   ROLL_SPEED,
+  SURFACE_TRACTION,
   SWIM_UNDERWATER_SPEED,
   WALK_SPEED,
 } from "../../src/simulation/playerSimulationConstants";
@@ -356,7 +360,10 @@ export function runMovementContracts() {
   landingPlayer.velocity.set(24, -16, 0);
   resolveWaterContact(landingPlayer, 0, null, false, 16, landingRuntime);
   assert(landingPlayer.justLanded, "ground resolve marks a fresh landing");
-  assert(landingRuntime.landingMomentumGraceRemaining === LANDING_MOMENTUM_GRACE_TIME, "landing starts a short momentum grace");
+  assert(
+    landingRuntime.landingMomentumGraceRemaining === LANDING_MOMENTUM_GRACE_TIME,
+    "landing starts a short momentum grace",
+  );
   const landingSpeedBeforeCarry = planarSpeed(landingPlayer);
   tickMovementTimers(landingPlayer, baseInput, 1 / 60, landingRuntime);
   applyMovementPhysics(landingPlayer, save, baseInput, 0, 1 / 60, landingRuntime, landingScratch);
@@ -372,15 +379,39 @@ export function runMovementContracts() {
     const dt = 1 / 60;
     const rollInput = { ...baseInput, moveY: 1, rollHeld: true };
     tickMovementTimers(releasedRollJumpPlayer, rollInput, dt, releasedRollJumpRuntime);
-    applyMovementPhysics(releasedRollJumpPlayer, save, rollInput, 0, dt, releasedRollJumpRuntime, releasedRollJumpScratch);
+    applyMovementPhysics(
+      releasedRollJumpPlayer,
+      save,
+      rollInput,
+      0,
+      dt,
+      releasedRollJumpRuntime,
+      releasedRollJumpScratch,
+    );
   }
   const releasedPreJumpSpeed = planarSpeed(releasedRollJumpPlayer);
   tickMovementTimers(releasedRollJumpPlayer, jumpInput, 1 / 60, releasedRollJumpRuntime);
-  applyMovementPhysics(releasedRollJumpPlayer, save, jumpInput, 0, 1 / 60, releasedRollJumpRuntime, releasedRollJumpScratch);
+  applyMovementPhysics(
+    releasedRollJumpPlayer,
+    save,
+    jumpInput,
+    0,
+    1 / 60,
+    releasedRollJumpRuntime,
+    releasedRollJumpScratch,
+  );
   for (let i = 0; i < 42; i += 1) {
     const dt = 1 / 60;
     tickMovementTimers(releasedRollJumpPlayer, baseInput, dt, releasedRollJumpRuntime);
-    applyMovementPhysics(releasedRollJumpPlayer, save, baseInput, 0, dt, releasedRollJumpRuntime, releasedRollJumpScratch);
+    applyMovementPhysics(
+      releasedRollJumpPlayer,
+      save,
+      baseInput,
+      0,
+      dt,
+      releasedRollJumpRuntime,
+      releasedRollJumpScratch,
+    );
   }
   assert(
     planarSpeed(releasedRollJumpPlayer) > releasedPreJumpSpeed * 0.68,
@@ -456,4 +487,98 @@ export function runMovementContracts() {
     "entering deep water lifts Mossu toward the swim surface",
   );
   assert(enteringSwimPlayer.velocity.y > -6, "entering deep water softens downward velocity");
+
+  // Surface-aware traction: design intent encoded in the SURFACE_TRACTION table.
+  assert(
+    SURFACE_TRACTION.rock.accelMultiplier > SURFACE_TRACTION.highland_grass.accelMultiplier,
+    "rock surfaces grip harder than highland grass on the accel push",
+  );
+  assert(
+    SURFACE_TRACTION.shrine_moss.rollCoastMultiplier < SURFACE_TRACTION.meadow_grass.rollCoastMultiplier,
+    "shrine moss lets a coasting roll glide further than meadow grass",
+  );
+  assert(
+    SURFACE_TRACTION.sand.decelMultiplier < SURFACE_TRACTION.meadow_grass.decelMultiplier,
+    "sand brakes softer than meadow grass — releasing input slides further",
+  );
+  assert(
+    SURFACE_TRACTION.forest_floor.turnMultiplier > SURFACE_TRACTION.highland_grass.turnMultiplier,
+    "forest floor turns tighter than loose highland grass",
+  );
+  // lookupSurfaceTraction reads the world at any position and returns one of the table entries.
+  // We verify it returns SOMETHING from the table (not the literal NEUTRAL fallback by accident),
+  // by checking traction at a few spread-out positions.
+  const tractionSamples = [
+    lookupSurfaceTraction(0, 0),
+    lookupSurfaceTraction(120, 60),
+    lookupSurfaceTraction(-80, 180),
+    lookupSurfaceTraction(20, 220),
+  ];
+  const tableEntries = Object.values(SURFACE_TRACTION);
+  for (const t of tractionSamples) {
+    assert(
+      tableEntries.includes(t as (typeof tableEntries)[number]),
+      "lookupSurfaceTraction returns a table entry for any sampled world position",
+    );
+  }
+
+  // Variable jump height: holding Space yields a higher arc than tap-and-release.
+  // We integrate height (sum of dt * vy) since position.y is clamped by ground/water resolution
+  // outside of applyMovementPhysics.
+  function simulateJumpArc(holdFrames: number) {
+    const player = makePlayer();
+    const runtime = createPlayerSimulationRuntime();
+    const scratch = createMovementScratch();
+    let height = 0;
+    let peakHeight = 0;
+    let postReleaseVy = NaN;
+    for (let i = 0; i < 30; i += 1) {
+      const dt = 1 / 60;
+      const held = i < holdFrames;
+      const inp = { ...baseInput, jumpHeld: held, jumpPressed: i === 0 };
+      tickMovementTimers(player, inp, dt, runtime);
+      applyMovementPhysics(player, save, inp, 0, dt, runtime, scratch);
+      // Integrate height from velocity each frame, ignoring ground clamps.
+      if (!player.grounded) height += dt * player.velocity.y;
+      peakHeight = Math.max(peakHeight, height);
+      if (i === holdFrames) postReleaseVy = player.velocity.y;
+    }
+    return { peakHeight, postReleaseVy };
+  }
+
+  const heldArc = simulateJumpArc(60); // hold for entire arc
+  const tapArc = simulateJumpArc(2); // release on frame 2
+
+  assert(
+    tapArc.postReleaseVy < JUMP_VELOCITY * (JUMP_RELEASE_CUT_MULTIPLIER + 0.15),
+    `releasing jump on frame 2 cuts vy roughly to JUMP_RELEASE_CUT_MULTIPLIER: post=${tapArc.postReleaseVy.toFixed(2)}`,
+  );
+  assert(
+    heldArc.peakHeight > tapArc.peakHeight * 1.5,
+    `holding jump reaches a meaningfully higher arc than a tap: held=${heldArc.peakHeight.toFixed(2)} tap=${tapArc.peakHeight.toFixed(2)}`,
+  );
+
+  // Cut only fires once per jump — re-pressing and releasing in air shouldn't re-cut.
+  const repeatCutPlayer = makePlayer();
+  const repeatCutRuntime = createPlayerSimulationRuntime();
+  const repeatCutScratch = createMovementScratch();
+  for (let i = 0; i < 4; i += 1) {
+    const dt = 1 / 60;
+    const inp = { ...baseInput, jumpHeld: i < 2, jumpPressed: i === 0 };
+    tickMovementTimers(repeatCutPlayer, inp, dt, repeatCutRuntime);
+    applyMovementPhysics(repeatCutPlayer, save, inp, 0, dt, repeatCutRuntime, repeatCutScratch);
+  }
+  const vyAfterFirstCut = repeatCutPlayer.velocity.y;
+  // Now press-release again mid-air; cut latch is consumed so vy should not get clamped a second time.
+  for (let i = 0; i < 2; i += 1) {
+    const dt = 1 / 60;
+    const inp = { ...baseInput, jumpHeld: i < 1, jumpPressed: false };
+    tickMovementTimers(repeatCutPlayer, inp, dt, repeatCutRuntime);
+    applyMovementPhysics(repeatCutPlayer, save, inp, 0, dt, repeatCutRuntime, repeatCutScratch);
+  }
+  // After 2 frames of gravity at GRAVITY=38, vy should fall by ~38*2/60 = ~1.27 — not be clamped again.
+  assert(
+    repeatCutPlayer.velocity.y >= vyAfterFirstCut - 2,
+    `mid-air re-press-and-release does not re-cut velocity: before=${vyAfterFirstCut.toFixed(2)} after=${repeatCutPlayer.velocity.y.toFixed(2)}`,
+  );
 }

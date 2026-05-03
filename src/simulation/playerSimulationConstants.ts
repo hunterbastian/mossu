@@ -77,3 +77,50 @@ export const SWIM_CURRENT_SCALE = 8;
 export const SWIM_MIN_DEPTH = 1.35;
 export const SWIM_UNDERWATER_MIN_DEPTH = 2.1;
 export const SWIM_UNDERWATER_STAMINA_DRAIN = 7;
+
+/**
+ * How strongly the early-release jump-cut damps remaining upward velocity.
+ * 1.0 = no cut, 0 = full clamp. 0.45 keeps a small upward arc so taps still feel like hops.
+ */
+export const JUMP_RELEASE_CUT_MULTIPLIER = 0.45;
+/**
+ * Don't cut if upward velocity has already fallen below this — the jump is past its useful arc
+ * and an extra clamp would feel like a yank.
+ */
+export const JUMP_MIN_RELEASE_VELOCITY = 9;
+/**
+ * Gravity scale applied near the apex of a jump (|vy| under HANG_VELOCITY_THRESHOLD).
+ * Reserved for future apex-hang work; not yet wired.
+ */
+export const APEX_HANG_GRAVITY_SCALE = 0.62;
+export const APEX_HANG_VELOCITY_THRESHOLD = 5.5;
+
+export interface SurfaceTraction {
+  /** Multiplier on acceleration when input pushes movement (grip on push). */
+  accelMultiplier: number;
+  /** Multiplier on deceleration when input releases (brake firmness). */
+  decelMultiplier: number;
+  /** Multiplier on turn-acceleration when reversing direction (turn bite). */
+  turnMultiplier: number;
+  /** Multiplier on roll coast deceleration (how fast a coasting roll bleeds speed). */
+  rollCoastMultiplier: number;
+}
+
+/**
+ * Per-surface traction. Multipliers around 1.0 = baseline meadow.
+ * - High grip surfaces (forest_floor, rock) accelerate/brake quickly and turn tightly.
+ * - Loose surfaces (sand, highland_grass) feel slippier; rolls coast further.
+ * - shrine_moss intentionally slides for a sacred-glide feel near the summit.
+ * Water is unused here because wading already has its own multipliers in movementPhysics.
+ */
+export const SURFACE_TRACTION = {
+  meadow_grass: { accelMultiplier: 1.0, decelMultiplier: 1.0, turnMultiplier: 1.0, rollCoastMultiplier: 1.0 },
+  sand: { accelMultiplier: 0.86, decelMultiplier: 0.78, turnMultiplier: 0.84, rollCoastMultiplier: 0.78 },
+  water: { accelMultiplier: 1.0, decelMultiplier: 1.0, turnMultiplier: 1.0, rollCoastMultiplier: 1.0 },
+  forest_floor: { accelMultiplier: 1.06, decelMultiplier: 1.06, turnMultiplier: 1.08, rollCoastMultiplier: 1.12 },
+  highland_grass: { accelMultiplier: 0.92, decelMultiplier: 0.9, turnMultiplier: 0.9, rollCoastMultiplier: 0.88 },
+  rock: { accelMultiplier: 1.1, decelMultiplier: 1.12, turnMultiplier: 1.12, rollCoastMultiplier: 1.08 },
+  shrine_moss: { accelMultiplier: 1.04, decelMultiplier: 0.9, turnMultiplier: 1.0, rollCoastMultiplier: 0.82 },
+} as const satisfies Record<string, SurfaceTraction>;
+
+export const NEUTRAL_SURFACE_TRACTION: SurfaceTraction = SURFACE_TRACTION.meadow_grass;

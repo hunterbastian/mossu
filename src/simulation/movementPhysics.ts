@@ -2,7 +2,7 @@ import { MathUtils, Vector3 } from "three";
 import type { InputSnapshot } from "./input";
 import type { PlayerState, SaveState } from "./gameState";
 import type { PlayerSimulationRuntime } from "./playerSimulationRuntime";
-import { sampleTerrainNormalInto } from "./world";
+import { sampleTerrainNormalInto, sampleWorldRegion } from "./world";
 import {
   AIR_ACCELERATION,
   AIR_DECELERATION,
@@ -20,8 +20,11 @@ import {
   GROUND_DECELERATION,
   GROUND_TURN_ACCELERATION,
   JUMP_BUFFER_TIME,
+  JUMP_MIN_RELEASE_VELOCITY,
+  JUMP_RELEASE_CUT_MULTIPLIER,
   JUMP_VELOCITY,
   LANDING_MOMENTUM_DECELERATION_MULTIPLIER,
+  NEUTRAL_SURFACE_TRACTION,
   ROLL_BOOST_DELAY,
   ROLL_BOOST_MULTIPLIER,
   ROLL_ACCELERATION_MULTIPLIER,
@@ -49,13 +52,20 @@ import {
   ROLL_UPHILL_INPUT_SPEED_PENALTY,
   LANDING_SPEED_CARRY_BONUS,
   STAMINA_ACTION_THRESHOLD,
+  SURFACE_TRACTION,
   SWIM_ACCELERATION,
   SWIM_DECELERATION,
   SWIM_MIN_DEPTH,
   SWIM_SPEED,
   SWIM_UNDERWATER_SPEED,
   WALK_SPEED,
+  type SurfaceTraction,
 } from "./playerSimulationConstants";
+
+export function lookupSurfaceTraction(x: number, z: number): SurfaceTraction {
+  const region = sampleWorldRegion(x, z);
+  return SURFACE_TRACTION[region.material] ?? NEUTRAL_SURFACE_TRACTION;
+}
 
 export interface MovementScratch {
   moveVector: Vector3;
@@ -143,6 +153,11 @@ export function applyMovementPhysics(
     scratch.moveVector.normalize();
   }
   sampleTerrainNormalInto(scratch.groundNormal, player.position.x, player.position.z);
+  // Surface traction is only meaningful while grounded — air/swim paths bypass these multipliers.
+  const surface =
+    player.grounded && !player.swimming
+      ? lookupSurfaceTraction(player.position.x, player.position.z)
+      : NEUTRAL_SURFACE_TRACTION;
 
   if (scratch.moveVector.lengthSq() > 0.0001) {
     const inputMagnitude = MathUtils.clamp(scratch.moveVector.length(), 0, 1);
@@ -208,12 +223,15 @@ export function applyMovementPhysics(
     : 0;
   const groundSpeed =
     (player.rolling
-      ? Math.max(ROLL_SPEED * 0.72, ROLL_SPEED * (player.rollingBoostActive ? ROLL_BOOST_MULTIPLIER : 1) + rollSlopeInputSpeed)
-      : WALK_SPEED) *
-    wadeSpeedMultiplier;
-  const passiveSlopeLimitBonus =
-    terrainSlope * ROLL_SLOPE_SPEED_BONUS * (rollSlopeInputAlignment < -0.1 ? 0.55 : 1);
-  const rollSpeedLimit = player.rolling ? groundSpeed + passiveSlopeLimitBonus + landingSpeedCarryBonus : groundSpeed + landingSpeedCarryBonus;
+      ? Math.max(
+          ROLL_SPEED * 0.72,
+          ROLL_SPEED * (player.rollingBoostActive ? ROLL_BOOST_MULTIPLIER : 1) + rollSlopeInputSpeed,
+        )
+      : WALK_SPEED) * wadeSpeedMultiplier;
+  const passiveSlopeLimitBonus = terrainSlope * ROLL_SLOPE_SPEED_BONUS * (rollSlopeInputAlignment < -0.1 ? 0.55 : 1);
+  const rollSpeedLimit = player.rolling
+    ? groundSpeed + passiveSlopeLimitBonus + landingSpeedCarryBonus
+    : groundSpeed + landingSpeedCarryBonus;
   const airSpeedLimit = player.rolling ? AIR_SPEED + ROLL_AIR_SPEED_BONUS : AIR_SPEED;
   const airborneMomentumSpeedBonus = airMomentumCarryActive ? runtime.airMomentumSpeedLimitBonus : 0;
   const swimSpeed = player.waterMode === "underwater" ? SWIM_UNDERWATER_SPEED : SWIM_SPEED;
@@ -259,18 +277,22 @@ export function applyMovementPhysics(
     ? SWIM_ACCELERATION
     : player.grounded
       ? player.rolling
-        ? (alignment < 0.35 ? ROLL_TURN_ACCELERATION : GROUND_ACCELERATION * ROLL_ACCELERATION_MULTIPLIER) *
+        ? (alignment < 0.35
+            ? ROLL_TURN_ACCELERATION * surface.turnMultiplier
+            : GROUND_ACCELERATION * ROLL_ACCELERATION_MULTIPLIER * surface.accelMultiplier) *
           computeRollSlopeInputAccelerationMultiplier(terrainSlope, rollSlopeInputAlignment) *
           MathUtils.lerp(1, WADE_ACCELERATION_MULTIPLIER, wadeAmount)
-        : (alignment < 0 ? GROUND_TURN_ACCELERATION : GROUND_ACCELERATION) *
+        : (alignment < 0
+            ? GROUND_TURN_ACCELERATION * surface.turnMultiplier
+            : GROUND_ACCELERATION * surface.accelMultiplier) *
           MathUtils.lerp(1, WADE_ACCELERATION_MULTIPLIER, wadeAmount)
       : AIR_ACCELERATION;
   const deceleration = player.swimming
     ? SWIM_DECELERATION
     : player.grounded
       ? player.rolling
-        ? ROLL_COAST_DECELERATION
-        : GROUND_DECELERATION
+        ? ROLL_COAST_DECELERATION * surface.rollCoastMultiplier
+        : GROUND_DECELERATION * surface.decelMultiplier
       : applyAirMomentumDeceleration(AIR_DECELERATION, airMomentumCarryActive);
 
   scratch.planarVelocity.x = moveTowards(
@@ -335,6 +357,7 @@ export function applyMovementPhysics(
     runtime.airMomentumSpeedLimitBonus = player.rolling ? ROLL_AIR_SPEED_BONUS : AIR_MOMENTUM_SPEED_LIMIT_BONUS;
     runtime.coyoteTimeRemaining = 0;
     runtime.jumpBufferRemaining = 0;
+    runtime.jumpReleaseCutConsumed = false;
   }
 
   const canFloat = save.unlockedAbilities.has("breeze_float");
@@ -348,6 +371,27 @@ export function applyMovementPhysics(
     player.velocity.y < BREEZE_FLOAT_MAX_UPWARD_VELOCITY;
   const isFloating = wantsFloat && player.stamina > STAMINA_ACTION_THRESHOLD;
   player.floating = isFloating;
+
+  // Variable jump height: releasing the jump key while still rising damps remaining upward
+  // velocity so taps become short hops. Skipped while floating (jump key is the float input)
+  // and once vy has already fallen below the useful arc.
+  const jumpJustReleased = runtime.jumpHeldPrevFrame && !input.jumpHeld;
+  if (
+    jumpJustReleased &&
+    !runtime.jumpReleaseCutConsumed &&
+    !player.grounded &&
+    !player.swimming &&
+    !isFloating &&
+    player.velocity.y > JUMP_MIN_RELEASE_VELOCITY
+  ) {
+    player.velocity.y *= JUMP_RELEASE_CUT_MULTIPLIER;
+    runtime.jumpReleaseCutConsumed = true;
+  }
+  // Landing always resets the cut latch so the next jump is eligible for cut again.
+  if (player.grounded) {
+    runtime.jumpReleaseCutConsumed = true;
+  }
+  runtime.jumpHeldPrevFrame = input.jumpHeld;
 
   if (!player.swimming) {
     player.velocity.y -= GRAVITY * (isFloating ? FLOAT_GRAVITY_SCALE : 1) * dt;
@@ -401,7 +445,9 @@ export function computeRollSlopeInputSpeedAdjustment(
 
   const slope = computeRollSlopeAmount(groundNormal);
   const alignment = MathUtils.clamp(target.dot(moveDirection) / moveDirection.length(), -1, 1);
-  return slope * (alignment >= 0 ? ROLL_DOWNHILL_INPUT_SPEED_BONUS * alignment : ROLL_UPHILL_INPUT_SPEED_PENALTY * alignment);
+  return (
+    slope * (alignment >= 0 ? ROLL_DOWNHILL_INPUT_SPEED_BONUS * alignment : ROLL_UPHILL_INPUT_SPEED_PENALTY * alignment)
+  );
 }
 
 export function computeRollSlopeInputAccelerationMultiplier(slope: number, downhillAlignment: number) {

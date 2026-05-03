@@ -12,6 +12,10 @@ export interface PlayerSimulationRuntime {
   landingMomentumGraceRemaining: number;
   smoothedMoveX: number;
   smoothedMoveY: number;
+  /** Was jump held on the previous physics tick — used to detect release-cut. */
+  jumpHeldPrevFrame: boolean;
+  /** True once the active jump's release-cut has fired, so we only damp once per jump. */
+  jumpReleaseCutConsumed: boolean;
 }
 
 export function createPlayerSimulationRuntime(): PlayerSimulationRuntime {
@@ -27,5 +31,7 @@ export function createPlayerSimulationRuntime(): PlayerSimulationRuntime {
     landingMomentumGraceRemaining: 0,
     smoothedMoveX: 0,
     smoothedMoveY: 0,
+    jumpHeldPrevFrame: false,
+    jumpReleaseCutConsumed: true,
   };
 }
