@@ -44,11 +44,13 @@ export function createRenderResolutionPolicy({
   viewportWidth,
   viewportHeight,
   devicePixelRatio,
+  pixelRatioCap,
 }: {
   qualityLow: boolean;
   viewportWidth: number;
   viewportHeight: number;
   devicePixelRatio: number;
+  pixelRatioCap?: number;
 }): RenderResolutionPolicy {
   const preferredWidth = qualityLow ? LOW_QUALITY_RENDER_WIDTH : PREFERRED_RENDER_WIDTH;
   const preferredHeight = qualityLow ? LOW_QUALITY_RENDER_HEIGHT : PREFERRED_RENDER_HEIGHT;
@@ -57,7 +59,11 @@ export function createRenderResolutionPolicy({
   const budgetPixelRatio = Math.sqrt(preferredPixelCount / viewportPixelCount);
   const hardCap = qualityLow ? LOW_QUALITY_MAX_PIXEL_RATIO : MAX_PIXEL_RATIO;
   const floor = qualityLow ? LOW_QUALITY_MIN_PIXEL_RATIO : Math.min(MIN_PIXEL_RATIO, budgetPixelRatio);
-  const maxPixelRatio = Math.min(devicePixelRatio, hardCap, Math.max(floor, budgetPixelRatio));
+  const userCap =
+    typeof pixelRatioCap === "number" && Number.isFinite(pixelRatioCap)
+      ? Math.max(floor, pixelRatioCap)
+      : Number.POSITIVE_INFINITY;
+  const maxPixelRatio = Math.min(devicePixelRatio, hardCap, userCap, Math.max(floor, budgetPixelRatio));
   const minPixelRatio = Math.min(maxPixelRatio, floor);
 
   return {

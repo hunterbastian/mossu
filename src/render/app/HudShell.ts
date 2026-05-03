@@ -27,6 +27,7 @@ import {
   routeLandmarkIdSet,
   routeLandmarks,
 } from "./worldMap";
+import { createQualitySettingsMarkup } from "./appQualitySettings";
 
 const POUCH_KIND_ORDER: ForageableKind[] = ["seed", "shell", "moss_tuft", "berry", "smooth_stone", "feather"];
 const POUCH_REVEAL_MS = 4200;
@@ -1372,13 +1373,8 @@ export class HudShell {
     settingsTitle.className = "pause-menu__settings-title";
     settingsTitle.textContent = "Settings";
     const settingsGrid = document.createElement("div");
-    settingsGrid.className = "pause-menu__settings-grid";
-    settingsGrid.append(
-      this.buildPauseSetting("Camera", "Cinematic", "shoulder"),
-      this.buildPauseSetting("HUD", "Soft focus", "hud"),
-      this.buildPauseSetting("Render", "60fps", "perf"),
-      this.buildPauseSetting("Audio", "Ambient", "audio"),
-    );
+    settingsGrid.className = "pause-menu__settings-grid pause-menu__settings-grid--quality";
+    settingsGrid.insertAdjacentHTML("beforeend", createQualitySettingsMarkup("pause"));
     settings.append(settingsTitle, settingsGrid);
 
     const status = document.createElement("div");
@@ -1418,26 +1414,6 @@ export class HudShell {
 
     article.append(key, title, body);
     return article;
-  }
-
-  private buildPauseSetting(labelText: string, valueText: string, kind: "shoulder" | "hud" | "perf" | "audio") {
-    const row = document.createElement("article");
-    row.className = `pause-setting pause-setting--${kind}`;
-
-    const orb = document.createElement("span");
-    orb.className = "pause-setting__orb";
-    orb.setAttribute("aria-hidden", "true");
-
-    const label = document.createElement("p");
-    label.className = "pause-setting__label";
-    label.textContent = labelText;
-
-    const value = document.createElement("strong");
-    value.className = "pause-setting__value";
-    value.textContent = valueText;
-
-    row.append(orb, label, value);
-    return row;
   }
 
   private buildPauseStat(labelText: string, valueNode: HTMLElement) {

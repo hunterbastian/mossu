@@ -54,6 +54,9 @@ const OPEN_FIELD_DISTANCE_BOOST = 9.5;
 const OPEN_FIELD_FOV_BOOST = 3.4;
 const OPEN_FIELD_FOCUS_LIFT = 1.1;
 const OPEN_FIELD_LOOK_AHEAD_BOOST = 0.035;
+const SPEED_FOV_BOOST = 1.35;
+const TURN_SHOULDER_RESPONSE = 0.024;
+const TURN_SHOULDER_LIMIT = 0.68;
 
 type CameraProfileName = "walk" | "roll" | "air" | "swim" | "ridge" | "summit" | "void";
 
@@ -303,6 +306,7 @@ export class FollowCamera {
   private idleOrbitYaw = 0;
   private controlActivityPending = false;
   private distanceBias = 0;
+  private userDistanceBias = 0;
   private lastProfileName: CameraProfileName = "walk";
   private polarFeedbackKick = 0;
   private distanceFeedbackKick = 0;
@@ -397,6 +401,7 @@ export class FollowCamera {
     const terrainLift = MathUtils.clamp((player.position.z + 160) / 360, 0, 1);
     const speed = Math.hypot(player.velocity.x, player.velocity.z);
     const speedBoost = MathUtils.clamp(speed / 24, 0, 1);
+    this.playerVelocity.set(player.velocity.x, 0, player.velocity.z);
     const profile = this.selectCameraProfile(player, terrainLift);
     const playerGround = sampleTerrainHeight(player.position.x, player.position.z);
     const habitat = sampleHabitatLayer(player.position.x, player.position.z, playerGround);
@@ -478,6 +483,18 @@ export class FollowCamera {
       profile.lookAheadBase +
       speedBoost * profile.lookAheadSpeed +
       this.openFieldBlend * OPEN_FIELD_LOOK_AHEAD_BOOST * openFieldProfileScale;
+    const cameraLookYaw = cameraPositionYawToLookYaw(this.controls.azimuthAngle);
+    this.shoulderRight.set(Math.cos(cameraLookYaw), 0, -Math.sin(cameraLookYaw));
+    const turnShoulderScale =
+      profile.name === "roll" ? 1.18 : profile.name === "walk" ? 0.78 : profile.name === "swim" ? 0.34 : 0.52;
+    const turnShoulderTarget =
+      MathUtils.clamp(
+        -this.playerVelocity.dot(this.shoulderRight) * TURN_SHOULDER_RESPONSE,
+        -TURN_SHOULDER_LIMIT,
+        TURN_SHOULDER_LIMIT,
+      ) *
+      turnShoulderScale *
+      (1 - this.idleOrbitBlend);
     const shoulderDrift =
       Math.sin(this.cinematicTime * 0.34 + terrainLift * 0.8) *
       CINEMATIC_SHOULDER_DRIFT *
@@ -485,6 +502,7 @@ export class FollowCamera {
       (profile.name === "void" ? 0 : 1);
     const shoulderTarget =
       profile.shoulder * MathUtils.lerp(0.45, 1, speedBoost) +
+      turnShoulderTarget +
       shoulderDrift +
       this.shoulderFeedbackKick +
       this.rollSettle * 0.28;
@@ -493,14 +511,14 @@ export class FollowCamera {
     this.currentShoulder = MathUtils.damp(this.currentShoulder, shoulderTarget, profile.profileDamping, dt);
     this.currentFov = MathUtils.damp(
       this.currentFov,
-      profile.fov + this.openFieldBlend * OPEN_FIELD_FOV_BOOST * openFieldProfileScale,
+      profile.fov +
+        this.openFieldBlend * OPEN_FIELD_FOV_BOOST * openFieldProfileScale +
+        speedBoost * SPEED_FOV_BOOST * (profile.name === "roll" ? 1 : 0.46) +
+        this.rollSettle * 0.72,
       profile.profileDamping,
       dt,
     );
 
-    this.playerVelocity.set(player.velocity.x, 0, player.velocity.z);
-    const cameraLookYaw = cameraPositionYawToLookYaw(this.controls.azimuthAngle);
-    this.shoulderRight.set(Math.cos(cameraLookYaw), 0, -Math.sin(cameraLookYaw));
     const routeVistaBias =
       profile.name === "walk" || profile.name === "ridge" || profile.name === "summit"
         ? MathUtils.lerp(1.4, 3.2, terrainLift) * (1 - speedBoost * 0.32)
@@ -532,6 +550,7 @@ export class FollowCamera {
         openFieldDistanceBoost +
         speedBoost * profile.speedDistanceBoost +
         this.distanceBias +
+        this.userDistanceBias +
         this.distanceFeedbackKick +
         this.rollSettle * 3.8 +
         this.landingSettle * 1.35 +
@@ -585,7 +604,7 @@ export class FollowCamera {
           const delta = Math.atan2(Math.sin(desiredCameraYaw - currentYaw), Math.cos(desiredCameraYaw - currentYaw));
           const tightFollow =
             profile.name === "walk" && this.currentDistance <= MIN_DISTANCE + 1.35 && !player.swimming;
-          const yawGain = tightFollow ? 1.28 : 1;
+          const yawGain = tightFollow ? 1.28 : profile.name === "roll" ? 1.18 + speedBoost * 0.24 : 1;
           controls._sphericalEnd.theta = currentYaw + delta * (1 - Math.exp(-dt * profile.yawResponsiveness * yawGain));
         }
       }
@@ -731,6 +750,7 @@ export class FollowCamera {
       idleOrbitActive: this.idleOrbitRequested,
       idleOrbitBlend: Number(this.idleOrbitBlend.toFixed(3)),
       distance: Number(this.currentDistance.toFixed(2)),
+      userDistanceBias: Number(this.userDistanceBias.toFixed(1)),
       polar: Number(this.currentPolar.toFixed(3)),
       fov: Number(this.currentFov.toFixed(1)),
       focusHeight: Number(this.currentFocusHeight.toFixed(2)),
@@ -755,6 +775,13 @@ export class FollowCamera {
       this.setIdleOrbitActive(false);
       this.releasePointerLock();
     }
+  }
+
+  setUserDistanceBias(distanceBias: number) {
+    if (!Number.isFinite(distanceBias)) {
+      return;
+    }
+    this.userDistanceBias = MathUtils.clamp(distanceBias, -8, 10);
   }
 
   setIdleOrbitActive(active: boolean) {

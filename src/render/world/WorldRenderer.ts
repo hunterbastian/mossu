@@ -7,9 +7,11 @@ import {
   CylinderGeometry,
   DirectionalLight,
   DoubleSide,
+  DynamicDrawUsage,
   FogExp2,
   Group,
   HemisphereLight,
+  InstancedBufferAttribute,
   InstancedMesh,
   Material,
   MathUtils,
@@ -21,6 +23,7 @@ import {
   PlaneGeometry,
   PointLight,
   Quaternion,
+  Raycaster,
   Scene,
   SphereGeometry,
   TorusGeometry,
@@ -33,6 +36,7 @@ import {
   sampleBaseTerrainHeight,
   sampleBiomeZone,
   sampleIslandBoundaryPoint,
+  sampleRouteDirtPathMask,
   sampleTerrainHeight,
   sampleTerrainNormal,
   sampleWaterState,
@@ -88,10 +92,12 @@ import {
   applySceneLightingColors,
   applySceneLightingMood,
   applySunRig,
+  createWorldLightingMoodState,
   getAtmosphereHorizonTints,
   getSunDirectionWorld,
   type SceneColorPairs,
   updateSunOrbitRig,
+  writeWorldLightingMood,
   writePatchSceneLightingUniforms,
 } from "./sceneLighting";
 import { buildTerrainFormStrokes, makeTerrainMesh } from "./terrainMesh";
@@ -107,11 +113,17 @@ const FAR_GRASS_PATCH_COUNT = 1420;
 const ALPINE_GRASS_COUNT = 220;
 const LANDING_SPLASH_PARTICLES = 18;
 const SNOW_TRAIL_PARTICLES = 20;
+export const MOSSU_TRACE_STAMP_COUNT = 34;
+export const WORLD_CLOUD_SHADOW_PATCH_COUNT = 6;
 const DEFERRED_WORLD_SLICES_PER_COVERED_FRAME = 3;
 const TREE_LEAF_WIND_UPDATE_INTERVAL = 1 / 30;
 const SMALL_PROP_CULL_DISTANCE = 210;
 const FAR_DECOR_CULL_DISTANCE = 280;
 const WORLD_CULLING_UPDATE_INTERVAL = 10;
+const CAMERA_OCCLUDER_FADE_OPACITY = 0.26;
+const CAMERA_OCCLUDER_UPDATE_INTERVAL = 3;
+const CAMERA_OCCLUDER_CORRIDOR_RADIUS = 5.4;
+const CAMERA_OCCLUDER_MAX_CANDIDATES = 36;
 
 interface LandingSplashParticle {
   mesh: Mesh;
@@ -135,10 +147,99 @@ interface SnowTrailParticle {
   drift: number;
 }
 
+interface MossuTraceStamp {
+  age: number;
+  life: number;
+  maxAlpha: number;
+}
+
+interface MossuTraceSystem {
+  mesh: InstancedMesh;
+  alpha: Float32Array;
+}
+
 interface MapMarker {
   group: Group;
   baseScale: number;
   pulseSpeed: number;
+}
+
+function createMossuTraceSystem(): MossuTraceSystem {
+  const geometry = new CircleGeometry(1, 18);
+  geometry.rotateX(-Math.PI / 2);
+
+  const alpha = new Float32Array(MOSSU_TRACE_STAMP_COUNT);
+  const seed = new Float32Array(MOSSU_TRACE_STAMP_COUNT);
+  for (let index = 0; index < seed.length; index += 1) {
+    seed[index] = Math.random();
+  }
+  geometry.setAttribute("instanceTraceAlpha", new InstancedBufferAttribute(alpha, 1));
+  geometry.setAttribute("instanceTraceSeed", new InstancedBufferAttribute(seed, 1));
+
+  const material = new MeshBasicMaterial({
+    color: "#82945b",
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  material.onBeforeCompile = (shader: GrassShader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        attribute float instanceTraceAlpha;
+        attribute float instanceTraceSeed;
+        varying float vTraceAlpha;
+        varying float vTraceSeed;
+        varying vec2 vTraceUv;`,
+      )
+      .replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+        vTraceAlpha = instanceTraceAlpha;
+        vTraceSeed = instanceTraceSeed;
+        vTraceUv = uv;`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        varying float vTraceAlpha;
+        varying float vTraceSeed;
+        varying vec2 vTraceUv;`,
+      )
+      .replace(
+        "vec4 diffuseColor = vec4( diffuse, opacity );",
+        `vec2 traceCenter = (vTraceUv - vec2(0.5)) * 2.0;
+        float radius = length(traceCenter);
+        float sketch = sin(vTraceUv.x * 21.0 + vTraceSeed * 7.0) * 0.5 +
+          sin((vTraceUv.x + vTraceUv.y) * 15.0 - vTraceSeed * 5.0) * 0.35;
+        float edge = 1.0 - smoothstep(0.55 + sketch * 0.025, 0.98, radius);
+        float fiber = sin((vTraceUv.x * 0.86 + vTraceUv.y * 0.54) * 24.0 + vTraceSeed * 12.0) * 0.5 + 0.5;
+        float brokenStroke = mix(0.68, 1.0, smoothstep(0.22, 0.9, fiber));
+        float centerLift = 0.76 + smoothstep(0.1, 0.72, abs(traceCenter.y)) * 0.18;
+        vec3 traceDiffuse = diffuse * vec3(0.94, 1.02, 0.82);
+        vec4 diffuseColor = vec4(traceDiffuse, opacity * vTraceAlpha * edge * brokenStroke * centerLift);`,
+      );
+  };
+
+  const mesh = new InstancedMesh(geometry, material, MOSSU_TRACE_STAMP_COUNT);
+  const dummy = new Object3D();
+  dummy.position.set(0, -999, 0);
+  dummy.scale.setScalar(0.001);
+  dummy.updateMatrix();
+  for (let index = 0; index < MOSSU_TRACE_STAMP_COUNT; index += 1) {
+    mesh.setMatrixAt(index, dummy.matrix);
+  }
+  mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.name = "mossu-pressed-grass-trace";
+  mesh.renderOrder = 2;
+  mesh.frustumCulled = false;
+  mesh.visible = false;
+  return { mesh, alpha };
 }
 
 interface ForageableVisual {
@@ -180,6 +281,9 @@ export interface WorldPerfStats {
   grassLodSourceInstances: number;
   grassLodVisitedCells: number;
   grassLodVisitedSources: number;
+  mossuTraceMeshes: number;
+  mossuTraceStampBudget: number;
+  mossuTraceActiveStamps: number;
   forestMeshes: number;
   forestInstances: number;
   forestEstimatedTriangles: number;
@@ -423,7 +527,43 @@ function buildShrine() {
 }
 
 function buildShadowPockets() {
-  return new Group();
+  const group = new Group();
+  const geometry = new PlaneGeometry(1, 1, 10, 3);
+  const placements = [
+    [-84, -84, 92, 28, 0.055, 0.18],
+    [-10, -12, 124, 34, 0.048, -0.08],
+    [48, 68, 106, 32, 0.044, 0.14],
+    [30, 132, 128, 42, 0.052, -0.18],
+    [-18, 178, 118, 38, 0.046, 0.06],
+    [24, 214, 98, 30, 0.04, -0.12],
+  ] as const;
+
+  placements.forEach(([x, z, width, depth, opacity, rotation], index) => {
+    const material = new MeshBasicMaterial({
+      color: index > 3 ? "#4e604f" : "#566e55",
+      transparent: true,
+      opacity,
+      depthWrite: false,
+      side: DoubleSide,
+      fog: true,
+    });
+    const patch = new Mesh(geometry.clone(), material);
+    patch.rotation.x = -Math.PI / 2;
+    patch.rotation.z = rotation;
+    patch.position.set(x, sampleTerrainHeight(x, z) + 0.09, z);
+    patch.scale.set(width, depth, 1);
+    patch.renderOrder = 1;
+    patch.userData.baseX = x;
+    patch.userData.baseZ = z;
+    patch.userData.baseOpacity = opacity;
+    patch.userData.baseRotation = rotation;
+    patch.userData.drift = 26 + index * 5;
+    patch.userData.speed = 0.018 + index * 0.003;
+    patch.name = `moving-cloud-shadow-${index + 1}`;
+    group.add(patch);
+  });
+
+  return group;
 }
 
 function buildValleyMist() {
@@ -998,6 +1138,15 @@ export class WorldRenderer {
   private readonly smallPropMeshes: Array<InstancedMesh> = [];
   private readonly waterSystem: WaterSystem;
   private readonly cameraCollisionMeshes: Mesh[] = [];
+  private readonly cameraOccluderMeshes: Mesh[] = [];
+  private readonly cameraOcclusionCandidates: Mesh[] = [];
+  private readonly cameraOcclusionActiveMeshes = new Set<Mesh>();
+  private readonly fadedCameraOccluders = new Set<Mesh>();
+  private readonly cameraOcclusionRay = new Raycaster();
+  private readonly cameraOcclusionDirection = new Vector3();
+  private readonly cameraOcclusionTarget = new Vector3();
+  private readonly cameraOcclusionMeshPosition = new Vector3();
+  private cameraOcclusionFrame = 0;
   private readonly gameplayFog = new FogExp2(grasslandsArt.scene.fog, 0.00054);
   private readonly lowlandBackground = new Color(grasslandsArt.scene.lowlandBackground);
   private readonly highlandBackground = new Color(grasslandsArt.scene.highlandBackground);
@@ -1024,6 +1173,8 @@ export class WorldRenderer {
   private readonly scenePatchShadow = new Color();
   private readonly scenePatchHorizon = new Color();
   private readonly scenePatchSunDir = new Vector3();
+  private readonly worldLightingMood = createWorldLightingMoodState();
+  private fogDensityScale = 1;
   private elevationMood = 0;
   private waterDepthDebug = false;
   private grassLodFrame = 0;
@@ -1090,6 +1241,12 @@ export class WorldRenderer {
   private readonly landingParticles: LandingSplashParticle[] = [];
   private readonly snowTrail = new Group();
   private readonly snowTrailParticles: SnowTrailParticle[] = [];
+  private readonly mossuTrace = createMossuTraceSystem();
+  private readonly mossuTraceStamps: MossuTraceStamp[] = Array.from({ length: MOSSU_TRACE_STAMP_COUNT }, () => ({
+    age: Number.POSITIVE_INFINITY,
+    life: 1,
+    maxAlpha: 0,
+  }));
   private readonly ambientBlobs: AmbientBlob[] = [];
   private readonly ambientNestGroup = new Group();
   private readonly ambientBlobGroup = new Group();
@@ -1111,9 +1268,15 @@ export class WorldRenderer {
   private readonly landingNormal = new Vector3();
   private readonly trailVelocity = new Vector3();
   private readonly trailDirection = new Vector3();
+  private readonly mossuTraceDummy = new Object3D();
+  private readonly mossuTraceVelocity = new Vector3();
+  private readonly mossuTraceDirection = new Vector3();
   private readonly remoteMossus = new Map<string, RemoteMossuVisual>();
   private readonly remoteMossuScratch = new Vector3();
   private trailEmissionCarry = 0;
+  private mossuTraceEmissionCarry = 0;
+  private mossuTraceCursor = 0;
+  private mossuTraceActiveStamps = 0;
   private readonly mapMarkerGroup = new Group();
   private readonly forageableGroup = new Group();
   private readonly forageableVisuals: ForageableVisual[] = [];
@@ -1194,6 +1357,7 @@ export class WorldRenderer {
     scene.add(this.mossu.group);
     scene.add(this.landingSplash);
     scene.add(this.snowTrail);
+    scene.add(this.mossuTrace.mesh);
     scene.add(this.forageableGroup);
     scene.add(this.ambientNestGroup);
     scene.add(this.ambientBlobGroup);
@@ -1461,6 +1625,12 @@ export class WorldRenderer {
     return this.cameraCollisionMeshes;
   }
 
+  setVisualQualitySettings(settings: { fogStrength?: number }) {
+    if (typeof settings.fogStrength === "number" && Number.isFinite(settings.fogStrength)) {
+      this.fogDensityScale = MathUtils.clamp(settings.fogStrength, 0.7, 1.25);
+    }
+  }
+
   getPerfStats() {
     return this.createPerfStats();
   }
@@ -1565,7 +1735,6 @@ export class WorldRenderer {
       },
       () => {
         moveChildren(this.shadowVolumes, buildShadowPockets());
-        freezeStaticHierarchy(this.shadowVolumes);
       },
       () => {
         const waterways = buildHighlandWaterways();
@@ -1656,12 +1825,14 @@ export class WorldRenderer {
     this.updateWater(elapsed, mapLookdown);
     this.updateLandingSplash(frame, dt);
     this.updateSnowTrail(frame, dt);
+    this.updateMossuTrace(frame, dt, mapLookdown);
     this.updateForageables(frame, elapsed, mapLookdown);
     this.updateMapMarkers(frame, elapsed, mapLookdown);
     this.updateGrassLod(frame, mapLookdown, coveredByTransition);
     const mapLookdownChanged = this.lastMapLookdown !== mapLookdown;
     this.updateWorldCulling(frame, viewCamera, mapLookdown, mapLookdownChanged);
     this.syncMapLookdownVisibility(mapLookdown);
+    this.updateCameraOccluderFade(frame, viewCamera, dt, mapLookdown);
     this.lastMapLookdown = mapLookdown;
     this.processDeferredWorldSlice(coveredByTransition);
   }
@@ -1701,6 +1872,7 @@ export class WorldRenderer {
     this.ocean.setVisible(gameplayVisible);
     this.shadowVolumes.visible = gameplayVisible;
     this.terrainFormStrokes.visible = gameplayVisible;
+    this.mossuTrace.mesh.visible = gameplayVisible && this.mossuTraceActiveStamps > 0;
     this.grassImpostorMeshes.forEach((mesh) => {
       mesh.visible = grassVisible && mesh.count > 0;
     });
@@ -1810,6 +1982,9 @@ export class WorldRenderer {
     if (!this.cameraCollisionMeshes.includes(mesh)) {
       this.cameraCollisionMeshes.push(mesh);
     }
+    if (mesh.userData.cameraOccluderFade && !this.cameraOccluderMeshes.includes(mesh)) {
+      this.cameraOccluderMeshes.push(mesh);
+    }
   }
 
   private createPerfStats(): WorldPerfStats {
@@ -1846,6 +2021,9 @@ export class WorldRenderer {
       grassLodSourceInstances: grassLodStats.reduce((sum, stats) => sum + (stats?.sourceInstances ?? 0), 0),
       grassLodVisitedCells: grassLodStats.reduce((sum, stats) => sum + (stats?.visitedCells ?? 0), 0),
       grassLodVisitedSources: grassLodStats.reduce((sum, stats) => sum + (stats?.visitedSources ?? 0), 0),
+      mossuTraceMeshes: 1,
+      mossuTraceStampBudget: MOSSU_TRACE_STAMP_COUNT,
+      mossuTraceActiveStamps: this.mossuTraceActiveStamps,
       forestMeshes: this.treeWindMeshes.length + this.treeLeafWindMeshes.length,
       forestInstances,
       forestEstimatedTriangles: countInstancedTriangles(this.treeWindMeshes) + staticTreeWindTriangles,
@@ -1952,6 +2130,148 @@ export class WorldRenderer {
       const cullDistance = mesh.count > 80 ? SMALL_PROP_CULL_DISTANCE : FAR_DECOR_CULL_DISTANCE;
       mesh.visible = playerDistance <= radius + cullDistance || cameraDistance <= radius + cullDistance * 0.82;
     });
+  }
+
+  private updateCameraOccluderFade(frame: FrameState, viewCamera: Camera, dt: number, mapLookdown: boolean) {
+    if (mapLookdown || this.cameraOccluderMeshes.length === 0) {
+      this.cameraOcclusionActiveMeshes.clear();
+    } else {
+      this.cameraOcclusionFrame += 1;
+      if (this.cameraOcclusionFrame % CAMERA_OCCLUDER_UPDATE_INTERVAL === 0) {
+        this.refreshCameraOccluders(frame, viewCamera);
+      }
+    }
+
+    this.cameraOcclusionActiveMeshes.forEach((mesh) => this.fadedCameraOccluders.add(mesh));
+    this.fadedCameraOccluders.forEach((mesh) => {
+      const active = this.cameraOcclusionActiveMeshes.has(mesh);
+      const stillFaded = this.setCameraOccluderOpacity(mesh, active ? CAMERA_OCCLUDER_FADE_OPACITY : 1, dt);
+      if (!active && !stillFaded) {
+        this.fadedCameraOccluders.delete(mesh);
+      }
+    });
+  }
+
+  private refreshCameraOccluders(frame: FrameState, viewCamera: Camera) {
+    this.cameraOcclusionActiveMeshes.clear();
+    this.cameraOcclusionTarget.copy(frame.player.position);
+    this.cameraOcclusionTarget.y += frame.player.swimming ? 1.7 : 2.2;
+
+    const cameraPosition = viewCamera.position;
+    const distanceToMossu = cameraPosition.distanceTo(this.cameraOcclusionTarget);
+    if (distanceToMossu < 5) {
+      return;
+    }
+
+    this.cameraOcclusionDirection.copy(this.cameraOcclusionTarget).sub(cameraPosition);
+    const rayLength = this.cameraOcclusionDirection.length();
+    if (rayLength <= 0.001) {
+      return;
+    }
+    this.cameraOcclusionDirection.multiplyScalar(1 / rayLength);
+
+    const segmentX = this.cameraOcclusionTarget.x - cameraPosition.x;
+    const segmentZ = this.cameraOcclusionTarget.z - cameraPosition.z;
+    const segmentLengthSq = segmentX * segmentX + segmentZ * segmentZ;
+    if (segmentLengthSq <= 0.001) {
+      return;
+    }
+
+    this.cameraOcclusionCandidates.length = 0;
+    for (const mesh of this.cameraOccluderMeshes) {
+      if (!mesh.visible) {
+        continue;
+      }
+
+      mesh.getWorldPosition(this.cameraOcclusionMeshPosition);
+      const along =
+        ((this.cameraOcclusionMeshPosition.x - cameraPosition.x) * segmentX +
+          (this.cameraOcclusionMeshPosition.z - cameraPosition.z) * segmentZ) /
+        segmentLengthSq;
+      if (along <= 0.04 || along >= 0.96) {
+        continue;
+      }
+
+      const closestX = cameraPosition.x + segmentX * along;
+      const closestZ = cameraPosition.z + segmentZ * along;
+      const corridorDistance = Math.hypot(
+        this.cameraOcclusionMeshPosition.x - closestX,
+        this.cameraOcclusionMeshPosition.z - closestZ,
+      );
+      if (corridorDistance > CAMERA_OCCLUDER_CORRIDOR_RADIUS) {
+        continue;
+      }
+
+      this.cameraOcclusionCandidates.push(mesh);
+      if (this.cameraOcclusionCandidates.length >= CAMERA_OCCLUDER_MAX_CANDIDATES) {
+        break;
+      }
+    }
+
+    if (this.cameraOcclusionCandidates.length === 0) {
+      return;
+    }
+
+    this.cameraOcclusionRay.set(cameraPosition, this.cameraOcclusionDirection);
+    this.cameraOcclusionRay.near = 0.7;
+    this.cameraOcclusionRay.far = Math.max(1, distanceToMossu - 1.2);
+    const hits = this.cameraOcclusionRay.intersectObjects(this.cameraOcclusionCandidates, false);
+    let faded = 0;
+    for (const hit of hits) {
+      const mesh = hit.object as Mesh;
+      if (this.cameraOcclusionActiveMeshes.has(mesh)) {
+        continue;
+      }
+      this.cameraOcclusionActiveMeshes.add(mesh);
+      faded += 1;
+      if (faded >= 4) {
+        break;
+      }
+    }
+  }
+
+  private setCameraOccluderOpacity(mesh: Mesh, targetOpacityScale: number, dt: number) {
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    let stillFaded = false;
+    const fadeDt = Math.min(dt, 1 / 20);
+
+    for (const material of materials) {
+      if (material.userData.cameraBaseOpacity === undefined) {
+        material.userData.cameraBaseOpacity = material.opacity;
+        material.userData.cameraBaseTransparent = material.transparent;
+        material.userData.cameraBaseDepthWrite = material.depthWrite;
+      }
+
+      const baseOpacity =
+        typeof material.userData.cameraBaseOpacity === "number"
+          ? material.userData.cameraBaseOpacity
+          : material.opacity;
+      const baseTransparent =
+        typeof material.userData.cameraBaseTransparent === "boolean" ? material.userData.cameraBaseTransparent : false;
+      const baseDepthWrite =
+        typeof material.userData.cameraBaseDepthWrite === "boolean" ? material.userData.cameraBaseDepthWrite : true;
+      const targetOpacity = baseOpacity * targetOpacityScale;
+      const nextOpacity = MathUtils.damp(material.opacity, targetOpacity, targetOpacityScale < 0.98 ? 16 : 9, fadeDt);
+
+      if (nextOpacity < baseOpacity - 0.008) {
+        material.opacity = nextOpacity;
+        if (!material.transparent || material.depthWrite) {
+          material.transparent = true;
+          material.depthWrite = false;
+          material.needsUpdate = true;
+        }
+        stillFaded = true;
+      } else {
+        material.opacity = baseOpacity;
+        if (material.transparent !== baseTransparent || material.depthWrite !== baseDepthWrite) {
+          material.transparent = baseTransparent;
+          material.depthWrite = baseDepthWrite;
+          material.needsUpdate = true;
+        }
+      }
+    }
+
+    return stillFaded;
   }
 
   private updateWind(frame: FrameState, elapsed: number, dt: number) {
@@ -2071,6 +2391,20 @@ export class WorldRenderer {
     const breath = Math.sin(elapsed * 0.34 + this.elevationMood * 1.8) * 0.5 + 0.5;
 
     updateSunOrbitRig(this.sun, elapsed, this.elevationMood);
+    writeWorldLightingMood(this.worldLightingMood, {
+      playerX,
+      playerZ,
+      playerHeight,
+      elevationMood: this.elevationMood,
+      routeMood,
+      decisionClarity: decisionClarityWindow,
+      orbitHeight:
+        typeof this.sun.userData.orbitHeight === "number" ? MathUtils.clamp(this.sun.userData.orbitHeight, 0, 1) : 0.8,
+      lowAngleWarmth:
+        typeof this.sun.userData.lowAngleWarmth === "number"
+          ? MathUtils.clamp(this.sun.userData.lowAngleWarmth, 0, 1)
+          : 0,
+    });
     applySceneLightingColors(
       {
         sun: this.sun,
@@ -2080,6 +2414,7 @@ export class WorldRenderer {
       },
       this.sceneColorPairs,
       this.elevationMood,
+      this.worldLightingMood,
     );
     applySceneLightingMood(
       {
@@ -2094,14 +2429,15 @@ export class WorldRenderer {
       this.elevationMood,
       cinematicLift,
       breath,
+      this.worldLightingMood,
     );
     this.gameplayFog.density = Math.max(
-      0.00034,
-      this.gameplayFog.density - decisionClarityWindow * 0.000075,
+      0.00028,
+      (this.gameplayFog.density - decisionClarityWindow * 0.000075) * this.fogDensityScale,
     );
     this.environmentPulse = MathUtils.damp(this.environmentPulse, 0, 2.35, dt);
-    syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera, elapsed);
-    syncStylizedSkySun(this.skySun, this.sun, viewCamera, this.elevationMood, elapsed);
+    syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera, elapsed, this.worldLightingMood);
+    syncStylizedSkySun(this.skySun, this.sun, this.elevationMood, elapsed, this.worldLightingMood);
 
     getAtmosphereHorizonTints(
       this.elevationMood,
@@ -2109,8 +2445,10 @@ export class WorldRenderer {
       this.scenePatchHaze,
       this.scenePatchBright,
       this.scenePatchShadow,
+      this.worldLightingMood,
     );
     getSunDirectionWorld(this.sun, this.scenePatchSunDir);
+    this.updateCloudShadowPockets(elapsed);
     const applyPatch = (shader: GrassShader | undefined) => {
       if (!shader) {
         return;
@@ -2123,6 +2461,7 @@ export class WorldRenderer {
         this.scenePatchHorizon,
         this.scenePatchSunDir,
         this.elevationMood,
+        this.worldLightingMood,
       );
     };
     this.windMeshes.forEach((mesh) => {
@@ -2136,6 +2475,33 @@ export class WorldRenderer {
         userData?: { waterShader?: GrassShader };
       };
       applyPatch(mat.userData?.waterShader);
+    });
+  }
+
+  private updateCloudShadowPockets(elapsed: number) {
+    const shadowStrength = this.worldLightingMood.cloudShadow * (1 - this.worldLightingMood.decisionClarity * 0.28);
+    const sunYaw = Math.atan2(this.scenePatchSunDir.x, this.scenePatchSunDir.z);
+    const driftX = -this.scenePatchSunDir.x;
+    const driftZ = -this.scenePatchSunDir.z;
+    this.shadowVolumes.children.forEach((child, index) => {
+      const patch = child as Mesh;
+      const material = patch.material;
+      if (!(material instanceof MeshBasicMaterial)) {
+        return;
+      }
+      const baseX = (patch.userData.baseX as number | undefined) ?? patch.position.x;
+      const baseZ = (patch.userData.baseZ as number | undefined) ?? patch.position.z;
+      const baseOpacity = (patch.userData.baseOpacity as number | undefined) ?? 0.04;
+      const baseRotation = (patch.userData.baseRotation as number | undefined) ?? 0;
+      const drift = (patch.userData.drift as number | undefined) ?? 30;
+      const speed = (patch.userData.speed as number | undefined) ?? 0.02;
+      const phase = Math.sin(elapsed * speed + index * 1.7) * drift;
+      patch.position.x = baseX + driftX * phase;
+      patch.position.z = baseZ + driftZ * phase;
+      patch.position.y = sampleTerrainHeight(patch.position.x, patch.position.z) + 0.09;
+      patch.rotation.z = baseRotation + sunYaw * 0.18 + Math.sin(elapsed * 0.01 + index) * 0.025;
+      material.opacity = baseOpacity * MathUtils.lerp(0.42, 1.12, shadowStrength);
+      patch.visible = shadowStrength > 0.035;
     });
   }
 
@@ -2393,6 +2759,108 @@ export class WorldRenderer {
     particle.mesh.visible = true;
     const material = particle.mesh.material as MeshLambertMaterial;
     material.opacity = 0.55;
+  }
+
+  private updateMossuTrace(frame: FrameState, dt: number, mapLookdown: boolean) {
+    const player = frame.player;
+    const planarSpeed = Math.hypot(player.velocity.x, player.velocity.z);
+    const canEmit = !mapLookdown && player.grounded && !player.swimming && !player.fallingToVoid && planarSpeed > 2.2;
+
+    if (canEmit) {
+      const rate = player.rolling
+        ? MathUtils.clamp(planarSpeed * 0.28, 2.4, 5.8)
+        : MathUtils.clamp(planarSpeed * 0.18, 0.8, 2.4);
+      this.mossuTraceEmissionCarry += dt * rate;
+      while (this.mossuTraceEmissionCarry >= 1) {
+        this.emitMossuTraceStamp(player.position, player.velocity, player.rolling);
+        this.mossuTraceEmissionCarry -= 1;
+      }
+    } else {
+      this.mossuTraceEmissionCarry = 0;
+    }
+
+    let active = 0;
+    let alphaChanged = false;
+    this.mossuTraceStamps.forEach((stamp, index) => {
+      if (stamp.age >= stamp.life) {
+        if (this.mossuTrace.alpha[index] !== 0) {
+          this.mossuTrace.alpha[index] = 0;
+          alphaChanged = true;
+        }
+        return;
+      }
+
+      stamp.age += dt;
+      if (stamp.age >= stamp.life) {
+        this.mossuTrace.alpha[index] = 0;
+        alphaChanged = true;
+        return;
+      }
+
+      active += 1;
+      const lifeT = stamp.age / stamp.life;
+      const fadeIn = MathUtils.smoothstep(lifeT, 0, 0.14);
+      const fadeOut = 1 - MathUtils.smoothstep(lifeT, 0.52, 1);
+      const alpha = stamp.maxAlpha * fadeIn * fadeOut;
+      if (Math.abs(this.mossuTrace.alpha[index] - alpha) > 0.001) {
+        this.mossuTrace.alpha[index] = alpha;
+        alphaChanged = true;
+      }
+    });
+
+    if (alphaChanged) {
+      this.mossuTrace.mesh.geometry.getAttribute("instanceTraceAlpha").needsUpdate = true;
+    }
+    this.mossuTraceActiveStamps = active;
+    this.mossuTrace.mesh.visible = !mapLookdown && active > 0;
+  }
+
+  private emitMossuTraceStamp(origin: Vector3, velocity: Vector3, rolling: boolean) {
+    this.mossuTraceVelocity.set(velocity.x, 0, velocity.z);
+    if (this.mossuTraceVelocity.lengthSq() <= 0.01) {
+      return;
+    }
+    this.mossuTraceDirection.copy(this.mossuTraceVelocity).normalize();
+
+    const side = (Math.random() - 0.5) * (rolling ? 0.95 : 0.58);
+    const back = rolling ? 1.3 : 0.82;
+    const x = origin.x - this.mossuTraceDirection.x * back - this.mossuTraceDirection.z * side;
+    const z = origin.z - this.mossuTraceDirection.z * back + this.mossuTraceDirection.x * side;
+    const water = sampleWaterState(x, z);
+    if (water && water.depth > 0.08) {
+      return;
+    }
+
+    const y = sampleTerrainHeight(x, z);
+    const normal = sampleTerrainNormal(x, z);
+    if (normal.y < 0.62) {
+      return;
+    }
+
+    const zone = sampleBiomeZone(x, z, y);
+    if (zone === "peak_shrine") {
+      return;
+    }
+
+    const routeDirt = sampleRouteDirtPathMask(x, z);
+    const index = this.mossuTraceCursor;
+    this.mossuTraceCursor = (this.mossuTraceCursor + 1) % this.mossuTraceStamps.length;
+    const stamp = this.mossuTraceStamps[index];
+    stamp.age = 0;
+    stamp.life = MathUtils.lerp(7.5, 13.5, Math.random()) * (rolling ? 1.08 : 1);
+    stamp.maxAlpha = MathUtils.clamp((rolling ? 0.13 : 0.095) + routeDirt * 0.045, 0.075, 0.17);
+
+    const yaw = Math.atan2(this.mossuTraceDirection.x, this.mossuTraceDirection.z) + (Math.random() - 0.5) * 0.2;
+    const length = rolling ? MathUtils.lerp(2.8, 4.0, Math.random()) : MathUtils.lerp(1.9, 3.0, Math.random());
+    const width = rolling ? MathUtils.lerp(0.95, 1.36, Math.random()) : MathUtils.lerp(0.72, 1.04, Math.random());
+    this.mossuTraceDummy.position.set(x, y + 0.055, z);
+    this.mossuTraceDummy.rotation.set(0, yaw, 0);
+    this.mossuTraceDummy.scale.set(width, 1, length);
+    this.mossuTraceDummy.updateMatrix();
+    this.mossuTrace.mesh.setMatrixAt(index, this.mossuTraceDummy.matrix);
+    this.mossuTrace.mesh.instanceMatrix.needsUpdate = true;
+    this.mossuTrace.alpha[index] = Math.max(this.mossuTrace.alpha[index], stamp.maxAlpha * 0.18);
+    this.mossuTrace.mesh.geometry.getAttribute("instanceTraceAlpha").needsUpdate = true;
   }
 
   private updateMapMarkers(frame: FrameState, elapsed: number, mapLookdown: boolean) {

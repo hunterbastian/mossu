@@ -6,14 +6,22 @@ import {
   computeDownhillRollVector,
   computeRollGravityStrength,
   computeRollSlopeAmount,
+  computeRollSlopeInputAccelerationMultiplier,
+  computeRollSlopeInputSpeedAdjustment,
   createMovementScratch,
   tickMovementTimers,
 } from "../../src/simulation/movementPhysics";
 import { createPlayerSimulationRuntime } from "../../src/simulation/playerSimulationRuntime";
 import {
+  COYOTE_TIME,
+  AIR_MOMENTUM_GRACE_TIME,
+  JUMP_BUFFER_TIME,
+  LANDING_MOMENTUM_GRACE_TIME,
   ROLL_AIR_SPEED_BONUS,
+  ROLL_AIR_MOMENTUM_GRACE_TIME,
   ROLL_BOOST_DELAY,
   ROLL_BOOST_MULTIPLIER,
+  ROLL_DRIFT_SPEED_RETENTION,
   ROLL_GRAVITY_FULL_SLOPE,
   ROLL_GRAVITY_MIN_SLOPE,
   ROLL_MODE_INDICATOR_DELAY,
@@ -22,7 +30,12 @@ import {
   WALK_SPEED,
 } from "../../src/simulation/playerSimulationConstants";
 import { updateStaminaAndAbilityState } from "../../src/simulation/staminaAbilities";
-import { applySwimForces, clampSwimVelocity, resolveWaterContact, wantsUnderwaterDive } from "../../src/simulation/waterTraversal";
+import {
+  applySwimForces,
+  clampSwimVelocity,
+  resolveWaterContact,
+  wantsUnderwaterDive,
+} from "../../src/simulation/waterTraversal";
 import type { WaterState } from "../../src/simulation/world";
 import { startingPosition } from "../../src/simulation/world";
 import { assert } from "./testHarness";
@@ -107,6 +120,69 @@ export function runMovementContracts() {
   assert(rightStrafe.x > 1, "D moves right relative to the gameplay camera");
   assert(leftStrafe.x * rightStrafe.x < -1, "A and D produce opposite strafe directions on the lateral axis");
 
+  const quickWalkPlayer = makePlayer();
+  const quickRollPlayer = makePlayer();
+  const quickWalkRuntime = createPlayerSimulationRuntime();
+  const quickRollRuntime = createPlayerSimulationRuntime();
+  const quickWalkScratch = createMovementScratch();
+  const quickRollScratch = createMovementScratch();
+  for (let i = 0; i < 12; i += 1) {
+    const dt = 1 / 60;
+    const walkInput = { ...baseInput, moveY: 1 };
+    const rollInput = { ...baseInput, moveY: 1, rollHeld: true };
+    tickMovementTimers(quickWalkPlayer, walkInput, dt, quickWalkRuntime);
+    tickMovementTimers(quickRollPlayer, rollInput, dt, quickRollRuntime);
+    applyMovementPhysics(quickWalkPlayer, save, walkInput, 0, dt, quickWalkRuntime, quickWalkScratch);
+    applyMovementPhysics(quickRollPlayer, save, rollInput, 0, dt, quickRollRuntime, quickRollScratch);
+  }
+  assert(
+    planarSpeed(quickRollPlayer) > planarSpeed(quickWalkPlayer) + 1.2,
+    `roll start has an immediate readable speed lift over walking: walk=${planarSpeed(quickWalkPlayer).toFixed(2)} roll=${planarSpeed(quickRollPlayer).toFixed(2)}`,
+  );
+
+  const driftPlayer = makePlayer();
+  const driftRuntime = createPlayerSimulationRuntime();
+  const driftScratch = createMovementScratch();
+  for (let i = 0; i < 36; i += 1) {
+    const dt = 1 / 60;
+    const rollInput = { ...baseInput, moveY: 1, rollHeld: true };
+    tickMovementTimers(driftPlayer, rollInput, dt, driftRuntime);
+    applyMovementPhysics(driftPlayer, save, rollInput, 0, dt, driftRuntime, driftScratch);
+  }
+  const driftSpeedBeforeTurn = planarSpeed(driftPlayer);
+  for (let i = 0; i < 16; i += 1) {
+    const dt = 1 / 60;
+    const turnInput = { ...baseInput, moveX: 1, rollHeld: true };
+    tickMovementTimers(driftPlayer, turnInput, dt, driftRuntime);
+    applyMovementPhysics(driftPlayer, save, turnInput, 0, dt, driftRuntime, driftScratch);
+  }
+  assert(
+    planarSpeed(driftPlayer) > driftSpeedBeforeTurn * ROLL_DRIFT_SPEED_RETENTION,
+    `roll drift keeps most of Mossu's momentum while turning sideways: before=${driftSpeedBeforeTurn.toFixed(2)} after=${planarSpeed(driftPlayer).toFixed(2)} retention=${ROLL_DRIFT_SPEED_RETENTION.toFixed(2)}`,
+  );
+  assert(Math.abs(driftPlayer.velocity.x) > 5, "sideways roll input visibly bends the velocity arc");
+
+  const reversePlayer = makePlayer();
+  const reverseRuntime = createPlayerSimulationRuntime();
+  const reverseScratch = createMovementScratch();
+  for (let i = 0; i < 42; i += 1) {
+    const dt = 1 / 60;
+    const rollInput = { ...baseInput, moveY: 1, rollHeld: true };
+    tickMovementTimers(reversePlayer, rollInput, dt, reverseRuntime);
+    applyMovementPhysics(reversePlayer, save, rollInput, 0, dt, reverseRuntime, reverseScratch);
+  }
+  const reverseSpeedBefore = planarSpeed(reversePlayer);
+  for (let i = 0; i < 12; i += 1) {
+    const dt = 1 / 60;
+    const reverseInput = { ...baseInput, moveY: -1, rollHeld: true };
+    tickMovementTimers(reversePlayer, reverseInput, dt, reverseRuntime);
+    applyMovementPhysics(reversePlayer, save, reverseInput, 0, dt, reverseRuntime, reverseScratch);
+  }
+  assert(
+    planarSpeed(reversePlayer) > reverseSpeedBefore * 0.55,
+    "reversing roll direction curves and sheds speed instead of stopping dead",
+  );
+
   const walkPlayer = makePlayer();
   const rollPlayer = makePlayer();
   const walkRuntime = createPlayerSimulationRuntime();
@@ -128,7 +204,10 @@ export function runMovementContracts() {
   assert(planarSpeed(rollPlayer) > WALK_SPEED + 4, "rolling is meaningfully faster than walking");
   assert(rollPlayer.rollingBoostActive, `roll boost activates after ${ROLL_BOOST_DELAY}s`);
   assert(rollPlayer.stamina === rollPlayer.staminaMax, "rolling does not consume stamina");
-  assert(planarSpeed(rollPlayer) <= ROLL_SPEED * ROLL_BOOST_MULTIPLIER + 12, "rolling stays bounded after boost and slope carry");
+  assert(
+    planarSpeed(rollPlayer) <= ROLL_SPEED * ROLL_BOOST_MULTIPLIER + 12,
+    "rolling stays bounded after boost and slope carry",
+  );
 
   const readyPlayer = makePlayer();
   const readyRuntime = createPlayerSimulationRuntime();
@@ -157,6 +236,10 @@ export function runMovementContracts() {
   tickMovementTimers(jumpPlayer, jumpInput, 1 / 60, jumpRuntime);
   applyMovementPhysics(jumpPlayer, save, jumpInput, 0, 1 / 60, jumpRuntime, jumpScratch);
   assert(!jumpPlayer.grounded, "roll jump leaves the ground");
+  assert(
+    jumpRuntime.airMomentumGraceRemaining === ROLL_AIR_MOMENTUM_GRACE_TIME,
+    "roll jump starts a generous air momentum grace",
+  );
   assert(planarSpeed(jumpPlayer) > speedBeforeJump + 2, "roll jump carries extra forward momentum");
   assert(planarSpeed(jumpPlayer) <= ROLL_SPEED + ROLL_AIR_SPEED_BONUS + 8, "roll jump momentum stays bounded");
 
@@ -178,7 +261,10 @@ export function runMovementContracts() {
   }
   assert(!floatPlayer.grounded, "roll jump can transition into air control");
   assert(floatPlayer.floating, "Breeze Float exposes an explicit player floating state while held in air");
-  assert(floatPlayer.stamina < floatPlayer.staminaMax, "Breeze Float, not rolling, consumes stamina while Space is held in air");
+  assert(
+    floatPlayer.stamina < floatPlayer.staminaMax,
+    "Breeze Float, not rolling, consumes stamina while Space is held in air",
+  );
 
   const dedicatedFloatPlayer = makePlayer();
   const dedicatedFloatRuntime = createPlayerSimulationRuntime();
@@ -193,11 +279,22 @@ export function runMovementContracts() {
       abilityPressed: i === 0,
     };
     tickMovementTimers(dedicatedFloatPlayer, abilityInput, dt, dedicatedFloatRuntime);
-    const result = applyMovementPhysics(dedicatedFloatPlayer, save, abilityInput, 0, dt, dedicatedFloatRuntime, dedicatedFloatScratch);
+    const result = applyMovementPhysics(
+      dedicatedFloatPlayer,
+      save,
+      abilityInput,
+      0,
+      dt,
+      dedicatedFloatRuntime,
+      dedicatedFloatScratch,
+    );
     updateStaminaAndAbilityState(dedicatedFloatPlayer, dt, dedicatedFloatRuntime, result.isFloating);
   }
   assert(dedicatedFloatPlayer.floating, "Q works as a dedicated Breeze Float hold without requiring Space");
-  assert(dedicatedFloatPlayer.stamina < dedicatedFloatPlayer.staminaMax, "dedicated Breeze Float input consumes stamina while active");
+  assert(
+    dedicatedFloatPlayer.stamina < dedicatedFloatPlayer.staminaMax,
+    "dedicated Breeze Float input consumes stamina while active",
+  );
 
   const bufferedFloatPlayer = makePlayer();
   const bufferedFloatRuntime = createPlayerSimulationRuntime();
@@ -205,10 +302,90 @@ export function runMovementContracts() {
   bufferedFloatPlayer.grounded = false;
   bufferedFloatPlayer.velocity.y = -1.2;
   tickMovementTimers(bufferedFloatPlayer, { ...baseInput, abilityPressed: true }, 1 / 60, bufferedFloatRuntime);
-  applyMovementPhysics(bufferedFloatPlayer, save, { ...baseInput, abilityPressed: true }, 0, 1 / 60, bufferedFloatRuntime, bufferedFloatScratch);
+  applyMovementPhysics(
+    bufferedFloatPlayer,
+    save,
+    { ...baseInput, abilityPressed: true },
+    0,
+    1 / 60,
+    bufferedFloatRuntime,
+    bufferedFloatScratch,
+  );
   tickMovementTimers(bufferedFloatPlayer, baseInput, 1 / 60, bufferedFloatRuntime);
-  const bufferedResult = applyMovementPhysics(bufferedFloatPlayer, save, baseInput, 0, 1 / 60, bufferedFloatRuntime, bufferedFloatScratch);
+  const bufferedResult = applyMovementPhysics(
+    bufferedFloatPlayer,
+    save,
+    baseInput,
+    0,
+    1 / 60,
+    bufferedFloatRuntime,
+    bufferedFloatScratch,
+  );
   assert(bufferedResult.isFloating, "a tapped Q buffers Breeze Float briefly after release");
+
+  const coyotePlayer = makePlayer();
+  const coyoteRuntime = createPlayerSimulationRuntime();
+  const coyoteScratch = createMovementScratch();
+  coyotePlayer.grounded = false;
+  coyoteRuntime.coyoteTimeRemaining = COYOTE_TIME;
+  const coyoteJumpInput = { ...baseInput, jumpPressed: true, jumpHeld: true };
+  tickMovementTimers(coyotePlayer, coyoteJumpInput, 1 / 60, coyoteRuntime);
+  applyMovementPhysics(coyotePlayer, save, coyoteJumpInput, 0, 1 / 60, coyoteRuntime, coyoteScratch);
+  assert(coyotePlayer.velocity.y > 10, "coyote time lets Mossu jump just after leaving a ledge");
+  assert(coyoteRuntime.airMomentumGraceRemaining === AIR_MOMENTUM_GRACE_TIME, "normal jump starts air momentum grace");
+
+  const bufferedJumpPlayer = makePlayer();
+  const bufferedJumpRuntime = createPlayerSimulationRuntime();
+  const bufferedJumpScratch = createMovementScratch();
+  bufferedJumpPlayer.grounded = false;
+  bufferedJumpRuntime.coyoteTimeRemaining = 0;
+  const earlyJumpInput = { ...baseInput, jumpPressed: true, jumpHeld: true };
+  tickMovementTimers(bufferedJumpPlayer, earlyJumpInput, 1 / 60, bufferedJumpRuntime);
+  applyMovementPhysics(bufferedJumpPlayer, save, earlyJumpInput, 0, 1 / 60, bufferedJumpRuntime, bufferedJumpScratch);
+  assert(bufferedJumpRuntime.jumpBufferRemaining > JUMP_BUFFER_TIME * 0.5, "early jump input stays buffered in air");
+  bufferedJumpPlayer.grounded = true;
+  tickMovementTimers(bufferedJumpPlayer, baseInput, 1 / 60, bufferedJumpRuntime);
+  applyMovementPhysics(bufferedJumpPlayer, save, baseInput, 0, 1 / 60, bufferedJumpRuntime, bufferedJumpScratch);
+  assert(bufferedJumpPlayer.velocity.y > 10, "buffered jump fires on the first grounded frame");
+
+  const landingPlayer = makePlayer();
+  const landingRuntime = createPlayerSimulationRuntime();
+  const landingScratch = createMovementScratch();
+  landingPlayer.position.set(0, 0, 0);
+  landingPlayer.grounded = false;
+  landingPlayer.velocity.set(24, -16, 0);
+  resolveWaterContact(landingPlayer, 0, null, false, 16, landingRuntime);
+  assert(landingPlayer.justLanded, "ground resolve marks a fresh landing");
+  assert(landingRuntime.landingMomentumGraceRemaining === LANDING_MOMENTUM_GRACE_TIME, "landing starts a short momentum grace");
+  const landingSpeedBeforeCarry = planarSpeed(landingPlayer);
+  tickMovementTimers(landingPlayer, baseInput, 1 / 60, landingRuntime);
+  applyMovementPhysics(landingPlayer, save, baseInput, 0, 1 / 60, landingRuntime, landingScratch);
+  assert(
+    planarSpeed(landingPlayer) > landingSpeedBeforeCarry - 0.8,
+    `landing carry preserves forward momentum for the first grounded beat: before=${landingSpeedBeforeCarry.toFixed(2)} after=${planarSpeed(landingPlayer).toFixed(2)}`,
+  );
+
+  const releasedRollJumpPlayer = makePlayer();
+  const releasedRollJumpRuntime = createPlayerSimulationRuntime();
+  const releasedRollJumpScratch = createMovementScratch();
+  for (let i = 0; i < 36; i += 1) {
+    const dt = 1 / 60;
+    const rollInput = { ...baseInput, moveY: 1, rollHeld: true };
+    tickMovementTimers(releasedRollJumpPlayer, rollInput, dt, releasedRollJumpRuntime);
+    applyMovementPhysics(releasedRollJumpPlayer, save, rollInput, 0, dt, releasedRollJumpRuntime, releasedRollJumpScratch);
+  }
+  const releasedPreJumpSpeed = planarSpeed(releasedRollJumpPlayer);
+  tickMovementTimers(releasedRollJumpPlayer, jumpInput, 1 / 60, releasedRollJumpRuntime);
+  applyMovementPhysics(releasedRollJumpPlayer, save, jumpInput, 0, 1 / 60, releasedRollJumpRuntime, releasedRollJumpScratch);
+  for (let i = 0; i < 42; i += 1) {
+    const dt = 1 / 60;
+    tickMovementTimers(releasedRollJumpPlayer, baseInput, dt, releasedRollJumpRuntime);
+    applyMovementPhysics(releasedRollJumpPlayer, save, baseInput, 0, dt, releasedRollJumpRuntime, releasedRollJumpScratch);
+  }
+  assert(
+    planarSpeed(releasedRollJumpPlayer) > releasedPreJumpSpeed * 0.68,
+    `released roll jumps keep enough forward speed to land with movement: before=${releasedPreJumpSpeed.toFixed(2)} after=${planarSpeed(releasedRollJumpPlayer).toFixed(2)}`,
+  );
 
   const flatNormal = new Vector3(0, 1, 0);
   const slopeNormal = new Vector3(0.28, 0.96, 0).normalize();
@@ -224,6 +401,24 @@ export function runMovementContracts() {
   assert(
     computeRollGravityStrength(steepNormal) >= computeRollGravityStrength(slopeNormal),
     `steeper slopes approach full roll gravity by ${ROLL_GRAVITY_FULL_SLOPE}`,
+  );
+  const downhillMove = downhill.clone();
+  const uphillMove = downhill.clone().multiplyScalar(-1);
+  assert(
+    computeRollSlopeInputSpeedAdjustment(slopeNormal, downhillMove) > 0,
+    "rolling with the downhill line gets a small speed bias",
+  );
+  assert(
+    computeRollSlopeInputSpeedAdjustment(slopeNormal, uphillMove) < 0,
+    "rolling against the hill gets a small speed penalty",
+  );
+  assert(
+    computeRollSlopeInputAccelerationMultiplier(computeRollSlopeAmount(slopeNormal), 1) > 1,
+    "downhill input slightly improves roll acceleration",
+  );
+  assert(
+    computeRollSlopeInputAccelerationMultiplier(computeRollSlopeAmount(slopeNormal), -1) < 1,
+    "uphill input slightly dampens roll acceleration",
   );
 
   const underwaterPlayer = makePlayer();
@@ -256,6 +451,9 @@ export function runMovementContracts() {
   enteringSwimPlayer.velocity.set(0, -7.5, 0);
   resolveWaterContact(enteringSwimPlayer, deepWater.surfaceY - deepWater.depth, deepWater, true, 7.5, entryRuntime);
   assert(enteringSwimPlayer.swimming, "deep water contact starts swimming");
-  assert(enteringSwimPlayer.position.y > deepWater.surfaceY - 1, "entering deep water lifts Mossu toward the swim surface");
+  assert(
+    enteringSwimPlayer.position.y > deepWater.surfaceY - 1,
+    "entering deep water lifts Mossu toward the swim surface",
+  );
   assert(enteringSwimPlayer.velocity.y > -6, "entering deep water softens downward velocity");
 }

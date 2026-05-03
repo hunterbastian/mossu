@@ -6,6 +6,9 @@ import { sampleTerrainNormalInto } from "./world";
 import {
   AIR_ACCELERATION,
   AIR_DECELERATION,
+  AIR_MOMENTUM_DECELERATION_MULTIPLIER,
+  AIR_MOMENTUM_GRACE_TIME,
+  AIR_MOMENTUM_SPEED_LIMIT_BONUS,
   AIR_SPEED,
   BREEZE_FLOAT_BUFFER_TIME,
   BREEZE_FLOAT_MAX_UPWARD_VELOCITY,
@@ -18,19 +21,33 @@ import {
   GROUND_TURN_ACCELERATION,
   JUMP_BUFFER_TIME,
   JUMP_VELOCITY,
+  LANDING_MOMENTUM_DECELERATION_MULTIPLIER,
   ROLL_BOOST_DELAY,
   ROLL_BOOST_MULTIPLIER,
   ROLL_ACCELERATION_MULTIPLIER,
   ROLL_AIR_SPEED_BONUS,
+  ROLL_AIR_MOMENTUM_GRACE_TIME,
   ROLL_COAST_DECELERATION,
+  ROLL_DOWNHILL_ACCELERATION_MULTIPLIER,
+  ROLL_DOWNHILL_INPUT_SPEED_BONUS,
+  ROLL_DRIFT_MAX_SPEED_LOSS,
+  ROLL_DRIFT_SPEED_RETENTION,
+  ROLL_DRIFT_STEERING,
   ROLL_GRAVITY_FULL_SLOPE,
   ROLL_GRAVITY_MIN_SLOPE,
+  ROLL_LANDING_SPEED_CARRY_BONUS,
   ROLL_JUMP_FORWARD_BONUS,
   ROLL_MODE_INDICATOR_DELAY,
+  ROLL_REVERSE_DRIFT_STEERING,
+  ROLL_REVERSE_DRIFT_MAX_SPEED_LOSS,
   ROLL_SLOPE_ACCELERATION,
   ROLL_SLOPE_SPEED_BONUS,
   ROLL_SPEED,
+  ROLL_START_IMPULSE,
   ROLL_TURN_ACCELERATION,
+  ROLL_UPHILL_ACCELERATION_MULTIPLIER,
+  ROLL_UPHILL_INPUT_SPEED_PENALTY,
+  LANDING_SPEED_CARRY_BONUS,
   STAMINA_ACTION_THRESHOLD,
   SWIM_ACCELERATION,
   SWIM_DECELERATION,
@@ -84,15 +101,18 @@ export function tickMovementTimers(
   dt: number,
   runtime: PlayerSimulationRuntime,
 ) {
-  runtime.jumpBufferRemaining = input.jumpPressed
-    ? JUMP_BUFFER_TIME
-    : Math.max(0, runtime.jumpBufferRemaining - dt);
-  runtime.breezeFloatBufferRemaining = input.abilityPressed || input.abilityHeld
-    ? BREEZE_FLOAT_BUFFER_TIME
-    : Math.max(0, runtime.breezeFloatBufferRemaining - dt);
-  runtime.coyoteTimeRemaining = player.grounded && !player.swimming
-    ? COYOTE_TIME
-    : Math.max(0, runtime.coyoteTimeRemaining - dt);
+  runtime.jumpBufferRemaining = input.jumpPressed ? JUMP_BUFFER_TIME : Math.max(0, runtime.jumpBufferRemaining - dt);
+  runtime.breezeFloatBufferRemaining =
+    input.abilityPressed || input.abilityHeld
+      ? BREEZE_FLOAT_BUFFER_TIME
+      : Math.max(0, runtime.breezeFloatBufferRemaining - dt);
+  runtime.coyoteTimeRemaining =
+    player.grounded && !player.swimming ? COYOTE_TIME : Math.max(0, runtime.coyoteTimeRemaining - dt);
+  runtime.airMomentumGraceRemaining = Math.max(0, runtime.airMomentumGraceRemaining - dt);
+  if (runtime.airMomentumGraceRemaining <= 0) {
+    runtime.airMomentumSpeedLimitBonus = 0;
+  }
+  runtime.landingMomentumGraceRemaining = Math.max(0, runtime.landingMomentumGraceRemaining - dt);
 }
 
 export function applyMovementPhysics(
@@ -150,14 +170,20 @@ export function applyMovementPhysics(
   runtime.rollModeHoldSeconds = player.rolling ? runtime.rollModeHoldSeconds + dt : 0;
   player.rollHoldSeconds = runtime.rollModeHoldSeconds;
   player.rollModeReady = player.rollHoldSeconds >= ROLL_MODE_INDICATOR_DELAY;
+  const justStartedRolling = player.rolling && player.grounded && runtime.rollModeHoldSeconds <= dt + 0.0001;
   const terrainSlope = computeRollSlopeAmount(scratch.groundNormal);
+  const hasDownhillVector = computeDownhillRollVector(scratch.groundNormal, scratch.slopeVector);
+  const rollSlopeInputAlignment =
+    player.rolling && scratch.worldMove.lengthSq() > 0.001 && hasDownhillVector
+      ? MathUtils.clamp(scratch.planarDirection.copy(scratch.worldMove).normalize().dot(scratch.slopeVector), -1, 1)
+      : 0;
   const rollingPlanarSpeed = Math.hypot(player.velocity.x, player.velocity.z);
   const rollGravityActive = player.rolling && player.grounded && terrainSlope > ROLL_GRAVITY_MIN_SLOPE;
   const sustainedRolling =
-    !player.swimming
-    && player.rolling
-    && player.grounded
-    && (scratch.worldMove.lengthSq() > 0.001 || rollGravityActive || rollingPlanarSpeed > 2);
+    !player.swimming &&
+    player.rolling &&
+    player.grounded &&
+    (scratch.worldMove.lengthSq() > 0.001 || rollGravityActive || rollingPlanarSpeed > 2);
   if (sustainedRolling) {
     runtime.rollingChargeSeconds += dt;
   } else {
@@ -165,73 +191,132 @@ export function applyMovementPhysics(
   }
   player.rollingBoostActive = runtime.rollingChargeSeconds >= ROLL_BOOST_DELAY;
 
-  const wadeAmount = player.waterMode === "wading"
-    ? MathUtils.clamp(player.waterDepth / Math.max(0.001, SWIM_MIN_DEPTH), 0, 1)
-    : 0;
+  const wadeAmount =
+    player.waterMode === "wading" ? MathUtils.clamp(player.waterDepth / Math.max(0.001, SWIM_MIN_DEPTH), 0, 1) : 0;
   const wadeSpeedMultiplier = MathUtils.lerp(1, WADE_SPEED_MIN_MULTIPLIER, wadeAmount);
-  const groundSpeed = (player.rolling
-    ? ROLL_SPEED * (player.rollingBoostActive ? ROLL_BOOST_MULTIPLIER : 1)
-    : WALK_SPEED) * wadeSpeedMultiplier;
-  const rollSpeedLimit = player.rolling
-    ? groundSpeed + terrainSlope * ROLL_SLOPE_SPEED_BONUS
-    : groundSpeed;
+  const rollSlopeInputSpeed = computeRollSlopeInputSpeedAdjustment(
+    scratch.groundNormal,
+    scratch.worldMove,
+    scratch.planarDirection,
+  );
+  const landingCarryActive = player.grounded && runtime.landingMomentumGraceRemaining > 0;
+  const airMomentumCarryActive = !player.grounded && !player.swimming && runtime.airMomentumGraceRemaining > 0;
+  const landingSpeedCarryBonus = landingCarryActive
+    ? player.rolling
+      ? ROLL_LANDING_SPEED_CARRY_BONUS
+      : LANDING_SPEED_CARRY_BONUS
+    : 0;
+  const groundSpeed =
+    (player.rolling
+      ? Math.max(ROLL_SPEED * 0.72, ROLL_SPEED * (player.rollingBoostActive ? ROLL_BOOST_MULTIPLIER : 1) + rollSlopeInputSpeed)
+      : WALK_SPEED) *
+    wadeSpeedMultiplier;
+  const passiveSlopeLimitBonus =
+    terrainSlope * ROLL_SLOPE_SPEED_BONUS * (rollSlopeInputAlignment < -0.1 ? 0.55 : 1);
+  const rollSpeedLimit = player.rolling ? groundSpeed + passiveSlopeLimitBonus + landingSpeedCarryBonus : groundSpeed + landingSpeedCarryBonus;
   const airSpeedLimit = player.rolling ? AIR_SPEED + ROLL_AIR_SPEED_BONUS : AIR_SPEED;
+  const airborneMomentumSpeedBonus = airMomentumCarryActive ? runtime.airMomentumSpeedLimitBonus : 0;
   const swimSpeed = player.waterMode === "underwater" ? SWIM_UNDERWATER_SPEED : SWIM_SPEED;
 
   scratch.planarVelocity.set(player.velocity.x, 0, player.velocity.z);
   scratch.desiredPlanarVelocity
     .copy(scratch.worldMove)
     .multiplyScalar(player.swimming ? swimSpeed : player.grounded ? groundSpeed : AIR_SPEED);
+  if (
+    airMomentumCarryActive &&
+    !hasRawInput &&
+    scratch.desiredPlanarVelocity.lengthSq() > 0.0001 &&
+    scratch.planarVelocity.lengthSq() > scratch.desiredPlanarVelocity.lengthSq()
+  ) {
+    scratch.desiredPlanarVelocity.setLength(scratch.planarVelocity.length());
+  }
 
   const hasMoveInput = scratch.worldMove.lengthSq() > 0.001;
   let alignment = 1;
   if (hasMoveInput && scratch.planarVelocity.lengthSq() > 0.001) {
     const desiredDirection = scratch.cameraForward.copy(scratch.worldMove).normalize();
-    alignment = scratch.planarDirection
-      .copy(scratch.planarVelocity)
-      .normalize()
-      .dot(desiredDirection);
+    alignment = scratch.planarDirection.copy(scratch.planarVelocity).normalize().dot(desiredDirection);
+  }
+  const rollDriftMinimumSpeed =
+    player.rolling && player.grounded && hasMoveInput && rollingPlanarSpeed > 2
+      ? Math.min(
+          rollSpeedLimit,
+          rollingPlanarSpeed - (alignment < -0.15 ? ROLL_REVERSE_DRIFT_MAX_SPEED_LOSS : ROLL_DRIFT_MAX_SPEED_LOSS) * dt,
+        )
+      : 0;
+
+  if (player.rolling && player.grounded && hasMoveInput && scratch.planarVelocity.lengthSq() > 0.25) {
+    const currentSpeed = scratch.planarVelocity.length();
+    const targetSpeed = Math.max(scratch.desiredPlanarVelocity.length(), currentSpeed * ROLL_DRIFT_SPEED_RETENTION);
+    const driftSteering = alignment < -0.15 ? ROLL_REVERSE_DRIFT_STEERING : ROLL_DRIFT_STEERING;
+    scratch.planarDirection.copy(scratch.planarVelocity).normalize();
+    scratch.cameraForward.copy(scratch.worldMove).normalize();
+    scratch.planarDirection.lerp(scratch.cameraForward, driftSteering).normalize();
+    scratch.desiredPlanarVelocity.copy(scratch.planarDirection).multiplyScalar(targetSpeed);
   }
 
   const acceleration = player.swimming
     ? SWIM_ACCELERATION
     : player.grounded
       ? player.rolling
-        ? (alignment < 0 ? ROLL_TURN_ACCELERATION : GROUND_ACCELERATION * ROLL_ACCELERATION_MULTIPLIER) * MathUtils.lerp(1, WADE_ACCELERATION_MULTIPLIER, wadeAmount)
-        : (alignment < 0 ? GROUND_TURN_ACCELERATION : GROUND_ACCELERATION) * MathUtils.lerp(1, WADE_ACCELERATION_MULTIPLIER, wadeAmount)
+        ? (alignment < 0.35 ? ROLL_TURN_ACCELERATION : GROUND_ACCELERATION * ROLL_ACCELERATION_MULTIPLIER) *
+          computeRollSlopeInputAccelerationMultiplier(terrainSlope, rollSlopeInputAlignment) *
+          MathUtils.lerp(1, WADE_ACCELERATION_MULTIPLIER, wadeAmount)
+        : (alignment < 0 ? GROUND_TURN_ACCELERATION : GROUND_ACCELERATION) *
+          MathUtils.lerp(1, WADE_ACCELERATION_MULTIPLIER, wadeAmount)
       : AIR_ACCELERATION;
   const deceleration = player.swimming
     ? SWIM_DECELERATION
     : player.grounded
-      ? player.rolling ? ROLL_COAST_DECELERATION : GROUND_DECELERATION
-      : AIR_DECELERATION;
+      ? player.rolling
+        ? ROLL_COAST_DECELERATION
+        : GROUND_DECELERATION
+      : applyAirMomentumDeceleration(AIR_DECELERATION, airMomentumCarryActive);
 
   scratch.planarVelocity.x = moveTowards(
     scratch.planarVelocity.x,
     hasMoveInput ? scratch.desiredPlanarVelocity.x : 0,
-    (hasMoveInput ? acceleration : deceleration) * dt,
+    (hasMoveInput ? acceleration : applyLandingMomentumDeceleration(deceleration, landingCarryActive)) * dt,
   );
   scratch.planarVelocity.z = moveTowards(
     scratch.planarVelocity.z,
     hasMoveInput ? scratch.desiredPlanarVelocity.z : 0,
-    (hasMoveInput ? acceleration : deceleration) * dt,
+    (hasMoveInput ? acceleration : applyLandingMomentumDeceleration(deceleration, landingCarryActive)) * dt,
   );
 
-  if (rollGravityActive && computeDownhillRollVector(scratch.groundNormal, scratch.slopeVector)) {
-    scratch.planarVelocity.addScaledVector(
-      scratch.slopeVector,
-      computeRollGravityStrength(scratch.groundNormal) * dt,
-    );
+  if (justStartedRolling && hasMoveInput) {
+    scratch.planarDirection.copy(scratch.worldMove).normalize();
+    const impulseScale = 1 - MathUtils.clamp(scratch.planarVelocity.length() / Math.max(0.001, ROLL_SPEED), 0, 1);
+    scratch.planarVelocity.addScaledVector(scratch.planarDirection, ROLL_START_IMPULSE * impulseScale);
+  }
+
+  if (rollGravityActive && hasDownhillVector) {
+    scratch.planarVelocity.addScaledVector(scratch.slopeVector, computeRollGravityStrength(scratch.groundNormal) * dt);
+  }
+
+  if (
+    rollDriftMinimumSpeed > 0 &&
+    scratch.planarVelocity.lengthSq() > 0.0001 &&
+    scratch.planarVelocity.length() < rollDriftMinimumSpeed
+  ) {
+    scratch.planarVelocity.setLength(rollDriftMinimumSpeed);
   }
 
   if (player.grounded && !player.swimming && scratch.planarVelocity.lengthSq() > 0.0001) {
-    scratch.planarVelocity.projectOnPlane(scratch.groundNormal).setLength(
-      Math.min(scratch.planarVelocity.length(), rollSpeedLimit),
-    );
+    const speedBeforeGroundProjection = scratch.planarVelocity.length();
+    scratch.planarVelocity.projectOnPlane(scratch.groundNormal).setY(0);
+    if (scratch.planarVelocity.lengthSq() > 0.0001) {
+      const projectionRetention = landingCarryActive ? 1 : player.rolling ? 0.86 : 0;
+      const retainedProjectionSpeed = speedBeforeGroundProjection * projectionRetention;
+      const projectedSpeed = Math.max(scratch.planarVelocity.length(), retainedProjectionSpeed);
+      scratch.planarVelocity.setLength(Math.min(projectedSpeed, rollSpeedLimit));
+    }
   } else if (player.swimming && scratch.planarVelocity.lengthSq() > 0.0001) {
     scratch.planarVelocity.setLength(Math.min(scratch.planarVelocity.length(), swimSpeed + 2));
   } else if (scratch.planarVelocity.lengthSq() > 0.0001) {
-    scratch.planarVelocity.setLength(Math.min(scratch.planarVelocity.length(), airSpeedLimit + 2.5));
+    scratch.planarVelocity.setLength(
+      Math.min(scratch.planarVelocity.length(), airSpeedLimit + airborneMomentumSpeedBonus + 2.5),
+    );
   }
 
   player.velocity.x = scratch.planarVelocity.x;
@@ -246,6 +331,8 @@ export function applyMovementPhysics(
     }
     player.velocity.y = JUMP_VELOCITY;
     player.grounded = false;
+    runtime.airMomentumGraceRemaining = player.rolling ? ROLL_AIR_MOMENTUM_GRACE_TIME : AIR_MOMENTUM_GRACE_TIME;
+    runtime.airMomentumSpeedLimitBonus = player.rolling ? ROLL_AIR_SPEED_BONUS : AIR_MOMENTUM_SPEED_LIMIT_BONUS;
     runtime.coyoteTimeRemaining = 0;
     runtime.jumpBufferRemaining = 0;
   }
@@ -286,6 +373,14 @@ function moveTowards(current: number, target: number, maxDelta: number) {
   return current + Math.sign(target - current) * maxDelta;
 }
 
+function applyLandingMomentumDeceleration(deceleration: number, landingCarryActive: boolean) {
+  return landingCarryActive ? deceleration * LANDING_MOMENTUM_DECELERATION_MULTIPLIER : deceleration;
+}
+
+function applyAirMomentumDeceleration(deceleration: number, airMomentumCarryActive: boolean) {
+  return airMomentumCarryActive ? deceleration * AIR_MOMENTUM_DECELERATION_MULTIPLIER : deceleration;
+}
+
 export function computeRollGravityStrength(groundNormal: Vector3) {
   const slope = computeRollSlopeAmount(groundNormal);
   return ROLL_SLOPE_ACCELERATION * MathUtils.smoothstep(slope, ROLL_GRAVITY_MIN_SLOPE, ROLL_GRAVITY_FULL_SLOPE);
@@ -293,6 +388,28 @@ export function computeRollGravityStrength(groundNormal: Vector3) {
 
 export function computeRollSlopeAmount(groundNormal: Vector3) {
   return MathUtils.clamp(Math.hypot(groundNormal.x, groundNormal.z), 0, 1);
+}
+
+export function computeRollSlopeInputSpeedAdjustment(
+  groundNormal: Vector3,
+  moveDirection: Vector3,
+  target = new Vector3(),
+) {
+  if (moveDirection.lengthSq() <= 0.0001 || !computeDownhillRollVector(groundNormal, target)) {
+    return 0;
+  }
+
+  const slope = computeRollSlopeAmount(groundNormal);
+  const alignment = MathUtils.clamp(target.dot(moveDirection) / moveDirection.length(), -1, 1);
+  return slope * (alignment >= 0 ? ROLL_DOWNHILL_INPUT_SPEED_BONUS * alignment : ROLL_UPHILL_INPUT_SPEED_PENALTY * alignment);
+}
+
+export function computeRollSlopeInputAccelerationMultiplier(slope: number, downhillAlignment: number) {
+  if (downhillAlignment >= 0) {
+    return MathUtils.lerp(1, ROLL_DOWNHILL_ACCELERATION_MULTIPLIER, MathUtils.clamp(slope * downhillAlignment, 0, 1));
+  }
+
+  return MathUtils.lerp(1, ROLL_UPHILL_ACCELERATION_MULTIPLIER, MathUtils.clamp(slope * -downhillAlignment, 0, 1));
 }
 
 export function computeDownhillRollVector(groundNormal: Vector3, target = new Vector3()) {

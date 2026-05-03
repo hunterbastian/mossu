@@ -4,6 +4,7 @@ import type { PlayerSimulationRuntime } from "./playerSimulationRuntime";
 import type { WaterState } from "./world";
 import {
   COYOTE_TIME,
+  LANDING_MOMENTUM_GRACE_TIME,
   PLAYER_RADIUS,
   SWIM_BUOYANCY,
   SWIM_CURRENT_SCALE,
@@ -117,8 +118,10 @@ export function resolveWaterContact(
     player.grounded = true;
     runtime.coyoteTimeRemaining = COYOTE_TIME;
     if (!wasGrounded) {
+      const planarLandingSpeed = Math.hypot(player.velocity.x, player.velocity.z);
       player.justLanded = true;
-      player.landingImpact = MathUtils.clamp(downwardSpeedBeforeResolve / 26, 0.2, 1.35);
+      player.landingImpact = MathUtils.clamp(downwardSpeedBeforeResolve / 22 + planarLandingSpeed / 90, 0.26, 1.45);
+      runtime.landingMomentumGraceRemaining = LANDING_MOMENTUM_GRACE_TIME;
     }
   } else {
     player.grounded = false;

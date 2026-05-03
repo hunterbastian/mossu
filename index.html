@@ -508,6 +508,8 @@
       @media (prefers-reduced-motion: reduce) {
         .instant-title__water,
         .instant-title__karu,
+        .instant-title__slime,
+        .instant-title__cell-ring,
         .instant-title__spore-bar::before,
         .instant-title__spore-bar::after,
         .instant-title__spore-fill::before,
@@ -1111,6 +1113,320 @@
         }
       }
 
+      /* Creature-cell first paint: glossy gel pods before the bundled CSS takes over. */
+      .instant-title {
+        color: #07363f;
+        background:
+          radial-gradient(circle at 16% 20%, rgba(255, 233, 118, 0.78), transparent 15rem),
+          radial-gradient(circle at 82% 18%, rgba(255, 143, 173, 0.48), transparent 17rem),
+          radial-gradient(circle at 22% 86%, rgba(143, 242, 120, 0.5), transparent 20rem),
+          radial-gradient(circle at 78% 72%, rgba(34, 200, 216, 0.44), transparent 22rem),
+          linear-gradient(180deg, #85e8f2 0%, #8de1c5 43%, #caeb78 100%);
+      }
+
+      .instant-title::before {
+        inset: auto 3vw 0;
+        width: auto;
+        height: 33vh;
+        transform: none;
+        border-radius: 54% 54% 0 0;
+        background:
+          radial-gradient(ellipse at 24% 45%, rgba(143, 242, 120, 0.54) 0 23%, transparent 24%),
+          radial-gradient(ellipse at 74% 52%, rgba(34, 200, 216, 0.34) 0 26%, transparent 27%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0) 0 30%, rgba(86, 201, 122, 0.58) 31% 68%, rgba(33, 158, 142, 0.62) 69% 100%);
+        filter: none;
+        opacity: 1;
+      }
+
+      .instant-title::after {
+        background:
+          radial-gradient(circle at 18% 70%, rgba(255, 255, 255, 0.4) 0 0.42rem, transparent 0.48rem),
+          radial-gradient(circle at 80% 30%, rgba(255, 255, 255, 0.34) 0 0.36rem, transparent 0.42rem),
+          repeating-linear-gradient(160deg, rgba(255, 255, 255, 0.16) 0 1px, transparent 1px 10px);
+        mix-blend-mode: screen;
+        opacity: 0.5;
+      }
+
+      .instant-title > div {
+        width: min(42rem, calc(100vw - 2rem));
+        padding: 0.82rem;
+        border: 0.14rem solid rgba(255, 255, 255, 0.82);
+        border-radius: 2rem;
+        background:
+          radial-gradient(circle at 22% 12%, rgba(255, 255, 255, 0.88), transparent 8rem),
+          radial-gradient(circle at 83% 22%, rgba(255, 143, 173, 0.22), transparent 10rem),
+          linear-gradient(180deg, rgba(239, 255, 244, 0.9), rgba(126, 232, 220, 0.72));
+        box-shadow:
+          inset 0 0.12rem 0 rgba(255, 255, 255, 0.92),
+          inset 0 -0.5rem 1rem rgba(8, 117, 120, 0.14),
+          0 1.1rem 2.8rem rgba(8, 82, 89, 0.26);
+      }
+
+      .instant-title > div::after {
+        inset: 0.56rem;
+        border: 1px solid rgba(255, 255, 255, 0.68);
+        border-radius: 1.56rem;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 42%);
+        opacity: 1;
+      }
+
+      .instant-title__header,
+      .instant-title__ledger {
+        color: #064b56;
+        font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+        text-shadow: none;
+      }
+
+      .instant-title__header {
+        border-radius: 999px;
+        background:
+          radial-gradient(circle at 16% 50%, rgba(255, 255, 255, 0.76) 0 0.22rem, transparent 0.24rem),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.22)),
+          rgba(34, 200, 216, 0.24);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.82),
+          0 0.32rem 0.7rem rgba(8, 91, 104, 0.12);
+      }
+
+      .instant-title__header span:nth-child(2) {
+        color: #073f49;
+        background:
+          radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.94), transparent 36%),
+          linear-gradient(150deg, #ffe976, #ff8fad);
+      }
+
+      .instant-title__scene {
+        border-color: rgba(255, 255, 255, 0.78);
+        border-radius: 1.45rem;
+        background:
+          radial-gradient(circle at 18% 17%, #fff18c 0 7%, transparent 8%),
+          radial-gradient(circle at 79% 18%, rgba(255, 143, 173, 0.5) 0 9%, transparent 10%),
+          linear-gradient(180deg, #72dce8 0 36%, #9af4ce 37% 58%, #53c3c0 59% 71%, #d3ec75 72% 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.82),
+          inset 0 -0.55rem 1.05rem rgba(8, 101, 112, 0.16);
+      }
+
+      .instant-title__scene::before {
+        background:
+          radial-gradient(circle at 22% 62%, rgba(255, 255, 255, 0.34) 0 0.28rem, transparent 0.32rem),
+          radial-gradient(circle at 62% 38%, rgba(255, 255, 255, 0.24) 0 0.2rem, transparent 0.24rem);
+        opacity: 0.7;
+      }
+
+      .instant-title__scene::after {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent 28%),
+          linear-gradient(90deg, rgba(7, 79, 92, 0.1), transparent 16% 84%, rgba(7, 79, 92, 0.1));
+      }
+
+      .instant-title__mountain {
+        background:
+          linear-gradient(135deg, transparent 0 48%, rgba(255, 255, 255, 0.3) 49% 63%, transparent 64%),
+          linear-gradient(180deg, #c5ed7a, #75bf6e 62%, #3da88d);
+      }
+
+      .instant-title__plateau {
+        background: linear-gradient(180deg, rgba(255, 235, 118, 0.7), rgba(92, 199, 112, 0.88));
+      }
+
+      .instant-title__water {
+        background:
+          repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.3) 0 2px, transparent 2px 0.72rem),
+          linear-gradient(90deg, #25a9c5, #83eee0 46%, #1c9bc2);
+        box-shadow:
+          inset 0 0.18rem 0 rgba(255, 255, 255, 0.42),
+          inset 0 -0.34rem 0 rgba(8, 98, 113, 0.18);
+      }
+
+      .instant-title__route {
+        background:
+          repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0 0.2rem, transparent 0.2rem 0.76rem),
+          linear-gradient(180deg, rgba(255, 233, 118, 0.96), rgba(255, 143, 173, 0.62));
+      }
+
+      .instant-title__trees {
+        background:
+          linear-gradient(135deg, transparent 0 26%, #248a63 27% 42%, transparent 43%),
+          linear-gradient(45deg, transparent 0 58%, #3da756 59% 72%, transparent 73%),
+          linear-gradient(180deg, transparent 0 58%, rgba(28, 142, 95, 0.84) 59% 100%);
+      }
+
+      .instant-title__pin {
+        border-color: rgba(255, 255, 255, 0.74);
+        background: #ffe976;
+      }
+
+      .instant-title__pin::after {
+        background: #ff8fad;
+      }
+
+      .instant-title__karu,
+      .instant-title__slime {
+        border-color: rgba(255, 255, 255, 0.68);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.72),
+          0 0.18rem 0.42rem rgba(8, 86, 96, 0.16);
+      }
+
+      .instant-title__karu {
+        background:
+          radial-gradient(circle at 34% 42%, #073f49 0 0.08rem, transparent 0.09rem),
+          radial-gradient(circle at 64% 41%, #073f49 0 0.08rem, transparent 0.09rem),
+          linear-gradient(180deg, #fff7ce, #ffe976);
+      }
+
+      .instant-title__slime {
+        width: 1.28rem;
+        aspect-ratio: 1.12;
+        border: 1px solid rgba(255, 255, 255, 0.68);
+        border-radius: 55% 45% 52% 48%;
+        background:
+          radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.92), transparent 34%),
+          linear-gradient(150deg, #ff8fad, #ffe976);
+        animation: instant-title-slime-bob 2.2s ease-in-out infinite;
+      }
+
+      .instant-title__slime--pink {
+        left: 23%;
+        bottom: 23%;
+      }
+
+      .instant-title__slime--mint {
+        right: 20%;
+        bottom: 25%;
+        width: 1.05rem;
+        background:
+          radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.92), transparent 34%),
+          linear-gradient(150deg, #8ff278, #22c8d8);
+        animation-delay: -0.72s;
+      }
+
+      .instant-title__cell-ring {
+        right: 31%;
+        top: 17%;
+        width: 3.2rem;
+        aspect-ratio: 1;
+        border: 0.12rem solid rgba(255, 255, 255, 0.58);
+        border-radius: 46% 54% 50% 50%;
+        box-shadow: inset 0 0 0.8rem rgba(255, 255, 255, 0.16);
+        animation: instant-title-cell-spin 7s linear infinite;
+      }
+
+      .instant-title strong {
+        color: #ffe976;
+        font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+        font-size: clamp(3.5rem, 11vw, 5.8rem);
+        font-weight: 950;
+        -webkit-text-stroke: clamp(0.06rem, 0.22vw, 0.12rem) rgba(7, 81, 96, 0.86);
+        text-shadow:
+          0 0.045em 0 rgba(255, 255, 255, 0.94),
+          0 0.105em 0 rgba(255, 143, 173, 0.72),
+          0 0.17em 0 rgba(8, 91, 104, 0.34);
+      }
+
+      .instant-title__mark span,
+      .instant-title__mark span:nth-child(3) {
+        border-color: rgba(255, 255, 255, 0.74);
+        background:
+          radial-gradient(circle at 33% 26%, rgba(255, 255, 255, 0.92), transparent 38%),
+          linear-gradient(150deg, #8ff278, #22c8d8);
+      }
+
+      .instant-title__mark span:nth-child(2) {
+        background:
+          radial-gradient(circle at 33% 26%, rgba(255, 255, 255, 0.92), transparent 38%),
+          linear-gradient(150deg, #ffe976, #ff8fad);
+      }
+
+      .instant-title [data-loading-status] {
+        color: #064b56;
+        font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+        text-shadow: none;
+      }
+
+      .instant-title__spore-bar {
+        border-color: rgba(255, 255, 255, 0.74);
+        border-radius: 999px;
+        background:
+          radial-gradient(circle at 14% 48%, rgba(255, 255, 255, 0.5) 0 0.18rem, transparent 0.2rem),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(7, 81, 96, 0.18));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.82),
+          0 0.32rem 0.7rem rgba(8, 91, 104, 0.12);
+      }
+
+      .instant-title__spore-bar::before,
+      .instant-title__spore-bar::after,
+      .instant-title__spore-fill span {
+        background:
+          radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.96), transparent 44%),
+          linear-gradient(150deg, #ffe976, #8ff278);
+      }
+
+      .instant-title__spore-fill {
+        border-radius: 999px 58% 58% 999px;
+        background:
+          radial-gradient(circle at 92% 50%, rgba(255, 255, 255, 0.9) 0 0.28rem, transparent 0.3rem),
+          repeating-radial-gradient(circle at 24% 48%, rgba(255, 255, 255, 0.44) 0 0.06rem, transparent 0.07rem 0.42rem),
+          linear-gradient(90deg, #22c8d8, #8ff278 58%, #ffe976);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.78),
+          inset 0 -0.16rem 0.18rem rgba(8, 91, 104, 0.22),
+          0 0 0.75rem rgba(143, 242, 120, 0.46);
+      }
+
+      .instant-title__spore-fill::before {
+        background:
+          radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.16) 38%, transparent 52%),
+          linear-gradient(150deg, #ffe976, #ff8fad);
+      }
+
+      .instant-title__ledger span {
+        border-color: rgba(255, 255, 255, 0.62);
+        border-radius: 999px;
+        background:
+          radial-gradient(circle at 16% 50%, rgba(255, 255, 255, 0.58) 0 0.16rem, transparent 0.18rem),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.18));
+        color: #064b56;
+      }
+
+      @keyframes instant-title-slime-bob {
+        0%,
+        100% {
+          transform: translateY(0) scale(1);
+        }
+        50% {
+          transform: translateY(-0.18rem) scale(1.05, 0.98);
+        }
+      }
+
+      @keyframes instant-title-cell-spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (max-width: 640px) {
+        .instant-title > div {
+          width: min(32rem, calc(100vw - 1rem));
+          padding: 0.62rem;
+          border-radius: 1.4rem;
+        }
+
+        .instant-title__scene {
+          aspect-ratio: 1.5;
+          border-radius: 1.1rem;
+        }
+
+        .instant-title strong {
+          font-size: clamp(3.05rem, 17vw, 4rem);
+        }
+      }
+
     </style>
   </head>
   <body>
@@ -1118,9 +1434,9 @@
       <div class="instant-title" aria-label="Mossu loading screen">
         <div>
           <div class="instant-title__header" aria-hidden="true">
-            <span>Habitat atlas</span>
-            <span>III</span>
-            <span>Creature route</span>
+            <span>Ranch cell atlas</span>
+            <span>gel</span>
+            <span>Mossu route</span>
           </div>
           <div class="instant-title__scene" aria-hidden="true">
             <span class="instant-title__mountain instant-title__mountain--left"></span>
@@ -1132,6 +1448,9 @@
             <span class="instant-title__pin instant-title__pin--burrow"></span>
             <span class="instant-title__pin instant-title__pin--crown"></span>
             <span class="instant-title__karu"></span>
+            <span class="instant-title__slime instant-title__slime--pink"></span>
+            <span class="instant-title__slime instant-title__slime--mint"></span>
+            <span class="instant-title__cell-ring"></span>
           </div>
           <div class="instant-title__title-row">
             <div class="instant-title__mark" aria-hidden="true">
@@ -1146,7 +1465,7 @@
               <span></span>
             </div>
           </div>
-          <p data-loading-status="" aria-live="polite">Charting the habitat route</p>
+          <p data-loading-status="" aria-live="polite">Growing the habitat gel</p>
           <div class="instant-title__spore-bar" aria-hidden="true">
             <span class="instant-title__spore-fill">
               <span></span>
@@ -1155,9 +1474,9 @@
             </span>
           </div>
           <div class="instant-title__ledger" aria-hidden="true">
-            <span>Burrow Hollow ready</span>
-            <span>Moss Crown plotted</span>
-            <span>Karu signal warm</span>
+            <span>Burrow corral warm</span>
+            <span>Moss Crown gene ping</span>
+            <span>Karu jelly signal</span>
           </div>
         </div>
       </div>

@@ -1,3 +1,5 @@
+import { createQualitySettingsMarkup } from "./appQualitySettings";
+
 export function createTitleScreen(onStart: () => void) {
   const titleScreen = document.createElement("div");
   titleScreen.className = "title-screen";
@@ -15,6 +17,18 @@ export function createTitleScreen(onStart: () => void) {
       <span></span>
       <span></span>
     </div>
+    <div class="title-screen__gene-rings" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <div class="title-screen__slime-field" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
     <div class="title-screen__menu">
       <span class="title-screen__glint title-screen__glint--one"></span>
       <span class="title-screen__glint title-screen__glint--two"></span>
@@ -23,7 +37,13 @@ export function createTitleScreen(onStart: () => void) {
         <span></span>
         <span></span>
       </div>
+      <div class="title-screen__pod-window" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
       <h1 class="title-screen__logo">Mossu</h1>
+      <p class="title-screen__splash">Burrow Hollow creature cell</p>
       <div class="title-screen__actions">
         <button class="title-screen__button title-screen__button--play" type="button" aria-label="Begin Mossu">
           <span class="title-screen__button-icon" aria-hidden="true"></span>
@@ -39,24 +59,7 @@ export function createTitleScreen(onStart: () => void) {
           <p>Settings</p>
           <button class="title-screen__settings-back" type="button" aria-label="Return to main menu">Back</button>
         </div>
-        <div class="title-screen__settings-grid">
-          <div class="title-screen__setting-row">
-            <span><em>Camera</em><small>Cinematic shoulder drift</small></span>
-            <strong>Cinematic</strong>
-          </div>
-          <div class="title-screen__setting-row">
-            <span><em>HUD</em><small>Softens during scenic beats</small></span>
-            <strong>Soft</strong>
-          </div>
-          <div class="title-screen__setting-row">
-            <span><em>Performance</em><small>Adaptive render guard</small></span>
-            <strong>60fps</strong>
-          </div>
-          <div class="title-screen__setting-row">
-            <span><em>Audio</em><small>Ambient meadow mix</small></span>
-            <strong>Ambient</strong>
-          </div>
-        </div>
+        ${createQualitySettingsMarkup("title")}
       </section>
     </div>
   `;

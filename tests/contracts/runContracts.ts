@@ -2,6 +2,7 @@ import { runCameraContracts } from "./cameraContracts";
 import { runControlContracts } from "./controlContracts";
 import { runHabitatContracts } from "./habitatContracts";
 import { runIslandRegionContracts } from "./islandRegionContracts";
+import { runLightingContracts } from "./lightingContracts";
 import { runMovementContracts } from "./movementContracts";
 import { runRenderQualityContracts } from "./renderQualityContracts";
 import { runRouteContracts } from "./routeContracts";
@@ -15,6 +16,7 @@ runContracts({
   controls: runControlContracts,
   habitats: runHabitatContracts,
   "island-regions": runIslandRegionContracts,
+  lighting: runLightingContracts,
   movement: runMovementContracts,
   "render-quality": runRenderQualityContracts,
   visuals: runVisualContracts,

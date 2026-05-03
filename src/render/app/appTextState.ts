@@ -9,6 +9,7 @@ import type { FollowCamera } from "./FollowCamera";
 import { LOCAL_SAVE_STORAGE_KEY, LOCAL_SAVE_VERSION } from "./localSave";
 import type { MovementAudioState } from "./MovementAudio";
 import type { MossuPerformanceSnapshot } from "./appPerformance";
+import type { QualitySettings } from "./appQualitySettings";
 
 type CameraDebugState = ReturnType<FollowCamera["getDebugState"]>;
 
@@ -26,6 +27,7 @@ type SharedTextStateInput = {
   characterScreenOpen: boolean;
   coopStressSnapshot: CoopStressSnapshot | null;
   camera: CameraDebugState;
+  qualitySettings: QualitySettings;
 };
 
 type FullTextStateInput = SharedTextStateInput & {
@@ -84,6 +86,7 @@ export function serializeE2eGameTextState({
   characterScreenOpen,
   coopStressSnapshot,
   camera,
+  qualitySettings,
 }: SharedTextStateInput) {
   return JSON.stringify({
     e2e: true,
@@ -108,6 +111,7 @@ export function serializeE2eGameTextState({
       unlockedAbilities: [...frame.save.unlockedAbilities],
     },
     camera,
+    qualitySettings,
     zone: frame.currentZone,
     landmark: frame.currentLandmark,
   });
@@ -132,6 +136,7 @@ export function serializeGameTextState({
   waterDepthDebugEnabled,
   underwaterIntensity,
   qa,
+  qualitySettings,
 }: FullTextStateInput) {
   const focusedCollection = characterData.collections.find(
     (entry) => entry.landmarkId === (characterData.latestCollectionId ?? focusedCollectionId),
@@ -233,6 +238,7 @@ export function serializeGameTextState({
       waterAmbience: waterAudio,
     },
     camera,
+    qualitySettings,
     performance,
     waterDebug: {
       depthView: waterDepthDebugEnabled,

@@ -2,22 +2,18 @@ import {
   AdditiveBlending,
   BackSide,
   Camera,
-  CircleGeometry,
   Color,
   DirectionalLight,
-  DoubleSide,
   Group,
   MathUtils,
   Mesh,
   MeshBasicMaterial,
-  PlaneGeometry,
-  RingGeometry,
   ShaderMaterial,
   SphereGeometry,
   Vector3,
 } from "three";
 import { scenicPockets } from "../../simulation/world";
-import { getAtmosphereHorizonTints } from "./sceneLighting";
+import { getAtmosphereHorizonTints, type WorldLightingMoodState } from "./sceneLighting";
 
 const _sunDirScratch = new Vector3();
 const _sunDirViewScratch = new Vector3();
@@ -25,58 +21,13 @@ const _horizonTintScratch = new Color();
 const _horizonHazeScratch = new Color();
 const _cloudBrightScratch = new Color();
 const _cloudShadowScratch = new Color();
-const _skySunPositionScratch = new Vector3();
+const SKY_DOME_RENDER_ORDER = -100;
 const SKY_SUN_RENDER_ORDER = 20;
 
 interface StylizedSkySunRefs {
-  outerGlow: Mesh;
-  warmHalo: Mesh;
-  softCorona: Mesh;
-  amberRing: Mesh;
+  body: Mesh;
   coronaShell: Mesh;
-  disk: Mesh;
-  surfaceFace: Mesh;
-  creamyCore: Mesh;
-  lowerGlow: Mesh;
-  rays: Mesh[];
-  godRays: Mesh[];
-  flecks: Mesh[];
-}
-
-function makeSkySunCircle(color: string, opacity: number, radius: number, additive = true) {
-  const material = new MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity,
-    depthWrite: false,
-    depthTest: false,
-    fog: false,
-    side: DoubleSide,
-    ...(additive ? { blending: AdditiveBlending } : {}),
-  });
-  material.toneMapped = false;
-
-  const mesh = new Mesh(new CircleGeometry(radius, 56), material);
-  mesh.renderOrder = SKY_SUN_RENDER_ORDER;
-  return mesh;
-}
-
-function makeSkySunRing(color: string, opacity: number, innerRadius: number, outerRadius: number) {
-  const material = new MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity,
-    depthWrite: false,
-    depthTest: false,
-    fog: false,
-    side: DoubleSide,
-    blending: AdditiveBlending,
-  });
-  material.toneMapped = false;
-
-  const mesh = new Mesh(new RingGeometry(innerRadius, outerRadius, 64), material);
-  mesh.renderOrder = SKY_SUN_RENDER_ORDER + 3;
-  return mesh;
+  warmGlowShell: Mesh;
 }
 
 function makeSunSurfaceMaterial() {
@@ -86,9 +37,10 @@ function makeSunSurfaceMaterial() {
       uMood: { value: 0 },
       uSunColor: { value: new Color("#ffd977") },
     },
-    transparent: true,
-    depthWrite: false,
+    transparent: false,
+    depthWrite: true,
     depthTest: false,
+    fog: false,
     vertexShader: `
       varying vec2 vUv;
       varying vec3 vNormalView;
@@ -125,17 +77,25 @@ function makeSunSurfaceMaterial() {
       void main() {
         vec3 n = normalize(vNormalView);
         float facing = clamp(n.z * 0.5 + 0.5, 0.0, 1.0);
-        float limb = pow(1.0 - facing, 1.55);
-        float grain = noise(vUv * vec2(9.0, 5.0) + vec2(uTime * 0.025, -uTime * 0.015));
-        float slowMarble = noise(vUv * vec2(3.2, 7.4) + vec2(-uTime * 0.011, uTime * 0.018));
-        vec3 apricot = mix(vec3(1.0, 0.61, 0.2), uSunColor, 0.38);
-        vec3 butter = mix(vec3(1.0, 0.89, 0.43), uSunColor, 0.62);
-        vec3 cream = mix(vec3(1.0, 0.97, 0.72), uSunColor, 0.48);
-        vec3 color = mix(apricot, butter, smoothstep(0.18, 0.9, facing));
-        color = mix(color, cream, pow(facing, 2.6) * 0.62);
-        color += vec3(1.0, 0.46, 0.08) * (grain - 0.36) * 0.16;
-        color += vec3(1.0, 0.78, 0.28) * (slowMarble - 0.38) * 0.12;
-        color += vec3(1.0, 0.72, 0.18) * limb * (0.36 - uMood * 0.08);
+        vec2 centered = vUv - vec2(0.5);
+        float radial = length(centered) * 2.0;
+        float limb = pow(1.0 - facing, 1.22);
+        float grain = noise(vUv * vec2(7.0, 4.2) + vec2(uTime * 0.014, -uTime * 0.009));
+        float broadCloud = noise(vUv * vec2(2.4, 5.8) + vec2(-uTime * 0.006, uTime * 0.01));
+        float veil = smoothstep(0.42, 0.82, broadCloud) * smoothstep(0.28, 1.18, radial);
+        float lowerHeat = smoothstep(-0.34, 0.42, centered.y + centered.x * 0.18);
+        vec3 ochre = mix(vec3(0.98, 0.54, 0.18), uSunColor, 0.3);
+        vec3 honey = mix(vec3(1.0, 0.76, 0.28), uSunColor, 0.52);
+        vec3 ivory = mix(vec3(1.0, 0.94, 0.62), uSunColor, 0.34);
+        vec3 milk = vec3(1.0, 0.985, 0.79);
+        vec3 color = mix(ochre, honey, smoothstep(0.08, 0.9, facing));
+        color = mix(color, ivory, pow(facing, 2.0) * 0.7);
+        color = mix(color, milk, (1.0 - veil) * pow(facing, 3.2) * 0.34);
+        color += vec3(1.0, 0.5, 0.08) * (grain - 0.42) * 0.11;
+        color = mix(color, vec3(1.0, 0.74, 0.34), veil * (0.16 - uMood * 0.035));
+        color = mix(color, vec3(0.92, 0.43, 0.12), limb * (0.28 - uMood * 0.035));
+        color += vec3(1.0, 0.9, 0.48) * pow(facing, 4.2) * 0.16;
+        color += vec3(1.0, 0.72, 0.24) * lowerHeat * 0.075;
         gl_FragColor = vec4(color, 1.0);
       }
     `,
@@ -155,6 +115,7 @@ function makeSunCoronaMaterial(opacity: number) {
     transparent: true,
     depthWrite: false,
     depthTest: false,
+    fog: false,
     blending: AdditiveBlending,
     vertexShader: `
       varying vec3 vNormalView;
@@ -187,172 +148,23 @@ function makeSunCoronaMaterial(opacity: number) {
   return material;
 }
 
-function makeSkySunRayMaterial(color: string, opacity: number) {
-  const material = new ShaderMaterial({
-    uniforms: {
-      uTime: { value: 0 },
-      uOpacity: { value: opacity },
-      uColor: { value: new Color(color) },
-    },
-    transparent: true,
-    depthWrite: false,
-    depthTest: false,
-    fog: false,
-    side: DoubleSide,
-    blending: AdditiveBlending,
-    vertexShader: `
-      varying vec2 vUv;
-
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float uTime;
-      uniform float uOpacity;
-      uniform vec3 uColor;
-
-      varying vec2 vUv;
-
-      void main() {
-        float crossFade = pow(clamp(1.0 - abs(vUv.x - 0.5) * 2.0, 0.0, 1.0), 1.55);
-        float lengthFade = smoothstep(0.02, 0.2, vUv.y) * (1.0 - smoothstep(0.74, 1.0, vUv.y));
-        float pulse = 0.86 + 0.14 * sin(uTime * 0.28 + vUv.y * 7.0);
-        float alpha = crossFade * lengthFade * uOpacity * pulse;
-        gl_FragColor = vec4(uColor, alpha);
-      }
-    `,
-  });
-  material.toneMapped = false;
-  return material;
-}
-
-function makeSkySunRay(length: number, width: number, color: string, opacity: number, angle: number, distance: number) {
-  const material = makeSkySunRayMaterial(color, opacity);
-  const ray = new Mesh(new PlaneGeometry(width, length), material);
-  ray.position.set(Math.cos(angle) * distance, Math.sin(angle) * distance, -0.08);
-  ray.rotation.z = angle - Math.PI / 2;
-  ray.renderOrder = SKY_SUN_RENDER_ORDER - 1;
-  ray.userData.baseAngle = angle;
-  ray.userData.baseDistance = distance;
-  ray.userData.baseOpacity = opacity;
-  ray.userData.length = length;
-  return ray;
-}
-
-function makeSkySunGodRay(
-  length: number,
-  width: number,
-  color: string,
-  opacity: number,
-  angle: number,
-  distance: number,
-) {
-  const ray = makeSkySunRay(length, width, color, opacity, angle, distance);
-  ray.renderOrder = SKY_SUN_RENDER_ORDER - 2;
-  ray.userData.isGodRay = true;
-  return ray;
-}
-
 export function buildStylizedSkySun() {
   const group = new Group();
-  group.name = "stylized-sky-sun";
+  group.name = "far-world-sun";
   group.renderOrder = SKY_SUN_RENDER_ORDER;
 
-  const outerGlow = makeSkySunCircle("#fff2a4", 0.065, 112);
-  const warmHalo = makeSkySunCircle("#ffd56a", 0.1, 76);
-  const softCorona = makeSkySunCircle("#fff8ce", 0.08, 56);
-  const amberRing = makeSkySunRing("#ffc35a", 0.18, 39, 46);
-  amberRing.rotation.z = -0.18;
+  const warmGlowShell = new Mesh(new SphereGeometry(72, 28, 16), makeSunCoronaMaterial(0.14));
+  warmGlowShell.renderOrder = SKY_SUN_RENDER_ORDER;
+  const coronaShell = new Mesh(new SphereGeometry(48, 30, 18), makeSunCoronaMaterial(0.34));
+  coronaShell.renderOrder = SKY_SUN_RENDER_ORDER + 1;
+  const body = new Mesh(new SphereGeometry(31, 36, 24), makeSunSurfaceMaterial());
+  body.renderOrder = SKY_SUN_RENDER_ORDER + 2;
 
-  const coronaShell = new Mesh(new SphereGeometry(44, 32, 18), makeSunCoronaMaterial(0.38));
-  coronaShell.renderOrder = SKY_SUN_RENDER_ORDER + 3;
-  const disk = new Mesh(new SphereGeometry(38, 36, 24), makeSunSurfaceMaterial());
-  disk.renderOrder = SKY_SUN_RENDER_ORDER + 4;
-  const surfaceFace = makeSkySunCircle("#ffc04f", 0.62, 35, false);
-  surfaceFace.position.z = 38;
-  surfaceFace.renderOrder = SKY_SUN_RENDER_ORDER + 5;
-  const creamyCore = new Mesh(new SphereGeometry(12.5, 20, 14), makeSunCoronaMaterial(0.6));
-  creamyCore.position.set(-9.5, 7.5, 29);
-  creamyCore.scale.set(1.18, 0.78, 0.34);
-  creamyCore.renderOrder = SKY_SUN_RENDER_ORDER + 6;
-  const lowerGlow = makeSkySunCircle("#ffdf73", 0.12, 30);
-  lowerGlow.position.set(8, -10, 0.04);
-  lowerGlow.scale.set(1.28, 0.68, 1);
-
-  const godRays = [
-    [-0.72, 108, 13, "#fff5bc", 0.017, 93],
-    [-0.34, 154, 17, "#ffe090", 0.015, 100],
-    [0.08, 196, 22, "#fff8d2", 0.012, 114],
-    [0.45, 142, 15, "#ffe4a0", 0.014, 101],
-    [0.84, 118, 12, "#fff6cb", 0.012, 92],
-  ].map(([angle, length, width, color, opacity, distance]) =>
-    makeSkySunGodRay(
-      length as number,
-      width as number,
-      color as string,
-      opacity as number,
-      angle as number,
-      distance as number,
-    ),
-  );
-
-  const rayAngles = [-0.34, 0.3, 0.92, 1.58, 2.28, 2.92, 3.66, 4.34, 5.08, 5.74];
-  const rays = rayAngles.map((angle, index) =>
-    makeSkySunRay(
-      index % 3 === 0 ? 82 : index % 2 === 0 ? 62 : 48,
-      index % 3 === 0 ? 10.5 : 7.2,
-      index % 2 === 0 ? "#fff7c9" : "#ffd56d",
-      index % 3 === 0 ? 0.12 : 0.085,
-      angle,
-      index % 3 === 0 ? 76 : 66,
-    ),
-  );
-
-  const flecks = [
-    [-48, 24, 3.6, "#fff7c6", 0.42],
-    [48, 29, 3.2, "#ffe17d", 0.34],
-    [-35, -33, 2.8, "#fff2ad", 0.3],
-    [32, -39, 2.4, "#ffd36d", 0.26],
-    [2, 54, 2.1, "#fff8d0", 0.32],
-  ].map(([x, y, radius, color, opacity], index) => {
-    const fleck = makeSkySunCircle(color as string, opacity as number, radius as number);
-    fleck.position.set(x as number, y as number, 0.08 + index * 0.01);
-    fleck.renderOrder = SKY_SUN_RENDER_ORDER + 4;
-    fleck.userData.baseX = x;
-    fleck.userData.baseY = y;
-    fleck.userData.baseOpacity = opacity;
-    return fleck;
-  });
-
-  group.add(
-    ...godRays,
-    outerGlow,
-    ...rays,
-    warmHalo,
-    softCorona,
-    amberRing,
-    coronaShell,
-    disk,
-    surfaceFace,
-    lowerGlow,
-    creamyCore,
-    ...flecks,
-  );
+  group.add(warmGlowShell, coronaShell, body);
   group.userData.skySunRefs = {
-    outerGlow,
-    warmHalo,
-    softCorona,
-    amberRing,
+    body,
     coronaShell,
-    disk,
-    surfaceFace,
-    creamyCore,
-    lowerGlow,
-    rays,
-    godRays,
-    flecks,
+    warmGlowShell,
   } satisfies StylizedSkySunRefs;
   return group;
 }
@@ -440,26 +252,32 @@ export function buildClouds() {
 }
 
 export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
-  const geometry = new SphereGeometry(520, 40, 28);
+  const geometry = new SphereGeometry(1100, 40, 28);
   if (options.webGpuCompatible) {
-    return new Mesh(
+    const mesh = new Mesh(
       geometry,
       new MeshBasicMaterial({
         color: "#aeeeff",
         side: BackSide,
         depthWrite: false,
+        depthTest: true,
         fog: false,
       }),
     );
+    mesh.renderOrder = SKY_DOME_RENDER_ORDER;
+    return mesh;
   }
 
   const material = new ShaderMaterial({
     side: BackSide,
     depthWrite: false,
+    depthTest: true,
     uniforms: {
       uSunDir: { value: new Vector3(-0.86, 0.2, -0.41).normalize() },
       uSunColor: { value: new Color("#fff0cf") },
       uElevationMood: { value: 0 },
+      uSunHaze: { value: 0 },
+      uLandmarkGlow: { value: 0 },
     },
     vertexShader: `
       varying vec3 vWorldDirection;
@@ -474,6 +292,8 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
       uniform vec3 uSunDir;
       uniform vec3 uSunColor;
       uniform float uElevationMood;
+      uniform float uSunHaze;
+      uniform float uLandmarkGlow;
 
       varying vec3 vWorldDirection;
 
@@ -515,25 +335,23 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
 
         vec3 sunDir = normalize(uSunDir);
         float sunDot = max(dot(dir, sunDir), 0.0);
-        float sunBloom = pow(sunDot, 2.92);
-        float sunCorona = pow(sunDot, 1.08) * (1.0 - pow(sunDot, 8.0) * 0.64);
-        float rayNoise = fbm(vec2(atan(dir.z, dir.x) * 1.7, dir.y * 3.2) + vec2(uElevationMood * 0.8, 0.0));
-        float rayBands = smoothstep(0.54, 0.88, rayNoise) * smoothstep(0.2, 0.98, sunDot);
-        float lightShaft = rayBands * pow(sunDot, 4.4) * smoothstep(-0.04, 0.48, dir.y);
-        float sunDisk = smoothstep(0.982, 0.993, sunDot);
-        float sunCore = smoothstep(0.993, 0.9985, sunDot);
-        vec3 sunTint = uSunColor * 1.1;
-        vec3 sunApricot = mix(vec3(1.0, 0.66, 0.25), sunTint, 0.48);
-        vec3 sunCream = mix(vec3(1.0, 0.96, 0.66), sunTint, 0.58);
-        vec3 warmHaze = mix(vec3(1.0, 0.76, 0.36), sunCream, 0.46);
-        vec3 coolBloom = vec3(0.58, 0.82, 0.96) * (0.09 + mood * 0.045);
+        float sunBloom = pow(sunDot, 2.28);
+        float broadSunHaze = pow(sunDot, 0.78) * (1.0 - pow(sunDot, 10.0) * 0.52);
+        float sunCorona = pow(sunDot, 1.0) * (1.0 - pow(sunDot, 8.0) * 0.54);
+        float rayNoise = fbm(vec2(atan(dir.z, dir.x) * 1.32, dir.y * 3.65) + vec2(uElevationMood * 0.8, 0.0));
+        float rayBands = smoothstep(0.5, 0.86, rayNoise) * smoothstep(0.16, 0.98, sunDot);
+        float lightShaft = rayBands * pow(sunDot, 3.65) * smoothstep(-0.04, 0.5, dir.y);
+        vec3 sunTint = uSunColor * 1.05;
+        vec3 sunApricot = mix(vec3(1.0, 0.62, 0.24), sunTint, 0.42);
+        vec3 sunCream = mix(vec3(1.0, 0.965, 0.7), sunTint, 0.5);
+        vec3 sunIvory = mix(vec3(1.0, 0.985, 0.83), sunCream, 0.58);
+        vec3 warmHaze = mix(vec3(1.0, 0.78, 0.42), sunCream, 0.42);
+        vec3 coolBloom = vec3(0.62, 0.82, 0.94) * (0.055 + mood * 0.025);
         color += coolBloom * sunBloom;
-        color += sunApricot * sunBloom * 0.3;
-        color += warmHaze * sunCorona * (0.23 + (1.0 - mood) * 0.05);
-        color += sunCream * lightShaft * (0.012 + (1.0 - mood) * 0.007);
-        color = mix(color, sunApricot, sunDisk * 0.58);
-        color = mix(color, sunCream, sunCore * 0.78);
-        color += sunCream * sunCore * 0.32;
+        color += sunApricot * sunBloom * 0.24;
+        color += warmHaze * sunCorona * (0.21 + (1.0 - mood) * 0.055 + uSunHaze * 0.08);
+        color += sunIvory * broadSunHaze * (0.08 + (1.0 - mood) * 0.022 + uSunHaze * 0.045);
+        color += sunCream * lightShaft * (0.014 + (1.0 - mood) * 0.008 + uSunHaze * 0.012);
 
         vec2 skyUv = dir.xz * (2.05 / max(0.26, dir.y + 0.38));
         float highWisp = fbm(skyUv * vec2(0.62, 0.26) + vec2(8.0, 3.0));
@@ -547,6 +365,7 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
         float paperBloom = fbm(vec2(atan(dir.z, dir.x) * 0.9, dir.y * 2.6) + vec2(2.4, 11.2));
         vec3 watercolorFog = mix(vec3(0.94, 0.985, 0.99), vec3(1.0, 0.95, 0.76), 0.34 + sunBloom * 0.26);
         color = mix(color, watercolorFog, horizonHaze * (0.34 + paperBloom * 0.055));
+        color = mix(color, vec3(1.0, 0.965, 0.78), horizonHaze * uLandmarkGlow * 0.08);
 
         float aquaLift = smoothstep(0.08, 0.72, dir.y) * (1.0 - smoothstep(0.76, 1.0, dir.y));
         color += vec3(0.075, 0.26, 0.24) * aquaLift * (0.046 - mood * 0.01);
@@ -559,10 +378,12 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
     `,
   });
 
-  return new Mesh(geometry, material);
+  const mesh = new Mesh(geometry, material);
+  mesh.renderOrder = SKY_DOME_RENDER_ORDER;
+  return mesh;
 }
 
-/** Keeps sky sun disc and volumetric-style clouds aligned with the scene DirectionalLight. */
+/** Keeps the sky haze and volumetric-style clouds aligned with the scene DirectionalLight. */
 export function syncAtmosphereLighting(
   skyDome: Mesh,
   clouds: Group,
@@ -570,6 +391,7 @@ export function syncAtmosphereLighting(
   elevationMood: number,
   camera: Camera,
   timeSeconds: number,
+  worldMood?: WorldLightingMoodState,
 ) {
   const mood = MathUtils.clamp(elevationMood, 0, 1);
   _sunDirScratch.subVectors(sun.position, sun.target.position).normalize();
@@ -579,12 +401,26 @@ export function syncAtmosphereLighting(
     skyMat.uniforms.uSunDir.value.copy(_sunDirScratch);
     (skyMat.uniforms.uSunColor.value as Color).copy(sun.color);
     skyMat.uniforms.uElevationMood.value = mood;
+    if (skyMat.uniforms.uSunHaze) {
+      skyMat.uniforms.uSunHaze.value = worldMood?.sunHaze ?? 0;
+    }
+    if (skyMat.uniforms.uLandmarkGlow) {
+      skyMat.uniforms.uLandmarkGlow.value = worldMood?.landmarkGlow ?? 0;
+    }
   }
   const cloudMat = clouds.userData.cloudMaterial as ShaderMaterial | MeshBasicMaterial | undefined;
   if (cloudMat instanceof MeshBasicMaterial) {
-    getAtmosphereHorizonTints(mood, _horizonTintScratch, _horizonHazeScratch, _cloudBrightScratch, _cloudShadowScratch);
+    getAtmosphereHorizonTints(
+      mood,
+      _horizonTintScratch,
+      _horizonHazeScratch,
+      _cloudBrightScratch,
+      _cloudShadowScratch,
+      worldMood,
+    );
     cloudMat.color.copy(_cloudBrightScratch).lerp(sun.color, 0.08 + (1 - mood) * 0.04);
-    cloudMat.opacity = MathUtils.lerp(0.22, 0.18, mood);
+    cloudMat.opacity =
+      MathUtils.lerp(0.22, 0.18, mood) + (worldMood?.watercolorFog ?? 0) * 0.018 - (worldMood?.landmarkGlow ?? 0) * 0.008;
   } else if (cloudMat?.uniforms?.uSunDirView) {
     _sunDirViewScratch.copy(_sunDirScratch).transformDirection(camera.matrixWorldInverse);
     cloudMat.uniforms.uSunDirView.value.copy(_sunDirViewScratch);
@@ -594,7 +430,14 @@ export function syncAtmosphereLighting(
     cloudMat.uniforms.uElevationMood.value = mood;
 
     // Ghibli-ish: warm paper/cream at horizon, cooler cel highlights aloft; ties to sky + elevation.
-    getAtmosphereHorizonTints(mood, _horizonTintScratch, _horizonHazeScratch, _cloudBrightScratch, _cloudShadowScratch);
+    getAtmosphereHorizonTints(
+      mood,
+      _horizonTintScratch,
+      _horizonHazeScratch,
+      _cloudBrightScratch,
+      _cloudShadowScratch,
+      worldMood,
+    );
     (cloudMat.uniforms.uHorizonTint.value as Color).copy(_horizonTintScratch);
     (cloudMat.uniforms.uHorizonHaze.value as Color).copy(_horizonHazeScratch);
     (cloudMat.uniforms.uCloudBright.value as Color).copy(_cloudBrightScratch);
@@ -605,19 +448,20 @@ export function syncAtmosphereLighting(
 export function syncStylizedSkySun(
   skySun: Group,
   sun: DirectionalLight,
-  camera: Camera,
   elevationMood: number,
   timeSeconds = 0,
+  worldMood?: WorldLightingMoodState,
 ) {
   const mood = MathUtils.clamp(elevationMood, 0, 1);
   const lowAngleWarmth =
     typeof sun.userData.lowAngleWarmth === "number" ? MathUtils.clamp(sun.userData.lowAngleWarmth, 0, 1) : 0;
-  const rayLift = MathUtils.lerp(0.48, 0.82, lowAngleWarmth);
-  _sunDirScratch.subVectors(sun.position, sun.target.position).normalize();
-  _skySunPositionScratch.copy(camera.position).addScaledVector(_sunDirScratch, 520);
-  skySun.position.copy(_skySunPositionScratch);
-  skySun.lookAt(camera.position);
-  skySun.scale.setScalar(MathUtils.lerp(0.98, 0.82, mood));
+  skySun.position.copy(sun.position);
+  skySun.scale.setScalar(MathUtils.lerp(1, 0.94, mood) * MathUtils.lerp(1, 1.045, worldMood?.sunHaze ?? 0));
+  skySun.rotation.set(
+    -0.16 + Math.sin(timeSeconds * 0.018) * 0.035,
+    timeSeconds * 0.026,
+    0.08 + Math.sin(timeSeconds * 0.013) * 0.025,
+  );
 
   const refs = skySun.userData.skySunRefs as StylizedSkySunRefs | undefined;
   const setOpacity = (mesh: Mesh | undefined, opacity: number) => {
@@ -644,56 +488,18 @@ export function syncStylizedSkySun(
     }
   });
 
-  setOpacity(refs?.outerGlow, MathUtils.lerp(0.076, 0.05, mood) * MathUtils.lerp(0.95, 1.16, lowAngleWarmth));
-  setOpacity(refs?.warmHalo, MathUtils.lerp(0.118, 0.08, mood) * MathUtils.lerp(0.95, 1.18, lowAngleWarmth));
-  setOpacity(refs?.softCorona, MathUtils.lerp(0.098, 0.065, mood));
-  setOpacity(refs?.amberRing, MathUtils.lerp(0.2, 0.13, mood));
-  setOpacity(refs?.coronaShell, MathUtils.lerp(0.26, 0.18, mood));
-  setOpacity(refs?.surfaceFace, MathUtils.lerp(0.66, 0.48, mood));
-  setOpacity(refs?.creamyCore, MathUtils.lerp(0.58, 0.38, mood));
-  setOpacity(refs?.lowerGlow, MathUtils.lerp(0.14, 0.08, mood));
-
-  refs?.rays.forEach((ray, index) => {
-    const baseAngle = (ray.userData.baseAngle as number | undefined) ?? 0;
-    const baseDistance = (ray.userData.baseDistance as number | undefined) ?? 60;
-    const baseOpacity = (ray.userData.baseOpacity as number | undefined) ?? 0.1;
-    const drift = Math.sin(timeSeconds * 0.12 + index * 1.7) * 0.035;
-    const pulse = 0.82 + Math.sin(timeSeconds * 0.34 + index * 0.83) * 0.18;
-    ray.rotation.z = baseAngle - Math.PI / 2 + drift;
-    ray.position.set(
-      Math.cos(baseAngle + drift * 0.4) * (baseDistance + pulse * 2.2),
-      Math.sin(baseAngle + drift * 0.4) * (baseDistance + pulse * 2.2),
-      -0.08,
-    );
-    setOpacity(
-      ray,
-      baseOpacity * MathUtils.lerp(0.92, 0.58, mood) * pulse * MathUtils.lerp(0.95, 1.16, lowAngleWarmth),
-    );
-  });
-
-  refs?.godRays.forEach((ray, index) => {
-    const baseAngle = (ray.userData.baseAngle as number | undefined) ?? 0;
-    const baseDistance = (ray.userData.baseDistance as number | undefined) ?? 96;
-    const baseOpacity = (ray.userData.baseOpacity as number | undefined) ?? 0.06;
-    const slowDrift = Math.sin(timeSeconds * 0.055 + index * 1.23) * 0.055;
-    const breathe = 0.72 + Math.sin(timeSeconds * 0.18 + index * 0.71) * 0.16;
-    ray.rotation.z = baseAngle - Math.PI / 2 + slowDrift;
-    ray.position.set(
-      Math.cos(baseAngle + slowDrift * 0.28) * (baseDistance + breathe * 5),
-      Math.sin(baseAngle + slowDrift * 0.28) * (baseDistance + breathe * 5),
-      -0.16,
-    );
-    setOpacity(ray, baseOpacity * MathUtils.lerp(1.0, 0.48, mood) * breathe * rayLift);
-  });
-
-  refs?.flecks.forEach((fleck, index) => {
-    const baseX = (fleck.userData.baseX as number | undefined) ?? fleck.position.x;
-    const baseY = (fleck.userData.baseY as number | undefined) ?? fleck.position.y;
-    const baseOpacity = (fleck.userData.baseOpacity as number | undefined) ?? 0.3;
-    fleck.position.x = baseX + Math.sin(timeSeconds * 0.2 + index * 0.9) * 1.2;
-    fleck.position.y = baseY + Math.cos(timeSeconds * 0.16 + index * 1.3) * 0.9;
-    setOpacity(fleck, baseOpacity * MathUtils.lerp(1, 0.62, mood));
-  });
+  setOpacity(
+    refs?.coronaShell,
+    MathUtils.lerp(0.26, 0.18, mood) *
+      MathUtils.lerp(0.96, 1.16, lowAngleWarmth) *
+      MathUtils.lerp(1, 1.18, worldMood?.sunHaze ?? 0),
+  );
+  setOpacity(
+    refs?.warmGlowShell,
+    MathUtils.lerp(0.08, 0.052, mood) *
+      MathUtils.lerp(0.92, 1.16, lowAngleWarmth) *
+      MathUtils.lerp(1, 1.26, worldMood?.landmarkGlow ?? 0),
+  );
 }
 
 export function buildMountainAtmosphere() {

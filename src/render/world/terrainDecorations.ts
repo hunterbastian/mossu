@@ -768,7 +768,9 @@ varying float vFoliage;
 uniform vec3 uSceneSunColor;
 uniform vec3 uSceneAmbient;
 uniform vec3 uSceneHorizon;
-uniform float uSceneElevationMood;`,
+uniform float uSceneElevationMood;
+uniform float uSceneCloudShadow;
+uniform float uSceneSunHaze;`,
       )
       .replace(
         "vec3 outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + totalEmissiveRadiance;",
@@ -779,6 +781,8 @@ vec3 sunTint = mix( vec3(1.0), uSceneSunColor, (0.32 + 0.08 * lowWarm) * ff );
 vec3 hemiHaze = mix( vec3(1.0), uSceneHorizon, (0.12 + 0.14 * lowWarm) * ff );
 outgoingLight = outgoingLight * sunTint * hemiHaze;
 outgoingLight = mix( outgoingLight, outgoingLight * uSceneAmbient, 0.04 * ff );
+outgoingLight *= 1.0 - uSceneCloudShadow * ff * 0.08;
+outgoingLight = mix( outgoingLight, uSceneHorizon * length(outgoingLight), uSceneSunHaze * ff * 0.035 );
 outgoingLight += vec3(0.04,0.05,0.02) * ff;
 outgoingLight = mix( outgoingLight, ( outgoingLight * 0.88 + uSceneHorizon * 0.22 * length(outgoingLight) ) * 1.12, 0.1 * ff );`,
       );
@@ -786,6 +790,8 @@ outgoingLight = mix( outgoingLight, ( outgoingLight * 0.88 + uSceneHorizon * 0.2
     shader.uniforms.uSceneAmbient = { value: new Color("#b8c8e0") };
     shader.uniforms.uSceneHorizon = { value: new Color("#f3e3d4") };
     shader.uniforms.uSceneElevationMood = { value: 0 };
+    shader.uniforms.uSceneCloudShadow = { value: 0 };
+    shader.uniforms.uSceneSunHaze = { value: 0 };
     material.userData.windShader = shader;
   };
   material.customProgramCacheKey = () => "mossu-instanced-tree-wind-ghibli";
@@ -854,6 +860,7 @@ function makeRoundTree(scale: number, leafColor: string) {
 
   const trunk = markCameraCollider(
     new Mesh(new CylinderGeometry(0.3 * scaledSize, 0.58 * scaledSize, 3.5 * scaledSize, 18), barkMaterial),
+    { fadeWhenOccluding: true },
   );
   trunk.position.y = 1.75 * scaledSize;
   group.add(trunk);
@@ -957,6 +964,7 @@ function makePineTree(scale: number, tone = "#5b7d4d") {
   const stubMat = new MeshLambertMaterial({ color: makeTint("#5c4736", "#6f5a43", 0.34) });
   const trunk = markCameraCollider(
     new Mesh(new CylinderGeometry(0.16 * scaledSize, 0.3 * scaledSize, 4.6 * scaledSize, 18), wood),
+    { fadeWhenOccluding: true },
   );
   trunk.position.y = 2.3 * scaledSize;
   group.add(trunk);
@@ -1014,6 +1022,7 @@ function makeBirchGroveTree(scale: number, leafColor: string = forestGroveProps.
 
   const trunk = markCameraCollider(
     new Mesh(new CylinderGeometry(0.22 * scaledSize, 0.32 * scaledSize, 4.25 * scaledSize, 16), barkMaterial),
+    { fadeWhenOccluding: true },
   );
   trunk.position.y = 2.12 * scaledSize;
   trunk.rotation.z = -0.04;
@@ -4653,7 +4662,9 @@ export function buildLandmarkTrees() {
 
   const makeTree = (x: number, z: number, color: MeshStandardMaterial) => {
     const tree = new Group();
-    const trunk = markCameraCollider(new Mesh(new CylinderGeometry(0.3, 0.42, 7.0, 12), trunkMaterial));
+    const trunk = markCameraCollider(new Mesh(new CylinderGeometry(0.3, 0.42, 7.0, 12), trunkMaterial), {
+      fadeWhenOccluding: true,
+    });
     trunk.position.y = 3.5;
     tree.add(trunk);
 

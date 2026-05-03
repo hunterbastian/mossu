@@ -23,6 +23,7 @@ import {
   sampleRiverDampBankMask,
   sampleRiverNookMask,
   sampleRiverWetness,
+  sampleRouteDirtPathMask,
   sampleTerrainHeight,
   sampleTerrainNormal,
 } from "../../simulation/world";
@@ -93,6 +94,7 @@ interface GrassLodSource {
   scales: Float32Array;
   widths: Float32Array;
   roots: Float32Array;
+  personalities: Float32Array;
   lastFrame: number;
   lastOriginX: number;
   lastOriginZ: number;
@@ -213,6 +215,7 @@ export function createGrassMesh(
   const scales = new Float32Array(count);
   const widths = new Float32Array(count);
   const roots = new Float32Array(count * 3);
+  const personalities = new Float32Array(count * 3);
   const matrices = new Float32Array(count * 16);
   let placed = 0;
 
@@ -231,6 +234,7 @@ export function createGrassMesh(
     const riverNookMask = sampleRiverNookMask(x, z);
     const riverWetness = sampleRiverWetness(x, z);
     const dampBankMask = sampleRiverDampBankMask(x, z);
+    const routeDirtMask = sampleRouteDirtPathMask(x, z);
     const fieldCluster = Math.sin(x * 0.016 + z * 0.009 - 0.8) * 0.5 + 0.5;
     const placementBias =
       zone === "plains" || zone === "hills"
@@ -312,6 +316,20 @@ export function createGrassMesh(
     roots[placed * 3] = x;
     roots[placed * 3 + 1] = height;
     roots[placed * 3 + 2] = z;
+    const reedPersonality = MathUtils.clamp(dampBankMask * 0.7 + riverNookBoost * 0.42 + riverWetness * 0.24, 0, 1);
+    const tuftPersonality = MathUtils.clamp(
+      (isMeadow ? 0.36 : 0.1) +
+        habitat.meadow * 0.46 +
+        openingMask * 0.24 +
+        fieldCluster * 0.12 -
+        reedPersonality * 0.28,
+      0,
+      1,
+    );
+    const routeEdgePersonality = MathUtils.clamp(routeDirtMask * 0.78 + habitat.edge * 0.36 + openingMask * 0.08, 0, 1);
+    personalities[placed * 3] = reedPersonality;
+    personalities[placed * 3 + 1] = tuftPersonality;
+    personalities[placed * 3 + 2] = routeEdgePersonality;
     placed += 1;
   }
 
@@ -320,6 +338,7 @@ export function createGrassMesh(
   mesh.geometry.setAttribute("instanceScale", new InstancedBufferAttribute(scales, 1));
   mesh.geometry.setAttribute("instanceWidth", new InstancedBufferAttribute(widths, 1));
   mesh.geometry.setAttribute("instanceRoot", new InstancedBufferAttribute(roots, 3));
+  mesh.geometry.setAttribute("instancePersonality", new InstancedBufferAttribute(personalities, 3));
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
 
   if (options.lod) {
@@ -342,6 +361,7 @@ export function createGrassMesh(
       scales: scales.slice(),
       widths: widths.slice(),
       roots: roots.slice(),
+      personalities: personalities.slice(),
       lastFrame: -9999,
       lastOriginX: Number.POSITIVE_INFINITY,
       lastOriginZ: Number.POSITIVE_INFINITY,
@@ -373,6 +393,8 @@ export function createGrassMesh(
     shader.uniforms.uSceneAmbient = { value: new Color(grassArt.shaderAmbient) };
     shader.uniforms.uSceneHorizon = { value: new Color(grassArt.shaderHorizon) };
     shader.uniforms.uSceneElevationMood = { value: 0 };
+    shader.uniforms.uSceneCloudShadow = { value: 0 };
+    shader.uniforms.uSceneSunHaze = { value: 0 };
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
@@ -382,6 +404,7 @@ export function createGrassMesh(
         attribute float instanceWidth;
         attribute vec3 instanceTint;
         attribute vec3 instanceRoot;
+        attribute vec3 instancePersonality;
         varying float vBladeMix;
         varying float vSoftEdge;
         varying float vPlayerFade;
@@ -395,6 +418,7 @@ export function createGrassMesh(
         varying float vCameraHighlandFade;
         varying float vGustSignal;
         varying float vIslandEdge;
+        varying float vRouteEdgePersonality;
         varying vec3 vTint;
         uniform float uTime;
         uniform vec3 uPlayerPosition;
@@ -417,6 +441,8 @@ export function createGrassMesh(
         uniform vec3 uSceneAmbient;
         uniform vec3 uSceneHorizon;
         uniform float uSceneElevationMood;
+        uniform float uSceneCloudShadow;
+        uniform float uSceneSunHaze;
       `,
       )
       .replace(
@@ -446,9 +472,14 @@ export function createGrassMesh(
           1.0
         );
         vec2 playerOffset = instanceRoot.xz - uPlayerPosition.xz;
+        float reedPersonality = clamp(instancePersonality.x, 0.0, 1.0);
+        float tuftPersonality = clamp(instancePersonality.y, 0.0, 1.0);
+        float routeEdgePersonality = clamp(instancePersonality.z, 0.0, 1.0);
+        vRouteEdgePersonality = routeEdgePersonality;
         float playerDistance = length(playerOffset);
         vec2 playerAway = playerDistance > 0.001 ? normalize(playerOffset) : vec2(0.0, 0.0);
         float playerReadMask = 1.0 - smoothstep(uPlayerPushRadius * 0.56, uPlayerPushRadius * 1.42, playerDistance);
+        playerReadMask = clamp(playerReadMask * mix(0.96, 1.16, routeEdgePersonality), 0.0, 1.0);
         float playerMask = playerReadMask * uPlayerPush * uPlayerPushStrength;
         float playerSpeed = length(uPlayerVelocity.xz);
         vec2 wakeDirection = playerSpeed > 0.01 ? normalize(-uPlayerVelocity.xz) : playerAway;
@@ -478,6 +509,7 @@ export function createGrassMesh(
         float gustFront = smoothstep(0.48, 0.96, sin(gustPhaseA));
         float gustShoulder = smoothstep(0.38, 0.92, sin(gustPhaseB)) * 0.54;
         float gustRebound = -smoothstep(0.62, 0.98, sin(gustPhaseA - 1.24)) * 0.24;
+        float reedSway = sin(dot(instanceRoot.xz, baseWindDirection) * 0.022 - windTime * 0.28 + instancePhase * 0.7) * reedPersonality;
         float gustExposure = mix(1.06 + vHeroField * 0.24, 1.18 + vElevationMood * 0.18, vSceneDepthMood);
         float gustWind = (gustFront + gustShoulder) * (0.62 + gustLane * 0.46) * gustExposure;
         float detailFlutter = sin(instanceRoot.x * 0.12 + windTime * 4.9 + instancePhase * 2.8)
@@ -489,7 +521,9 @@ export function createGrassMesh(
           gustWind * mix(0.42, 0.64, vElevationMood) +
           gustRebound
         ) * breath * uWindExaggeration * uBroadWindScale * mix(0.98, 1.22, vElevationMood);
+        broadBend = mix(broadBend, broadBend * 0.62 + reedSway * 0.38, reedPersonality * 0.72);
         float fineMotion = detailFlutter * (1.0 - windLod) * uWindExaggeration * uFineWindScale;
+        fineMotion *= mix(1.0 + tuftPersonality * 0.38, 0.28, reedPersonality);
         vGustSignal = clamp(gustWind * (1.0 - vDistanceBlend * 0.28), 0.0, 1.0);
         vec2 windDirection = normalize(baseWindDirection + crossWindDirection * (macroWind * 0.08 + gustWind * 0.18));
         float tuftWeight = pow(uv.y, 1.24);
@@ -499,14 +533,15 @@ export function createGrassMesh(
         float bend = (0.054 + broadBend * 0.068 + gustWind * mix(0.024, 0.052, vElevationMood)) * tuftWeight * instanceScale;
         float flutter = fineMotion * tipWeight * instanceScale * (0.052 + vHeroField * 0.028);
         float baseLean = (mix(0.16, 0.1, vSceneDepthMood) + vHeroField * 0.12) * tuftWeight;
-        float playerDisplace = playerMask * (0.22 + tipWeight * 1.85);
+        float routeLeanBoost = smoothstep(0.18, 1.0, routeEdgePersonality);
+        float playerDisplace = playerMask * (0.22 + tipWeight * mix(1.85, 2.22, routeLeanBoost));
         transformed.x *= mix(0.84, 0.98, instanceWidth - 0.64);
         transformed.x += windDirection.x * (sweep + baseLean) + bend * sin(instancePhase) + flutter;
         transformed.z += windDirection.y * (sweep + baseLean) + bend * cos(instancePhase) - flutter * 0.42;
         transformed.z += (0.06 - bladeSide * 0.026) * sin(instancePhase * 0.8) * tuftWeight * instanceScale;
         transformed.x += pushDirection.x * playerDisplace;
         transformed.z += pushDirection.y * playerDisplace;
-        transformed.y -= playerMask * tipWeight * 0.16 * instanceScale;
+        transformed.y -= playerMask * tipWeight * (0.16 + routeLeanBoost * 0.08 + reedPersonality * 0.05) * instanceScale;
         vPlayerFade = 1.0 - playerReadMask * (0.34 + uPlayerPush * 0.18);
       `,
       );
@@ -528,6 +563,7 @@ export function createGrassMesh(
         varying float vCameraHighlandFade;
         varying float vGustSignal;
         varying float vIslandEdge;
+        varying float vRouteEdgePersonality;
         varying vec3 vTint;
         uniform float uRootFillBoost;
         uniform float uSelfShadowStrength;
@@ -536,6 +572,8 @@ export function createGrassMesh(
         uniform vec3 uSceneAmbient;
         uniform vec3 uSceneHorizon;
         uniform float uSceneElevationMood;
+        uniform float uSceneCloudShadow;
+        uniform float uSceneSunHaze;
       `,
       )
       .replace(
@@ -575,6 +613,10 @@ export function createGrassMesh(
         distantMass = mix(distantMass, vTint * vec3(0.86, 1.06, 0.52), (vPatchLight * 0.48 + vHeroField * 0.14) * (1.0 - vElevationMood * 0.42));
         float distanceCompression = clamp(vDistanceBlend + uDistanceCompressionBoost, 0.0, 1.0);
         meadowColor = mix(meadowColor, distantMass, distanceCompression * 0.7);
+        meadowColor = mix(meadowColor, meadowColor * vec3(1.04, 1.035, 0.86), vRouteEdgePersonality * nearDetail * 0.1);
+        float cloudShadowWash = uSceneCloudShadow * smoothstep(0.16, 0.92, vBladeMix) * (0.16 + vPatchLight * 0.08 + vElevationMood * 0.05);
+        meadowColor *= 1.0 - cloudShadowWash;
+        meadowColor = mix(meadowColor, uSceneHorizon * vec3(0.98, 1.02, 0.82), uSceneSunHaze * nearDetail * 0.035);
         // Far: collapse to cheap blended color (fewer highlights / less band detail)
         float farCheapMix = pow(clamp(vDistanceBlend * 0.92 + vSceneDepthMood * 0.2, 0.0, 1.0), 1.35);
         vec3 cheapFar = mix(
@@ -781,6 +823,7 @@ export function updateGrassMeshLod(mesh: InstancedMesh, origin: Vector3, frameIn
   const scaleArray = mesh.geometry.getAttribute("instanceScale").array as Float32Array;
   const widthArray = mesh.geometry.getAttribute("instanceWidth").array as Float32Array;
   const rootArray = mesh.geometry.getAttribute("instanceRoot").array as Float32Array;
+  const personalityArray = mesh.geometry.getAttribute("instancePersonality").array as Float32Array;
   let active = 0;
   let visitedCells = 0;
   let visitedSources = 0;
@@ -814,6 +857,7 @@ export function updateGrassMeshLod(mesh: InstancedMesh, origin: Vector3, frameIn
       widthArray[active] = lod.widths[source];
       tintArray.set(lod.tints.subarray(rootIndex, rootIndex + 3), active * 3);
       rootArray.set(lod.roots.subarray(rootIndex, rootIndex + 3), active * 3);
+      personalityArray.set(lod.personalities.subarray(rootIndex, rootIndex + 3), active * 3);
       active += 1;
     }
   }
@@ -825,6 +869,7 @@ export function updateGrassMeshLod(mesh: InstancedMesh, origin: Vector3, frameIn
   mesh.geometry.getAttribute("instanceScale").needsUpdate = true;
   mesh.geometry.getAttribute("instanceWidth").needsUpdate = true;
   mesh.geometry.getAttribute("instanceRoot").needsUpdate = true;
+  mesh.geometry.getAttribute("instancePersonality").needsUpdate = true;
   mesh.visible = active > 0;
 
   lod.activeCount = active;

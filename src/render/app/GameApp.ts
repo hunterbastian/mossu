@@ -66,6 +66,17 @@ import {
   updateRetroTexturePass,
 } from "./appPostProcessing";
 import {
+  DEFAULT_QUALITY_SETTINGS,
+  getQualitySettingOutput,
+  normalizeQualitySettings,
+  readQualitySettings,
+  readQualitySettingsPatchFromControl,
+  shouldPersistQualitySettings,
+  writeQualitySettings,
+  type QualitySettingKey,
+  type QualitySettings,
+} from "./appQualitySettings";
+import {
   createRenderQualityRuntime,
   createRenderResolutionPolicy,
   getRenderResolutionSnapshot,
@@ -205,6 +216,8 @@ export class GameApp {
   /** `?deterministicPerf=1` lets perfGuard own the render clock through advanceTime(). */
   private readonly deterministicPerf: boolean;
   private readonly savePersistenceEnabled: boolean;
+  private readonly qualitySettingsPersistenceEnabled: boolean;
+  private qualitySettings: QualitySettings = { ...DEFAULT_QUALITY_SETTINGS };
   private readonly localSaveRuntime = createLocalSaveRuntime();
   private lastSavePersistenceRevision = -1;
   private readonly coopStress: CoopStressSimulator | null;
@@ -259,6 +272,8 @@ export class GameApp {
     this.visualProbeEnabled = params.has("visualProbe");
     this.deterministicPerf = params.has("deterministicPerf");
     this.savePersistenceEnabled = shouldUsePersistentSave(params);
+    this.qualitySettingsPersistenceEnabled = shouldPersistQualitySettings(params);
+    this.qualitySettings = readQualitySettings(params);
     const coopStressRemoteCount = getCoopStressRemoteCount(params);
     this.coopStress = coopStressRemoteCount > 0 ? new CoopStressSimulator(coopStressRemoteCount) : null;
     this.waterDepthDebugEnabled = params.has("waterDebugDepth") || params.get("waterDebug") === "depth";
@@ -268,6 +283,7 @@ export class GameApp {
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       devicePixelRatio: window.devicePixelRatio,
+      pixelRatioCap: this.qualitySettings.pixelRatioCap,
     });
     this.maxPixelRatio = this.renderResolutionPolicy.maxPixelRatio;
     this.minPixelRatio = this.renderResolutionPolicy.minPixelRatio;
@@ -295,6 +311,7 @@ export class GameApp {
       webGpuCompatibleMaterials: this.activeRendererBackend !== "webgl",
       waterDepthDebug: this.waterDepthDebugEnabled,
     });
+    this.applyQualitySettings({ persist: false, syncControls: false, preferPixelRatio: false });
     this.followCamera.setCollisionMeshes(this.world.getCameraCollisionMeshes());
     this.hud = new HudShell(this.characterPreview.element);
     this.container.appendChild(this.hud.element);
@@ -332,9 +349,12 @@ export class GameApp {
     this.renderer.domElement.addEventListener("pointerdown", this.handleMapPointerDown);
     this.container.addEventListener("pointerdown", this.handleUiPointerDown, true);
     this.container.addEventListener("click", this.handleUiCommandClick);
+    this.container.addEventListener("input", this.handleQualitySettingInput);
+    this.container.addEventListener("change", this.handleQualitySettingInput);
     this.container.addEventListener("keydown", this.handleUiKeyboardActivate, true);
     this.handleResize();
     window.setTimeout(() => {
+      this.syncQualitySettingsControls();
       this.titleScreen.querySelector<HTMLButtonElement>(".title-screen__button")?.focus();
     }, 0);
   }
@@ -378,6 +398,8 @@ export class GameApp {
     this.renderer.domElement.removeEventListener("pointerdown", this.handleMapPointerDown);
     this.container.removeEventListener("pointerdown", this.handleUiPointerDown, true);
     this.container.removeEventListener("click", this.handleUiCommandClick);
+    this.container.removeEventListener("input", this.handleQualitySettingInput);
+    this.container.removeEventListener("change", this.handleQualitySettingInput);
     this.container.removeEventListener("keydown", this.handleUiKeyboardActivate, true);
     this.input.dispose();
     this.followCamera.dispose();
@@ -471,6 +493,7 @@ export class GameApp {
     this.bloomPass = bloomPass;
     this.animeColorGradePass = animeColorGradePass;
     this.retroTexturePass = retroTexturePass;
+    this.updateBloomSettings();
     this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
     this.logRenderPathEvent("postprocessing-ready");
   }
@@ -613,6 +636,82 @@ export class GameApp {
     return this.lastPerfFrameProfile;
   }
 
+  debugSetQualitySettings(settings: Partial<QualitySettings>) {
+    this.setQualitySettings({ ...this.qualitySettings, ...settings }, { persist: false, preferPixelRatio: true });
+  }
+
+  private setQualitySettings(
+    settings: Partial<QualitySettings>,
+    options: { persist?: boolean; preferPixelRatio?: boolean } = {},
+  ) {
+    this.qualitySettings = normalizeQualitySettings(settings);
+    this.applyQualitySettings({
+      persist: options.persist ?? true,
+      syncControls: true,
+      preferPixelRatio: options.preferPixelRatio ?? true,
+    });
+  }
+
+  private applyQualitySettings({
+    persist,
+    syncControls,
+    preferPixelRatio,
+  }: {
+    persist: boolean;
+    syncControls: boolean;
+    preferPixelRatio: boolean;
+  }) {
+    this.followCamera.setUserDistanceBias(this.qualitySettings.cameraDistance);
+    this.world.setVisualQualitySettings({ fogStrength: this.qualitySettings.fogStrength });
+    this.updateBloomSettings();
+    this.updateRenderResolutionPolicy({ preferSettingsPixelRatio: preferPixelRatio });
+    this.perfPanelLastUpdatedAt = 0;
+
+    if (persist && this.qualitySettingsPersistenceEnabled) {
+      writeQualitySettings(this.qualitySettings);
+    }
+    if (syncControls) {
+      this.syncQualitySettingsControls();
+    }
+  }
+
+  private updateBloomSettings() {
+    if (!this.bloomPass) {
+      return;
+    }
+
+    this.bloomPass.strength = BLOOM_STRENGTH * this.qualitySettings.bloomIntensity;
+    this.bloomPass.radius = BLOOM_RADIUS;
+    this.bloomPass.threshold = BLOOM_THRESHOLD;
+  }
+
+  private syncQualitySettingsControls() {
+    const settings = this.qualitySettings;
+    this.container.querySelectorAll<HTMLInputElement>("[data-quality-setting]").forEach((control) => {
+      const key = control.dataset.qualitySetting as QualitySettingKey | undefined;
+      if (!key) {
+        return;
+      }
+
+      if (key === "visualPreset") {
+        control.checked = control.value === settings.visualPreset;
+      } else if (key === "bloomEnabled") {
+        control.checked = settings.bloomEnabled;
+      } else {
+        control.value = String(settings[key]);
+      }
+    });
+
+    this.container.querySelectorAll<HTMLOutputElement>("[data-quality-output]").forEach((output) => {
+      const key = output.dataset.qualityOutput as QualitySettingKey | undefined;
+      if (!key) {
+        return;
+      }
+      output.value = getQualitySettingOutput(settings, key);
+      output.textContent = output.value;
+    });
+  }
+
   renderGameToText() {
     const openingSequence = {
       active: this.openingSequenceActive,
@@ -629,6 +728,7 @@ export class GameApp {
         characterScreenOpen: this.characterScreenOpen,
         coopStressSnapshot: this.latestCoopStressSnapshot,
         camera: this.followCamera.getDebugState(),
+        qualitySettings: this.qualitySettings,
       });
     }
 
@@ -651,6 +751,7 @@ export class GameApp {
       waterDepthDebugEnabled: this.waterDepthDebugEnabled,
       underwaterIntensity: this.underwaterEffect.getIntensity(),
       qa: this.world.getQaStats(),
+      qualitySettings: this.qualitySettings,
     });
   }
 
@@ -897,7 +998,7 @@ export class GameApp {
       this.logRenderPathEvent(`render-path-${renderPath}`);
     }
     if (this.bloomPass) {
-      this.bloomPass.enabled = postProcessingEnabled;
+      this.bloomPass.enabled = postProcessingEnabled && this.qualitySettings.bloomEnabled;
     }
     if (this.animeColorGradePass) {
       this.animeColorGradePass.enabled = postProcessingEnabled;
@@ -933,11 +1034,14 @@ export class GameApp {
   }
 
   private shouldUseBloom() {
-    return this.shouldUsePostProcessing();
+    return this.shouldUsePostProcessing() && this.qualitySettings.bloomEnabled;
   }
 
   private shouldUseRetroTexture() {
-    return shouldUseRetroTextureRuntime(this.retroRenderEnabled, this.shouldUsePostProcessing());
+    return shouldUseRetroTextureRuntime(
+      this.retroRenderEnabled && this.qualitySettings.visualPreset !== "crisp",
+      this.shouldUsePostProcessing(),
+    );
   }
 
   private syncHudForFrame(dt: number) {
@@ -1169,16 +1273,21 @@ export class GameApp {
     this.followCamera.resize(window.innerWidth, window.innerHeight);
   };
 
-  private updateRenderResolutionPolicy() {
+  private updateRenderResolutionPolicy(options: { preferSettingsPixelRatio?: boolean } = {}) {
     this.renderResolutionPolicy = createRenderResolutionPolicy({
       qualityLow: this.qualityLow,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       devicePixelRatio: window.devicePixelRatio,
+      pixelRatioCap: this.qualitySettings.pixelRatioCap,
     });
     this.maxPixelRatio = this.renderResolutionPolicy.maxPixelRatio;
     this.minPixelRatio = this.renderResolutionPolicy.minPixelRatio;
-    const nextPixelRatio = Math.min(this.maxPixelRatio, Math.max(this.minPixelRatio, this.activePixelRatio));
+    const desiredPixelRatio =
+      options.preferSettingsPixelRatio && !this.coopStress && !this.deterministicPerf
+        ? this.qualitySettings.pixelRatioCap
+        : this.activePixelRatio;
+    const nextPixelRatio = Math.min(this.maxPixelRatio, Math.max(this.minPixelRatio, desiredPixelRatio));
     if (Math.abs(nextPixelRatio - this.activePixelRatio) < 0.01) {
       return;
     }
@@ -1281,6 +1390,22 @@ export class GameApp {
         this.resetProgressFromUi();
         break;
     }
+  };
+
+  private handleQualitySettingInput = (event: Event) => {
+    const control =
+      event.target instanceof Element
+        ? event.target.closest<HTMLInputElement>("input[data-quality-setting]")
+        : null;
+    if (!control) {
+      return;
+    }
+
+    const patch = readQualitySettingsPatchFromControl(control);
+    if (!patch) {
+      return;
+    }
+    this.setQualitySettings({ ...this.qualitySettings, ...patch }, { persist: true, preferPixelRatio: true });
   };
 
   private handlePointerLockChange = () => {
@@ -1554,11 +1679,16 @@ export class GameApp {
       return;
     }
 
+    if (
+      isButtonLikeUiTarget(event.target) ||
+      (event.target instanceof Element && event.target.closest(".title-screen__settings"))
+    ) {
+      return;
+    }
+
     if (event.code === "Enter" || event.code === "Space") {
       event.preventDefault();
-      if (!isButtonLikeUiTarget(event.target)) {
-        this.interfaceAudio.playClick();
-      }
+      this.interfaceAudio.playClick();
       this.startFromTitle();
     }
   };

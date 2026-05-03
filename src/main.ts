@@ -1,6 +1,7 @@
 import "./styles.css";
 import type { MossuErrorDetail } from "./errorUi";
 import { reportMossuError, showMossuErrorOverlay } from "./errorUi";
+import type { QualitySettings } from "./render/app/appQualitySettings";
 
 /** Set after runtime hooks attach; `ready` flips on the first animation frame (safe for Playwright to probe). */
 export type MossuE2eBridge = {
@@ -26,6 +27,7 @@ declare global {
       ) => void;
       setWaterDepthDebug?: (enabled: boolean) => void;
       setLayerVisibility?: (layer: string, visible: boolean) => void;
+      setQualitySettings?: (settings: Partial<QualitySettings>) => void;
       getLastFrameProfile?: () => Record<string, number> | null;
     };
     render_game_to_text?: () => string;
@@ -46,6 +48,7 @@ interface MossuAppRuntime {
   ) => void;
   debugSetWaterDepthDebug?: (enabled: boolean) => void;
   debugSetLayerVisibility?: (layer: string, visible: boolean) => void;
+  debugSetQualitySettings?: (settings: Partial<QualitySettings>) => void;
   debugGetLastFrameProfile?: () => Record<string, number> | null;
   renderGameToText: () => string;
   start: () => void;
@@ -158,6 +161,7 @@ function attachRuntime(app: MossuAppRuntime, mode: MossuE2eBridge["mode"]) {
       faceRouteHeading: (heading, cameraOptions) => app.debugFaceRouteHeading?.(heading, cameraOptions),
       setWaterDepthDebug: (enabled) => app.debugSetWaterDepthDebug?.(enabled),
       setLayerVisibility: (layer, visible) => app.debugSetLayerVisibility?.(layer, visible),
+      setQualitySettings: (settings) => app.debugSetQualitySettings?.(settings),
       getLastFrameProfile: () => app.debugGetLastFrameProfile?.() ?? null,
     };
   }
@@ -171,16 +175,16 @@ function attachRuntime(app: MossuAppRuntime, mode: MossuE2eBridge["mode"]) {
 }
 
 async function startGame() {
-  setLoadingStatus("Unfolding the island atlas", 36);
+  setLoadingStatus("Growing the habitat gel", 36);
   const { GameApp } = await import("./render/app/GameApp");
-  setLoadingStatus("Waking the habitat cells", 72);
+  setLoadingStatus("Hatching route cells", 72);
   const game = await GameApp.create(appContainer);
   attachRuntime(game, "game");
   finishLoading();
 }
 
 async function startModelViewer() {
-  setLoadingStatus("Lighting the creature workshop", 68);
+  setLoadingStatus("Lighting the creature pod", 68);
   const { ModelViewerApp } = await import("./render/app/ModelViewerApp");
   const viewer = new ModelViewerApp(appContainer);
   attachRuntime(viewer, "model_viewer");

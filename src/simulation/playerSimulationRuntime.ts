@@ -7,6 +7,9 @@ export interface PlayerSimulationRuntime {
   staminaRegenDelayRemaining: number;
   rollingChargeSeconds: number;
   rollModeHoldSeconds: number;
+  airMomentumGraceRemaining: number;
+  airMomentumSpeedLimitBonus: number;
+  landingMomentumGraceRemaining: number;
   smoothedMoveX: number;
   smoothedMoveY: number;
 }
@@ -19,6 +22,9 @@ export function createPlayerSimulationRuntime(): PlayerSimulationRuntime {
     staminaRegenDelayRemaining: 0,
     rollingChargeSeconds: 0,
     rollModeHoldSeconds: 0,
+    airMomentumGraceRemaining: 0,
+    airMomentumSpeedLimitBonus: 0,
+    landingMomentumGraceRemaining: 0,
     smoothedMoveX: 0,
     smoothedMoveY: 0,
   };

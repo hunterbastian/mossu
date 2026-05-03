@@ -1316,6 +1316,8 @@ function createWebGLWaterController(
         uniform vec3 uSceneAmbient;
         uniform vec3 uSceneHorizon;
         uniform float uSceneElevationMood;
+        uniform float uSceneWaterSparkle;
+        uniform float uSceneSunHaze;
 
         float waterHash(vec2 p) {
           return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -1481,20 +1483,21 @@ function createWebGLWaterController(
         float fresnel = min(1.0, fresnelBase * (1.0 + shallowMask * 0.12 + (1.0 - channelDepth) * 0.06));
         vec3 reflectionTint = mix(uReflectionColor, uHighlightColor, smoothstep(0.48, 1.0, broadFlow * 0.4 + sideShimmer * 0.38 + sparkleNoise * 0.22));
         float highlightRibbon = smoothstep(0.5, 1.0, currentBands * 0.28 + directionalRipple * 0.22 + detailFlow * 0.24 + sideShimmer * 0.18 + sparkleNoise * 0.16 + actorRipple * 0.24);
-        float highlightMask = fresnel * highlightRibbon * (0.18 + slopeBoost * 0.32) * uHighlightStrength;
-        float glintMask = pow(smoothstep(0.82, 1.0, sparkleNoise * 0.45 + detailFlow * 0.35), 2.0) * (0.08 + slopeBoost * 0.18) * fresnel;
+        float sceneSparkle = 1.0 + uSceneWaterSparkle * 0.42;
+        float highlightMask = fresnel * highlightRibbon * (0.18 + slopeBoost * 0.32) * uHighlightStrength * sceneSparkle;
+        float glintMask = pow(smoothstep(0.82, 1.0, sparkleNoise * 0.45 + detailFlow * 0.35), 2.0) * (0.08 + slopeBoost * 0.18 + uSceneSunHaze * 0.04) * fresnel;
         float sparkleScatter = waterNoise(vWaterWorldPosition.xz * 0.22 + vec2(uTime * 0.18, -uTime * 0.12));
         float sparkleTwinkle = sin(uTime * 4.8 + sparkleScatter * 12.0 + vWaterFlowT * 34.0) * 0.5 + 0.5;
         float sparkleScore = sparkleScatter * 0.62 + sparkleTwinkle * 0.28 + sideShimmer * 0.1;
         float sparkleMask = pow(
           smoothstep(0.84, 1.0, sparkleScore),
           6.0
-        ) * step(0.9, sparkleScore) * shallowMask * (0.06 + fresnel * 0.32) * uSparkleStrength;
+        ) * step(0.9, sparkleScore) * shallowMask * (0.06 + fresnel * 0.32) * uSparkleStrength * sceneSparkle;
         float sparkleStroke = smoothstep(
           0.78,
           1.0,
           sin(flowUv.x * 22.0 + flowUv.y * 7.4 - uTime * uFlowSpeed * 3.4 * uFlowDirection + sparkleNoise * 3.2) * 0.5 + 0.5
-        ) * shallowMask * (0.04 + fresnel * 0.12) * uSparkleStrength * (1.0 - bankMask * 0.45);
+        ) * shallowMask * (0.04 + fresnel * 0.12) * uSparkleStrength * sceneSparkle * (1.0 - bankMask * 0.45);
         vec3 bodyFill = mix(uWaterShallow, uWaterDeep, clamp(painterDepth * 0.72 + 0.12, 0.0, 1.0));
         bodyFill = mix(bodyFill, uReflectionColor, fresnel * 0.12 + shallowMask * 0.04);
         vec3 finalWater = mix(bodyFill, waterTint, 0.58);
@@ -1553,6 +1556,7 @@ function createWebGLWaterController(
         finalWater = mix(finalWater, finalWater * uSceneSunColor, 0.06 + 0.05 * wLow);
         finalWater = mix(finalWater, finalWater * uSceneHorizon, 0.05 * (0.4 + 0.6 * wLow));
         finalWater = mix(finalWater, finalWater * uSceneAmbient, 0.05);
+        finalWater = mix(finalWater, uSceneHorizon * vec3(0.8, 1.02, 0.92), uSceneSunHaze * shallowMask * 0.018);
         vec3 waterFloor = mix(vec3(0.18, 0.5, 0.58), vec3(0.52, 0.8, 0.76), clamp(shallowMask * 0.42 + foamMask * 0.2 + uMapLookdown * 0.18, 0.0, 1.0));
         finalWater = max(finalWater, waterFloor);
         vec3 posterWater = floor(finalWater * 8.0 + 0.5) / 8.0;
@@ -1573,6 +1577,8 @@ function createWebGLWaterController(
     shader.uniforms.uSceneAmbient = { value: new Color(0.55, 0.62, 0.8) };
     shader.uniforms.uSceneHorizon = { value: new Color(0.95, 0.88, 0.82) };
     shader.uniforms.uSceneElevationMood = { value: 0 };
+    shader.uniforms.uSceneWaterSparkle = { value: 0 };
+    shader.uniforms.uSceneSunHaze = { value: 0 };
     material.userData.waterShader = shader;
   };
 
