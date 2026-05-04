@@ -19,6 +19,7 @@ import {
   GROUND_ACCELERATION,
   GROUND_DECELERATION,
   GROUND_TURN_ACCELERATION,
+  AIR_BOOST_IMPULSE,
   JUMP_BUFFER_TIME,
   JUMP_HOLD_MAX_DURATION,
   JUMP_HOLD_THRUST,
@@ -418,6 +419,37 @@ export function applyMovementPhysics(
       player.velocity.z += (player.velocity.z / horizontalSpeed) * boost;
     }
   }
+
+  // Air-boost: one-shot planar impulse on the first Shift press while airborne.
+  // Direction: current planar motion if any, else player heading. Resets on grounded
+  // or swimming so each new jump/fall gets its own boost. Disabled while jump-buffered
+  // (so a press that triggers the jump on the same frame doesn't double-fire).
+  const rollJustPressed = !runtime.rollHeldPrevFrame && input.rollHeld;
+  if (
+    rollJustPressed &&
+    !player.grounded &&
+    !player.swimming &&
+    runtime.airBoostAvailable &&
+    runtime.coyoteTimeRemaining <= 0
+  ) {
+    const planarSpeed = Math.hypot(player.velocity.x, player.velocity.z);
+    let dirX: number;
+    let dirZ: number;
+    if (planarSpeed > 0.5) {
+      dirX = player.velocity.x / planarSpeed;
+      dirZ = player.velocity.z / planarSpeed;
+    } else {
+      dirX = Math.sin(player.heading);
+      dirZ = Math.cos(player.heading);
+    }
+    player.velocity.x += dirX * AIR_BOOST_IMPULSE;
+    player.velocity.z += dirZ * AIR_BOOST_IMPULSE;
+    runtime.airBoostAvailable = false;
+  }
+  if (player.grounded || player.swimming) {
+    runtime.airBoostAvailable = true;
+  }
+  runtime.rollHeldPrevFrame = input.rollHeld;
 
   return {
     sustainedRolling,

@@ -22,6 +22,14 @@ export interface PlayerSimulationRuntime {
    * leaves the charged arc alone (hold = high jump).
    */
   jumpHoldThrustRemaining: number;
+  /** Was Shift (roll) held on the previous physics tick — used to detect press transitions for the air-boost. */
+  rollHeldPrevFrame: boolean;
+  /**
+   * One-shot air-boost availability. True after grounding/swimming, false after the
+   * boost has fired this air time. The boost itself fires once per Shift press while
+   * airborne — re-pressing without re-grounding has no effect.
+   */
+  airBoostAvailable: boolean;
 }
 
 export function createPlayerSimulationRuntime(): PlayerSimulationRuntime {
@@ -39,5 +47,7 @@ export function createPlayerSimulationRuntime(): PlayerSimulationRuntime {
     smoothedMoveY: 0,
     jumpHeldPrevFrame: false,
     jumpHoldThrustRemaining: 0,
+    rollHeldPrevFrame: false,
+    airBoostAvailable: true,
   };
 }

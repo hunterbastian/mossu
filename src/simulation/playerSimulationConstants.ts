@@ -1,18 +1,25 @@
 export const PLAYER_RADIUS = 2.2;
 export const WALK_SPEED = 18.5;
-export const ROLL_SPEED = 31;
-export const ROLL_BOOST_DELAY = 1.15;
-export const ROLL_BOOST_MULTIPLIER = 1.28;
-export const ROLL_MODE_INDICATOR_DELAY = 3;
-export const ROLL_ACCELERATION_MULTIPLIER = 1.08;
-export const ROLL_TURN_ACCELERATION = 76;
-export const ROLL_START_IMPULSE = 6.4;
-export const ROLL_COAST_DECELERATION = 10;
-export const ROLL_DRIFT_STEERING = 0.34;
-export const ROLL_REVERSE_DRIFT_STEERING = 0.18;
-export const ROLL_DRIFT_SPEED_RETENTION = 0.78;
-export const ROLL_DRIFT_MAX_SPEED_LOSS = 8.5;
-export const ROLL_REVERSE_DRIFT_MAX_SPEED_LOSS = 18;
+// Roll polish pass — "kinetic from frame one":
+// - Start impulse pops harder so the moment of entering roll has weight.
+// - Boost engages much faster (0.55s vs 1.15s), so sustained rolling rewards quickly.
+// - Boost multiplier and base speed both up so rolling feels like a different gear.
+// - Coast deceleration lowered so flat ground doesn't punish rolling.
+// - Drift steering slightly tighter and retention higher so high-speed turns feel
+//   controlled instead of yanky; reverse-drift loss halved for satisfying 180° pivots.
+export const ROLL_SPEED = 36;
+export const ROLL_BOOST_DELAY = 0.55;
+export const ROLL_BOOST_MULTIPLIER = 1.42;
+export const ROLL_MODE_INDICATOR_DELAY = 1.6;
+export const ROLL_ACCELERATION_MULTIPLIER = 1.18;
+export const ROLL_TURN_ACCELERATION = 88;
+export const ROLL_START_IMPULSE = 10;
+export const ROLL_COAST_DECELERATION = 6;
+export const ROLL_DRIFT_STEERING = 0.42;
+export const ROLL_REVERSE_DRIFT_STEERING = 0.24;
+export const ROLL_DRIFT_SPEED_RETENTION = 0.86;
+export const ROLL_DRIFT_MAX_SPEED_LOSS = 6;
+export const ROLL_REVERSE_DRIFT_MAX_SPEED_LOSS = 9;
 export const ROLL_GRAVITY_MIN_SLOPE = 0.035;
 export const ROLL_GRAVITY_FULL_SLOPE = 0.32;
 export const ROLL_SLOPE_ACCELERATION = 118;
@@ -106,6 +113,13 @@ export const JUMP_HOLD_THRUST = 40;
  * coasts ballistically even if Space is still held. Keeps "hold to charge" bounded.
  */
 export const JUMP_HOLD_MAX_DURATION = 0.35;
+/**
+ * One-shot planar impulse applied when Shift is pressed in the air. Resets on
+ * grounded or swimming. The intent is "a little boost" while flying — strong enough
+ * to extend a jump arc or recover a misjudged gap, weak enough that it doesn't replace
+ * Breeze Float for sustained traversal.
+ */
+export const AIR_BOOST_IMPULSE = 12;
 
 export interface SurfaceTraction {
   /** Multiplier on acceleration when input pushes movement (grip on push). */
