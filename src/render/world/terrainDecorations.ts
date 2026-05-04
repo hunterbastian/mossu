@@ -87,7 +87,56 @@ interface ForestComposition {
   edge: number;
 }
 
-function enableTreeLeafWindMaterial(material: Material, intensity = 1) {
+/**
+ * Per-type wind profile for hand-placed tree canopies. Each tree species has a
+ * different physics character — pines stay stiff, oaks sway broadly, birches snap
+ * crisply. The shader interpolates between these profile constants at compile time.
+ */
+interface TreeWindProfile {
+  id: string;
+  breezeFreq: number;
+  breezeAmpX: number;
+  breezeAmpZ: number;
+  flutterFreq: number;
+  flutterAmpX: number;
+  flutterAmpZ: number;
+  flutterLift: number;
+}
+
+const TREE_WIND_OAK: TreeWindProfile = {
+  id: "oak",
+  breezeFreq: 1.05,
+  breezeAmpX: 0.09,
+  breezeAmpZ: 0.044,
+  flutterFreq: 2.45,
+  flutterAmpX: 0.022,
+  flutterAmpZ: 0.014,
+  flutterLift: 0.012,
+};
+
+const TREE_WIND_PINE: TreeWindProfile = {
+  id: "pine",
+  breezeFreq: 0.78,
+  breezeAmpX: 0.052,
+  breezeAmpZ: 0.026,
+  flutterFreq: 1.85,
+  flutterAmpX: 0.009,
+  flutterAmpZ: 0.006,
+  flutterLift: 0.005,
+};
+
+const TREE_WIND_BIRCH: TreeWindProfile = {
+  id: "birch",
+  breezeFreq: 1.18,
+  breezeAmpX: 0.082,
+  breezeAmpZ: 0.04,
+  flutterFreq: 3.35,
+  flutterAmpX: 0.036,
+  flutterAmpZ: 0.022,
+  flutterLift: 0.018,
+};
+
+function enableTreeLeafWindMaterial(material: Material, profile: TreeWindProfile = TREE_WIND_OAK, intensity = 1) {
   if (material.userData.treeLeafWindEnabled) {
     return;
   }
@@ -95,14 +144,26 @@ function enableTreeLeafWindMaterial(material: Material, intensity = 1) {
   const originalCompile = material.onBeforeCompile.bind(material);
   const originalProgramKey = material.customProgramCacheKey.bind(material);
   const windIntensity = intensity.toFixed(2);
+  const breezeFreq = profile.breezeFreq.toFixed(3);
+  const breezeAmpX = profile.breezeAmpX.toFixed(4);
+  const breezeAmpZ = profile.breezeAmpZ.toFixed(4);
+  const flutterFreq = profile.flutterFreq.toFixed(3);
+  const flutterAmpX = profile.flutterAmpX.toFixed(4);
+  const flutterAmpZ = profile.flutterAmpZ.toFixed(4);
+  const flutterLift = profile.flutterLift.toFixed(4);
   material.onBeforeCompile = (shader: MaterialCompileShader, renderer: MaterialCompileRenderer) => {
     originalCompile(shader, renderer);
     shader.uniforms.uTime = { value: 0 };
+    // Vertex shader: per-type wind motion + per-tree hue jitter computed from the
+    // tree's world translation. modelMatrix[3].xyz is unique per hand-placed tree, so
+    // the hash produces visible variation across instances of the same builder. The
+    // varying carries the resulting tint to the fragment shader.
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
         `#include <common>
-uniform float uTime;`,
+uniform float uTime;
+varying vec3 vMossuLeafTint;`,
       )
       .replace(
         "#include <begin_vertex>",
@@ -110,24 +171,46 @@ uniform float uTime;`,
 vec3 mossuLeafWorld = (modelMatrix * vec4(position, 1.0)).xyz;
 float mossuLeafFacing = smoothstep(-0.35, 0.85, normal.y * 0.5 + 0.5);
 float mossuLeafCrown = smoothstep(0.0, 1.0, position.y * 0.08 + 0.35);
-float mossuLeafBreeze = sin(uTime * 1.05 + mossuLeafWorld.x * 0.055 + mossuLeafWorld.z * 0.041);
-float mossuLeafFlutter = sin(uTime * 2.45 + mossuLeafWorld.x * 0.13 - mossuLeafWorld.z * 0.09);
+float mossuLeafBreeze = sin(uTime * ${breezeFreq} + mossuLeafWorld.x * 0.055 + mossuLeafWorld.z * 0.041);
+float mossuLeafFlutter = sin(uTime * ${flutterFreq} + mossuLeafWorld.x * 0.13 - mossuLeafWorld.z * 0.09);
 float mossuLeafWind = ${windIntensity} * mossuLeafFacing * mossuLeafCrown;
-transformed.x += (mossuLeafBreeze * 0.09 + mossuLeafFlutter * 0.022) * mossuLeafWind;
-transformed.z += (mossuLeafBreeze * 0.044 - mossuLeafFlutter * 0.014) * mossuLeafWind;
-transformed.y += mossuLeafFlutter * 0.012 * mossuLeafWind;`,
+transformed.x += (mossuLeafBreeze * ${breezeAmpX} + mossuLeafFlutter * ${flutterAmpX}) * mossuLeafWind;
+transformed.z += (mossuLeafBreeze * ${breezeAmpZ} - mossuLeafFlutter * ${flutterAmpZ}) * mossuLeafWind;
+transformed.y += mossuLeafFlutter * ${flutterLift} * mossuLeafWind;
+vec3 mossuTreeSeed = modelMatrix[3].xyz;
+float mossuJitterA = fract(sin(dot(mossuTreeSeed, vec3(91.71, 31.13, 17.97))) * 43758.5453);
+float mossuJitterB = fract(sin(dot(mossuTreeSeed, vec3(31.13, 91.71, 41.31))) * 43758.5453);
+vMossuLeafTint = vec3(
+  mix(0.92, 1.06, mossuJitterA),
+  mix(0.94, 1.04, mossuJitterB),
+  mix(0.94, 1.02, mossuJitterA * 0.6 + mossuJitterB * 0.4)
+);`,
+      );
+    // Fragment shader: read the per-tree tint and modulate the outgoing color so each
+    // tree of the same builder reads as a slightly different individual.
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+varying vec3 vMossuLeafTint;`,
+      )
+      .replace(
+        "#include <output_fragment>",
+        `#include <output_fragment>
+gl_FragColor.rgb *= vMossuLeafTint;`,
       );
     material.userData.windShader = shader;
   };
-  material.customProgramCacheKey = () => `${originalProgramKey()}-${TREE_LEAF_WIND_CACHE_KEY}-${windIntensity}`;
+  material.customProgramCacheKey = () =>
+    `${originalProgramKey()}-${TREE_LEAF_WIND_CACHE_KEY}-${profile.id}-${windIntensity}`;
   material.userData.treeLeafWindEnabled = true;
 }
 
-function markTreeLeafWind<T extends Mesh>(mesh: T, intensity = 1) {
+function markTreeLeafWind<T extends Mesh>(mesh: T, profile: TreeWindProfile = TREE_WIND_OAK, intensity = 1) {
   mesh.userData.treeLeafWind = true;
   const material = mesh.material;
   if (!Array.isArray(material)) {
-    enableTreeLeafWindMaterial(material, intensity);
+    enableTreeLeafWindMaterial(material, profile, intensity);
   }
   return mesh;
 }
@@ -793,7 +876,8 @@ function makeWindTreeMaterial(kind: "round" | "pine" = "round") {
         `#include <common>
 attribute float windWeight;
 uniform float uTime;
-varying float vFoliage;`,
+varying float vFoliage;
+varying vec3 vTreeTint;`,
       )
       .replace(
         "#include <begin_vertex>",
@@ -816,7 +900,15 @@ quickFlutter *= treeDetailLod * highlandDamp;
 float gust = sin(uTime * 1.9 + treeRoot.x * 0.07 + treeRoot.z * 0.055) * 0.12;
 transformed.x += (slowSway + quickFlutter + gust) * 0.19 * windWeight;
 transformed.z += (slowSway * 0.07 + quickFlutter * 0.14) * windWeight;
-transformed.y += quickFlutter * 0.035 * windWeight;`
+transformed.y += quickFlutter * 0.035 * windWeight;
+// Per-tree hue jitter so a forest of identical instances reads as varied individuals.
+float treeJitterA = fract(sin(dot(treeRoot, vec3(91.71, 31.13, 17.97))) * 43758.5453);
+float treeJitterB = fract(sin(dot(treeRoot, vec3(31.13, 91.71, 41.31))) * 43758.5453);
+vTreeTint = vec3(
+  mix(0.92, 1.06, treeJitterA),
+  mix(0.94, 1.04, treeJitterB),
+  mix(0.94, 1.02, treeJitterA * 0.6 + treeJitterB * 0.4)
+);`
           : `#include <begin_vertex>
 vFoliage = windWeight;
 #ifdef USE_INSTANCING
@@ -837,13 +929,22 @@ float gust = sin(uTime * 2.4 + treeRoot.x * 0.09 + treeRoot.z * 0.07) * 0.06;
 float needleShimmer = sin(uTime * 5.8 + treeRoot.x * 0.21 + treeRoot.z * 0.17) * 0.18 * treeDetailLod;
 transformed.x += (slowSway + quickFlutter + gust) * 0.09 * windWeight;
 transformed.z += (slowSway * 0.04 + quickFlutter * 0.07) * windWeight;
-transformed.y += (quickFlutter * 0.06 + needleShimmer * 0.05) * windWeight;`,
+transformed.y += (quickFlutter * 0.06 + needleShimmer * 0.05) * windWeight;
+// Per-tree hue jitter — slightly narrower range for pines to keep the cool-needle read.
+float treeJitterA = fract(sin(dot(treeRoot, vec3(91.71, 31.13, 17.97))) * 43758.5453);
+float treeJitterB = fract(sin(dot(treeRoot, vec3(31.13, 91.71, 41.31))) * 43758.5453);
+vTreeTint = vec3(
+  mix(0.94, 1.04, treeJitterA),
+  mix(0.92, 1.06, treeJitterB),
+  mix(0.96, 1.02, treeJitterA * 0.6 + treeJitterB * 0.4)
+);`,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "#include <common>",
         `#include <common>
 varying float vFoliage;
+varying vec3 vTreeTint;
 uniform vec3 uSceneSunColor;
 uniform vec3 uSceneAmbient;
 uniform vec3 uSceneHorizon;
@@ -863,7 +964,9 @@ outgoingLight = mix( outgoingLight, outgoingLight * uSceneAmbient, 0.04 * ff );
 outgoingLight *= 1.0 - uSceneCloudShadow * ff * 0.08;
 outgoingLight = mix( outgoingLight, uSceneHorizon * length(outgoingLight), uSceneSunHaze * ff * 0.035 );
 outgoingLight += vec3(0.04,0.05,0.02) * ff;
-outgoingLight = mix( outgoingLight, ( outgoingLight * 0.88 + uSceneHorizon * 0.22 * length(outgoingLight) ) * 1.12, 0.1 * ff );`,
+outgoingLight = mix( outgoingLight, ( outgoingLight * 0.88 + uSceneHorizon * 0.22 * length(outgoingLight) ) * 1.12, 0.1 * ff );
+// Per-tree hue jitter — only modulates foliage so trunks stay consistent across instances.
+outgoingLight *= mix( vec3(1.0), vTreeTint, ff );`,
       );
     shader.uniforms.uSceneSunColor = { value: new Color("#fff8e8") };
     shader.uniforms.uSceneAmbient = { value: new Color("#b8c8e0") };
@@ -873,7 +976,7 @@ outgoingLight = mix( outgoingLight, ( outgoingLight * 0.88 + uSceneHorizon * 0.2
     shader.uniforms.uSceneSunHaze = { value: 0 };
     material.userData.windShader = shader;
   };
-  material.customProgramCacheKey = () => "mossu-instanced-tree-wind-ghibli";
+  material.customProgramCacheKey = () => `mossu-instanced-tree-wind-ghibli-jitter-${kind}`;
   return material;
 }
 
@@ -1004,6 +1107,7 @@ function makeRoundTree(scale: number, leafColor: string) {
         new SphereGeometry((s as number) * scaledSize, 12, 8),
         new MeshLambertMaterial({ color: makeTint(leafColor, "#1e3a24", 0.2) }),
       ),
+      TREE_WIND_OAK,
       0.72,
     );
     puff.position.set((x as number) * scaledSize, (y as number) * scaledSize, (z as number) * scaledSize);
@@ -1013,6 +1117,7 @@ function makeRoundTree(scale: number, leafColor: string) {
   for (const [x, y, z, s] of [[0.4, 4.85, 0.1, 0.26]]) {
     const puff = markTreeLeafWind(
       new Mesh(new SphereGeometry((s as number) * scaledSize, 12, 8), leafLightMaterial),
+      TREE_WIND_OAK,
       0.72,
     );
     puff.position.set((x as number) * scaledSize, (y as number) * scaledSize, (z as number) * scaledSize);
@@ -1072,13 +1177,18 @@ function makePineTree(scale: number, tone = "#5b7d4d") {
     if (layer.sx) {
       geom.scale(layer.sx, 1, layer.sz ?? 1);
     }
-    const mesh = markTreeLeafWind(new Mesh(geom, new MeshLambertMaterial({ color: layer.color })), 0.82);
+    const mesh = markTreeLeafWind(
+      new Mesh(geom, new MeshLambertMaterial({ color: layer.color })),
+      TREE_WIND_PINE,
+      0.82,
+    );
     mesh.position.y = layer.y * scaledSize;
     group.add(mesh);
   }
 
   const hip = markTreeLeafWind(
     new Mesh(new SphereGeometry(0.17 * scaledSize, 14, 9), new MeshLambertMaterial({ color: tTop })),
+    TREE_WIND_PINE,
     0.7,
   );
   hip.scale.set(0.52, 0.4, 0.5);
@@ -1126,7 +1236,10 @@ function makeBirchGroveTree(scale: number, leafColor: string = forestGroveProps.
     [0.64, 4.26, -0.12, 0.74, 0.52, 0.7, leafMaterial],
     [0.12, 4.88, 0.22, 0.56, 0.38, 0.52, leafLightMaterial],
   ] as const) {
-    const leaf = markTreeLeafWind(new Mesh(new SphereGeometry(scaledSize, 14, 10), material as MeshLambertMaterial));
+    const leaf = markTreeLeafWind(
+      new Mesh(new SphereGeometry(scaledSize, 14, 10), material as MeshLambertMaterial),
+      TREE_WIND_BIRCH,
+    );
     leaf.scale.set(sx as number, sy as number, sz as number);
     leaf.position.set((x as number) * scaledSize, (y as number) * scaledSize, (z as number) * scaledSize);
     group.add(leaf);
@@ -1208,6 +1321,7 @@ function makeRoundSapling(scale: number, leafColor: string) {
   ] as const) {
     const leaf = markTreeLeafWind(
       new Mesh(new SphereGeometry((size as number) * scale, 8, 6), mat as MeshLambertMaterial),
+      TREE_WIND_OAK,
       0.64,
     );
     leaf.scale.set(1.16, 0.78, 1.04);
@@ -1236,7 +1350,11 @@ function makePineSapling(scale: number, tone = "#668a55") {
   ] as const) {
     const g = new ConeGeometry((radius as number) * scale, (height as number) * scale, 8);
     g.rotateY(rot as number);
-    const cone = markTreeLeafWind(new Mesh(g, new MeshLambertMaterial({ color: y > 1.4 ? c2 : c1 })), 0.66);
+    const cone = markTreeLeafWind(
+      new Mesh(g, new MeshLambertMaterial({ color: y > 1.4 ? c2 : c1 })),
+      TREE_WIND_PINE,
+      0.66,
+    );
     cone.position.y = (y as number) * scale;
     group.add(cone);
   }
@@ -4909,6 +5027,7 @@ export function buildLandmarkTrees() {
     ]) {
       const leaf = markTreeLeafWind(
         new Mesh(new SphereGeometry((size as number) * 0.92, 10, 8), y > 7.5 ? topMat : color),
+        TREE_WIND_OAK,
         0.34,
       );
       leaf.position.set(ox as number, y as number, oz as number);
@@ -4918,7 +5037,7 @@ export function buildLandmarkTrees() {
       [4.2, 0.5, 0, 0],
       [5.1, 0.36, 0.6, 0.2],
     ]) {
-      const sub = markTreeLeafWind(new Mesh(new SphereGeometry(s as number, 8, 6), color), 0.3);
+      const sub = markTreeLeafWind(new Mesh(new SphereGeometry(s as number, 8, 6), color), TREE_WIND_OAK, 0.3);
       sub.position.set(ox as number, y as number, oz as number);
       tree.add(sub);
     }
