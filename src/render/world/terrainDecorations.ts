@@ -456,19 +456,21 @@ function buildInstancedTreePlacements(kind: InstancedForestKind) {
     }
 
     const zone = sampleBiomeZone(x, z, y);
-    const scaleBase = kind === "round" ? 0.88 + forestHash(x, z, 59) * 0.42 : 0.86 + forestHash(x, z, 61) * 0.48;
-    const altitudeScale = zone === "ridge" || zone === "alpine" ? 1.08 : zone === "foothills" ? 1 : 0.92;
-    const edgeLift = 1 + sampleForestComposition(x, z, y).edge * 0.1;
+    // Tightened base variance and pillar lift after the Ghibli silhouette rebuild —
+    // the new geometries are intrinsically larger (more canopy bulbs on oak, taller
+    // pine trunk) so the previous 0.88-1.30 spread + 1.42x vertical pillar lift was
+    // producing a "tiny vs huge trees" read on screen.
+    const scaleBase = kind === "round" ? 0.96 + forestHash(x, z, 59) * 0.22 : 0.94 + forestHash(x, z, 61) * 0.24;
+    const altitudeScale = zone === "ridge" || zone === "alpine" ? 1.05 : zone === "foothills" ? 1 : 0.94;
+    const edgeLift = 1 + sampleForestComposition(x, z, y).edge * 0.08;
 
-    // Vertical lift: ~30% of trees become old-growth pillars (1.18-1.42x Y),
-    // the rest stay uniform. Bias toward pillars in foothills/forest where the
-    // spec wants the connected-canopy ceiling broken by occasional towering
-    // older trees. Pines lift more dramatically than rounded broadleaf since
-    // their conical silhouette reads as "tallest in the stand" naturally.
+    // Vertical lift: ~30% of trees become old-growth pillars (subtler 1.10-1.22x Y).
+    // Bias toward pillars in foothills/forest where the spec wants the connected-canopy
+    // ceiling broken by occasional towering older trees.
     const pillarHash = forestHash(x, z, kind === "round" ? 113 : 127);
     const pillarChance =
-      zone === "foothills" || zone === "alpine" || zone === "ridge" ? 0.34 : zone === "hills" ? 0.22 : 0.12;
-    const pillarStrength = kind === "pine" ? 1.42 : 1.28;
+      zone === "foothills" || zone === "alpine" || zone === "ridge" ? 0.32 : zone === "hills" ? 0.2 : 0.1;
+    const pillarStrength = kind === "pine" ? 1.22 : 1.16;
     const verticalLift =
       pillarHash < pillarChance ? 1.0 + (pillarStrength - 1.0) * (0.6 + forestHash(x, z, 131) * 0.4) : 1.0;
 
@@ -546,44 +548,55 @@ function transformGeometry(
 }
 
 function makeRoundForestGeometry() {
-  // Storybook broadleaf: warm bark, 3-lobe crown, fewer noisy micro-puffs
-  const bark = "#7a5a3a";
+  // Ghibli oak: cluster-of-bulbs canopy forming a cloud silhouette, flared trunk base,
+  // visible silhouette branches between bulbs, exaggerated canopy:trunk ratio. Reads
+  // as Totoro's camphor — disproportionate leaf mass, painterly soft volumes, dark
+  // underside contrast against bright sunlit top.
+  const bark = "#6e5132";
   const softBark = "#b8956a";
-  const rootBark = "#5c4228";
-  const leafBase = "#6ba848";
-  const leafLight = "#cde87a";
-  const leafMist = "#9dcc88";
-  const leafShade = "#4f7744";
-  const leafDeep = "#3b623a";
-  const leafInk = "#335934";
+  const rootBark = "#4f3a24";
+  const branchInk = "#3d2c1c";
+  const leafBase = "#62a046";
+  const leafLight = "#d3ec80";
+  const leafCrown = "#e6f59a";
+  const leafMist = "#9fce86";
+  const leafShade = "#487044";
+  const leafDeep = "#365b3a";
+  const leafInk = "#27452f";
 
-  const trunk = new CylinderGeometry(0.3, 0.58, 3.5, 18);
-  trunk.translate(0, 1.75, 0);
-  const trunkHighlight = transformGeometry(new SphereGeometry(0.22, 9, 7), {
-    scale: [0.72, 4.8, 0.3],
-    rotation: [0, 0.15, -0.12],
-    position: [0.18, 1.9, 0.32],
+  // Wider, shorter trunk with a strong root flare so canopy mass reads as supported.
+  const trunk = new CylinderGeometry(0.32, 0.74, 2.95, 20);
+  trunk.translate(0, 1.475, 0);
+  const trunkHighlight = transformGeometry(new SphereGeometry(0.24, 9, 7), {
+    scale: [0.68, 3.9, 0.28],
+    rotation: [0, 0.15, -0.1],
+    position: [0.2, 1.55, 0.3],
   });
-  const trunkMossNub = transformGeometry(new SphereGeometry(0.1, 6, 5), {
-    position: [-0.2, 1.1, 0.28],
+  const trunkMossNub = transformGeometry(new SphereGeometry(0.12, 6, 5), {
+    position: [-0.22, 0.98, 0.3],
   });
 
-  const rootParts = Array.from({ length: 6 }, (_, index) => {
-    const angle = (index / 6) * Math.PI * 2 + 0.08;
-    const s = 0.34 + (index % 3) * 0.05;
+  // 8-spoke flared root plate — wider, lower, more dramatic than the previous 6-spoke.
+  const rootParts = Array.from({ length: 8 }, (_, index) => {
+    const angle = (index / 8) * Math.PI * 2 + 0.06;
+    const s = 0.42 + (index % 3) * 0.08;
     return transformGeometry(new SphereGeometry(1, 10, 7), {
-      scale: [s, 0.16 + (index % 2) * 0.03, 0.8 + (index % 2) * 0.08],
-      rotation: [0.1, angle, (index % 2) * 0.1],
-      position: [Math.cos(angle) * 0.45, 0.16, Math.sin(angle) * 0.45],
+      scale: [s, 0.18 + (index % 2) * 0.04, 1.05 + (index % 2) * 0.12],
+      rotation: [0.08, angle, (index % 2) * 0.12],
+      position: [Math.cos(angle) * 0.52, 0.14, Math.sin(angle) * 0.52],
     });
   });
 
+  // Visible silhouette branches that poke between canopy bulbs — Ghibli reads them
+  // as dark linework through the cloud of leaves.
   const branchParts = [
-    [-0.26, 2.7, 0.1, 0.1, 0.2, 0.88],
-    [0.28, 2.85, -0.06, -0.08, -0.24, 0.82],
-    [0.1, 3.2, 0.24, 0.1, 0.16, 0.6],
+    [-0.32, 2.5, 0.12, 0.18, 0.32, 1.2],
+    [0.36, 2.62, -0.08, -0.12, -0.34, 1.1],
+    [0.12, 3.0, 0.36, 0.16, 0.18, 0.95],
+    [-0.18, 2.95, -0.34, -0.18, -0.12, 0.88],
+    [0.05, 3.4, 0.05, 0.04, 0.06, 0.7],
   ].map(([x, y, z, pitch, roll, len]) =>
-    transformGeometry(new CylinderGeometry(0.04, 0.1, len as number, 10), {
+    transformGeometry(new CylinderGeometry(0.05, 0.13, len as number, 10), {
       rotation: [pitch as number, 0, roll as number],
       position: [x as number, y as number, z as number],
     }),
@@ -592,28 +605,42 @@ function makeRoundForestGeometry() {
   const sphereSeg = 16;
   const sphereRow = 11;
 
-  // Three dominant ellipsoids + back/side fill (readable silhouette)
+  // Cluster-of-bulbs canopy. 14 bulbs total: 1 main center mass, 6 mid-ring bulbs,
+  // 4 top crown bulbs (light), 3 underside shadow bulbs. Together they read as a
+  // single pillowy cloud, not a sphere. Coordinates organize as concentric rings.
   const canopyParts = [
-    [0, 4.1, 0, 1.75, 1.02, 1.38, leafBase],
-    [-0.95, 3.9, 0.12, 1.1, 0.7, 0.98, leafShade],
-    [0.95, 3.95, 0, 1.12, 0.7, 0.96, leafMist],
-    [-1.32, 3.48, 0.04, 0.72, 0.28, 0.82, leafInk],
-    [1.3, 3.5, -0.02, 0.72, 0.28, 0.8, leafShade],
-    [-0.4, 4.7, -0.2, 0.9, 0.55, 0.9, leafLight],
-    [0.5, 4.6, 0.2, 0.88, 0.58, 0.88, leafLight],
-    [-0.15, 3.5, 0.55, 0.82, 0.48, 0.7, leafDeep],
-    [0.15, 3.5, -0.58, 0.82, 0.5, 0.72, leafShade],
-    [0, 5.05, 0.02, 0.64, 0.34, 0.62, leafLight],
+    // Main center mass — bigger than before, slightly lifted
+    [0, 4.05, 0, 1.95, 1.18, 1.55, leafBase],
+    // Mid-ring (6 bulbs around the equator)
+    [-1.18, 3.95, 0.18, 1.18, 0.78, 1.05, leafShade],
+    [1.18, 4.0, -0.05, 1.2, 0.78, 1.02, leafMist],
+    [-0.6, 3.85, 0.95, 1.02, 0.72, 0.92, leafShade],
+    [0.65, 3.88, -0.92, 1.0, 0.72, 0.92, leafMist],
+    [-0.85, 4.1, -0.55, 0.94, 0.72, 0.88, leafBase],
+    [0.9, 4.05, 0.55, 0.94, 0.72, 0.88, leafBase],
+    // Top crown (4 lighter bulbs above mid-ring — sun-catching layer)
+    [-0.42, 4.85, -0.2, 1.05, 0.65, 1.05, leafLight],
+    [0.5, 4.78, 0.22, 1.02, 0.65, 1.02, leafLight],
+    [0, 5.18, 0.02, 0.86, 0.55, 0.82, leafCrown],
+    [0.18, 5.4, -0.18, 0.6, 0.4, 0.6, leafCrown],
+    // Underside shadow bulbs (anchor base of canopy, dark contrast)
+    [-1.45, 3.55, 0.06, 0.78, 0.32, 0.86, leafInk],
+    [1.42, 3.58, -0.04, 0.78, 0.32, 0.84, leafInk],
+    [0, 3.42, 0, 1.4, 0.34, 1.1, leafDeep],
   ] as const;
 
+  // Inner trunk-shadow puff to anchor canopy to trunk visually
   const puffParts = [
-    [0, 2.9, 0, 0.36, makeTint(leafBase, leafDeep, 0.2)],
-    [0.4, 4.85, 0.1, 0.26, leafLight],
+    [0, 2.95, 0, 0.46, makeTint(leafBase, leafDeep, 0.32)],
+    [0.42, 5.05, 0.1, 0.32, leafCrown],
+    [-0.46, 5.0, -0.05, 0.3, leafLight],
   ] as const;
 
+  // Tiny blossom/fruit accents (same as before — readable warm dots)
   const blossomParts = [
-    [0.65, 4.0, 0.7, "#fff2c8", 0.14],
-    [-0.55, 3.6, 0.65, "#f0c878", 0.12],
+    [0.75, 4.18, 0.78, "#fff2c8", 0.14],
+    [-0.62, 3.75, 0.7, "#f0c878", 0.12],
+    [0.05, 5.45, 0.2, "#fff5d4", 0.1],
   ] as const;
 
   return mergeTreeGeometry([
@@ -621,7 +648,7 @@ function makeRoundForestGeometry() {
     { geometry: trunkHighlight, color: softBark, windWeight: 0 },
     { geometry: trunkMossNub, color: makeTint(softBark, "#4a6a3a", 0.4), windWeight: 0 },
     ...rootParts.map((geometry) => ({ geometry, color: rootBark, windWeight: 0 })),
-    ...branchParts.map((geometry) => ({ geometry, color: rootBark, windWeight: 0.2 })),
+    ...branchParts.map((geometry) => ({ geometry, color: branchInk, windWeight: 0.18 })),
     ...canopyParts.map(([x, y, z, sx, sy, sz, color]) => ({
       geometry: transformGeometry(new SphereGeometry(1, sphereSeg, sphereRow), {
         scale: [sx, sy, sz],
@@ -650,58 +677,109 @@ function makeRoundForestGeometry() {
 }
 
 function makePineForestGeometry() {
-  const segs = 24;
-  const trunk = new CylinderGeometry(0.16, 0.3, 4.6, 18);
-  trunk.translate(0, 2.3, 0);
-  const wood = "#5c4736";
-  const t1 = "#4f6d49";
-  const t2 = "#5f8052";
-  const t3 = "#71945f";
-  const t4 = "#86ad70";
-  const t5 = "#9cc982";
-  const tTop = "#c0dc9a";
-  const tInk = "#365b3b";
+  // Ghibli pine: tall slim trunk with visible inner branches and needle puffs at branch
+  // tips. Replaces the previous concentric-cone stack which read as Christmas-tree-like.
+  // Reads as Totoro forest pine — sparse silhouette branches with dense puff clusters.
+  const wood = "#54402f";
+  const branchInk = "#3a2c1f";
+  const t1 = "#465f3f"; // base shadow needle
+  const t2 = "#587548"; // mid shade
+  const t3 = "#6c8a55"; // mid lit
+  const t4 = "#82a766"; // upper
+  const t5 = "#9bc97a"; // tip puff
+  const tCrown = "#bcd99a"; // top crown highlight
 
-  const baseShadow = new ConeGeometry(1.44, 0.92, segs);
-  baseShadow.rotateY(0.16);
-  baseShadow.scale(1.08, 0.82, 0.96);
-  baseShadow.translate(0, 2.02, 0);
-  const lower = new ConeGeometry(1.32, 2.1, segs);
-  lower.rotateY(0.5);
-  lower.translate(0, 2.4, 0);
-  const lowMid = new ConeGeometry(1.1, 1.85, segs);
-  lowMid.rotateY(1.25);
-  lowMid.scale(1.04, 1, 0.96);
-  lowMid.translate(0, 3.2, 0);
-  const middle = new ConeGeometry(0.95, 1.75, segs);
-  middle.rotateY(0.15);
-  middle.translate(0, 3.95, 0);
-  const upper = new ConeGeometry(0.76, 1.5, segs);
-  upper.rotateY(0.95);
-  upper.translate(0, 4.7, 0);
-  const tip = new ConeGeometry(0.42, 1.1, segs);
-  tip.scale(0.86, 1.08, 0.86);
-  tip.translate(0, 5.5, 0);
-  const hip = transformGeometry(new SphereGeometry(0.34, 14, 9), {
-    scale: [0.52, 0.4, 0.5],
-    position: [0, 5.8, 0],
+  const trunk = new CylinderGeometry(0.14, 0.34, 5.4, 18);
+  trunk.translate(0, 2.7, 0);
+
+  // 6-sided root flare so the tall pine doesn't look perched
+  const rootParts = Array.from({ length: 6 }, (_, index) => {
+    const angle = (index / 6) * Math.PI * 2;
+    return transformGeometry(new SphereGeometry(1, 8, 6), {
+      scale: [0.28, 0.14, 0.6],
+      rotation: [0.06, angle, 0],
+      position: [Math.cos(angle) * 0.32, 0.1, Math.sin(angle) * 0.32],
+    });
   });
-  // Dead stub for silhouette break (tucked under mid tier)
-  const stub = transformGeometry(new CylinderGeometry(0.04, 0.08, 0.5, 10), {
-    rotation: [0, 0, 0.5],
-    position: [0.42, 3.5, 0.2],
+
+  // Inner branches: dark cylinders pointing outward at varying heights and angles.
+  // Each branch is a thin stick that anchors a needle puff at its tip.
+  const branchSpecs: Array<[x: number, y: number, z: number, pitch: number, roll: number, length: number]> = [
+    // height, angle pairs forming a spiral up the trunk
+    [0.0, 1.9, 0.0, 0.0, 0.95, 1.5], // east, low
+    [0.0, 2.4, 0.0, 0.0, -0.95, 1.4], // west, low-mid
+    [0.0, 2.85, 0.0, 0.95, 0.0, 1.3], // south, mid (roll about x rotates around z)
+    [0.0, 3.25, 0.0, -0.95, 0.0, 1.25], // north, mid
+    [0.0, 3.65, 0.0, 0.0, 0.85, 1.1], // east, upper-mid
+    [0.0, 4.05, 0.0, 0.0, -0.85, 1.0], // west, upper
+    [0.0, 4.45, 0.0, 0.85, 0.0, 0.9], // south, upper
+    [0.0, 4.85, 0.0, -0.85, 0.0, 0.8], // north, top
+  ];
+  const branchParts = branchSpecs.map(([x, y, z, pitch, roll, len]) =>
+    transformGeometry(new CylinderGeometry(0.045, 0.08, len, 8), {
+      rotation: [pitch, 0, roll],
+      position: [x, y + len * 0.5 * Math.cos(Math.max(Math.abs(pitch), Math.abs(roll))), z],
+    }),
+  );
+
+  // Needle puffs at the END of each branch. We approximate the tip position by
+  // pushing along the branch's outward direction.
+  function puffAt(branchIndex: number, color: string, sizeMult = 1.0, windWeight = 0.95) {
+    const [, y, , pitch, roll, len] = branchSpecs[branchIndex];
+    // Outward direction from rotation
+    const dirX = Math.sin(roll) * Math.cos(pitch);
+    const dirZ = -Math.sin(pitch) * Math.cos(roll);
+    const dirY = Math.cos(pitch) * Math.cos(roll) - 1; // small vertical droop
+    const tipX = dirX * (len * 0.95);
+    const tipZ = dirZ * (len * 0.95);
+    const tipY = y + dirY * (len * 0.42) + 0.2;
+    return {
+      geometry: transformGeometry(new SphereGeometry(1, 12, 9), {
+        scale: [0.78 * sizeMult, 0.62 * sizeMult, 0.78 * sizeMult],
+        position: [tipX, tipY, tipZ],
+      }),
+      color,
+      windWeight,
+    };
+  }
+
+  const tipPuffs = [
+    puffAt(0, t1, 1.05, 0.78), // low east
+    puffAt(1, t2, 1.05, 0.78), // low west
+    puffAt(2, t2, 1.0, 0.85), // mid south
+    puffAt(3, t3, 1.0, 0.85), // mid north
+    puffAt(4, t3, 0.92, 0.92), // upper east
+    puffAt(5, t4, 0.92, 0.92), // upper west
+    puffAt(6, t4, 0.84, 0.95), // upper south
+    puffAt(7, t5, 0.78, 1.0), // top north
+  ];
+
+  // Inner shadow puffs near the trunk to fill the volume so silhouette doesn't read
+  // as a stick with floating dots.
+  const innerPuffs = [
+    transformGeometry(new SphereGeometry(1, 12, 8), { scale: [0.6, 0.5, 0.6], position: [0, 2.6, 0] }),
+    transformGeometry(new SphereGeometry(1, 12, 8), { scale: [0.55, 0.5, 0.55], position: [0, 3.4, 0] }),
+    transformGeometry(new SphereGeometry(1, 12, 8), { scale: [0.5, 0.45, 0.5], position: [0, 4.2, 0] }),
+    transformGeometry(new SphereGeometry(1, 12, 8), { scale: [0.42, 0.4, 0.42], position: [0, 4.95, 0] }),
+  ];
+
+  // Crown puff at top — slightly larger to anchor the tip
+  const crownPuff = transformGeometry(new SphereGeometry(1, 12, 9), {
+    scale: [0.52, 0.5, 0.52],
+    position: [0.04, 5.45, 0.04],
   });
 
   return mergeTreeGeometry([
     { geometry: trunk, color: wood, windWeight: 0 },
-    { geometry: stub, color: makeTint(wood, "#7a6448", 0.3), windWeight: 0 },
-    { geometry: baseShadow, color: tInk, windWeight: 0.62 },
-    { geometry: lower, color: t1, windWeight: 0.78 },
-    { geometry: lowMid, color: t2, windWeight: 0.86 },
-    { geometry: middle, color: t3, windWeight: 0.92 },
-    { geometry: upper, color: t4, windWeight: 0.98 },
-    { geometry: tip, color: t5, windWeight: 1 },
-    { geometry: hip, color: tTop, windWeight: 0.85 },
+    ...rootParts.map((geometry) => ({ geometry, color: makeTint(wood, "#3a2c1f", 0.32), windWeight: 0 })),
+    ...branchParts.map((geometry) => ({ geometry, color: branchInk, windWeight: 0.16 })),
+    ...innerPuffs.map((geometry, i) => ({
+      geometry,
+      color: i < 2 ? t1 : t2,
+      windWeight: 0.55 + i * 0.08,
+    })),
+    ...tipPuffs,
+    { geometry: crownPuff, color: tCrown, windWeight: 0.92 },
   ]);
 }
 
