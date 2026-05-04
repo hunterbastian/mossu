@@ -23,6 +23,7 @@ import {
 } from "three";
 import {
   STARTING_WATER_POOLS,
+  biomeThresholdLandmarks,
   isInsideIslandPlayableBounds,
   sampleBiomeZone,
   sampleHabitatLayer,
@@ -4642,6 +4643,152 @@ export function buildHighlandAccents() {
     addHighlandObject(makeAlpineHerbCluster(scale, z > 168 ? "#e4e2c2" : "#fff0b3"), x, z, 0.04, yaw);
   });
 
+  return group;
+}
+
+// === Biome threshold landmarks ===
+//
+// Hero props placed at biome boundaries so the player feels the crossing. Cairns and
+// silhouette pines sit at the points where one zone gives way to the next; their
+// positions also feed sampleRouteReadabilityClearing so the immediate canopy thins
+// out around them.
+
+function makeMossCairn(scale: number) {
+  const group = new Group();
+  group.name = "biome-threshold-moss-cairn";
+  const stoneA = new MeshLambertMaterial({ color: "#8a877c" });
+  const stoneB = new MeshLambertMaterial({ color: "#9b9683" });
+  const stoneC = new MeshLambertMaterial({ color: "#a39d8a" });
+  const moss = new MeshLambertMaterial({ color: "#5d8a52" });
+  const layers: ReadonlyArray<{ y: number; r: number; color: MeshLambertMaterial; sx: number; sz: number }> = [
+    { y: 0.4, r: 1.1, color: stoneA, sx: 1.0, sz: 0.96 },
+    { y: 1.0, r: 0.86, color: stoneB, sx: 1.04, sz: 0.92 },
+    { y: 1.5, r: 0.62, color: stoneC, sx: 0.94, sz: 1.0 },
+    { y: 1.86, r: 0.42, color: stoneB, sx: 1.0, sz: 1.0 },
+  ];
+  for (const layer of layers) {
+    const stone = markCameraCollider(new Mesh(new SphereGeometry(layer.r * scale, 8, 6), layer.color));
+    stone.scale.set(layer.sx, 0.66, layer.sz);
+    stone.position.y = layer.y * scale;
+    group.add(stone);
+  }
+  const tuft = new Mesh(new SphereGeometry(0.32 * scale, 8, 6), moss);
+  tuft.scale.set(1.1, 0.32, 1.0);
+  tuft.position.set(-0.1 * scale, 1.18 * scale, 0.18 * scale);
+  group.add(tuft);
+  return group;
+}
+
+function makeStoneCairn(scale: number) {
+  const group = new Group();
+  group.name = "biome-threshold-stone-cairn";
+  const stoneA = new MeshLambertMaterial({ color: "#a8a293" });
+  const stoneB = new MeshLambertMaterial({ color: "#b8b1a0" });
+  const stoneC = new MeshLambertMaterial({ color: "#928c7e" });
+  const layers: ReadonlyArray<{ y: number; r: number; color: MeshLambertMaterial; sx: number; sz: number }> = [
+    { y: 0.36, r: 1.2, color: stoneA, sx: 1.1, sz: 1.0 },
+    { y: 0.96, r: 1.0, color: stoneC, sx: 0.96, sz: 1.04 },
+    { y: 1.46, r: 0.78, color: stoneB, sx: 1.0, sz: 0.94 },
+    { y: 1.86, r: 0.58, color: stoneA, sx: 1.02, sz: 1.0 },
+    { y: 2.18, r: 0.38, color: stoneC, sx: 0.94, sz: 1.0 },
+  ];
+  for (const layer of layers) {
+    const stone = markCameraCollider(new Mesh(new SphereGeometry(layer.r * scale, 8, 6), layer.color));
+    stone.scale.set(layer.sx, 0.7, layer.sz);
+    stone.position.y = layer.y * scale;
+    group.add(stone);
+  }
+  return group;
+}
+
+function makePrayerCairn(scale: number) {
+  const group = new Group();
+  group.name = "biome-threshold-prayer-cairn";
+  const stoneA = new MeshLambertMaterial({ color: "#c8bfa8" });
+  const stoneB = new MeshLambertMaterial({ color: "#b6ad96" });
+  const cloth = new MeshLambertMaterial({ color: "#e07a5f" });
+  const cap = new MeshLambertMaterial({ color: "#dca64f" });
+  const layers: ReadonlyArray<{
+    y: number;
+    r: number;
+    color: MeshLambertMaterial;
+    sx: number;
+    sy: number;
+    sz: number;
+  }> = [
+    { y: 0.32, r: 0.96, color: stoneA, sx: 1.1, sy: 0.66, sz: 1.0 },
+    { y: 0.92, r: 0.78, color: stoneB, sx: 0.96, sy: 0.7, sz: 0.96 },
+    { y: 1.46, r: 0.66, color: stoneA, sx: 1.0, sy: 0.66, sz: 1.0 },
+    { y: 1.94, r: 0.54, color: stoneB, sx: 0.94, sy: 0.7, sz: 0.96 },
+    { y: 2.36, r: 0.42, color: stoneA, sx: 1.0, sy: 0.66, sz: 1.0 },
+    { y: 2.7, r: 0.32, color: stoneB, sx: 0.96, sy: 0.6, sz: 0.96 },
+  ];
+  for (const layer of layers) {
+    const stone = markCameraCollider(new Mesh(new SphereGeometry(layer.r * scale, 8, 6), layer.color));
+    stone.scale.set(layer.sx, layer.sy, layer.sz);
+    stone.position.y = layer.y * scale;
+    group.add(stone);
+  }
+  const stripFront = new Mesh(new BoxGeometry(1.4 * scale, 0.12 * scale, 0.04 * scale), cloth);
+  stripFront.position.set(0.04 * scale, 1.62 * scale, 0.18 * scale);
+  stripFront.rotation.y = 0.45;
+  group.add(stripFront);
+  const stripBack = new Mesh(new BoxGeometry(1.4 * scale, 0.12 * scale, 0.04 * scale), cloth);
+  stripBack.position.set(-0.05 * scale, 1.62 * scale, -0.16 * scale);
+  stripBack.rotation.y = -0.5;
+  group.add(stripBack);
+  const peak = new Mesh(new SphereGeometry(0.16 * scale, 10, 8), cap);
+  peak.position.y = 2.96 * scale;
+  group.add(peak);
+  return group;
+}
+
+function makeHeroPine(scale: number, tone = "#4d6a40", lean = 0.06) {
+  // Hero proportions: noticeably taller and broader than its neighbors so the
+  // silhouette reads as a deliberate threshold marker rather than another canopy tree.
+  const group = makePineTree(scale, tone);
+  group.scale.set(1.4, 1.55, 1.4);
+  group.rotation.z = lean;
+  return group;
+}
+
+function makeWindPine(scale: number, tone = "#536e48", lean = 0.18) {
+  // Wind-bent silhouette for ridge thresholds where exposure shapes the tree line.
+  const group = makePineTree(scale, tone);
+  group.scale.set(1.18, 1.32, 1.0);
+  group.rotation.z = lean;
+  group.rotation.x = -0.04;
+  return group;
+}
+
+export function buildBiomeThresholdLandmarks() {
+  const group = new Group();
+  group.name = "biome-threshold-landmarks";
+  for (const landmark of biomeThresholdLandmarks) {
+    let mesh: Group;
+    switch (landmark.kind) {
+      case "moss_cairn":
+        mesh = makeMossCairn(1.4);
+        break;
+      case "stone_cairn":
+        mesh = makeStoneCairn(1.55);
+        break;
+      case "prayer_cairn":
+        mesh = makePrayerCairn(1.5);
+        break;
+      case "hero_pine":
+        mesh = makeHeroPine(1.0);
+        break;
+      case "wind_pine":
+        mesh = makeWindPine(0.95);
+        break;
+    }
+    const groundY = sampleTerrainHeight(landmark.position.x, landmark.position.z);
+    mesh.position.set(landmark.position.x, groundY, landmark.position.z);
+    mesh.rotation.y = forestHash(landmark.position.x, landmark.position.z, 990) * Math.PI * 2;
+    mesh.userData.biomeThresholdId = landmark.id;
+    group.add(mesh);
+  }
   return group;
 }
 

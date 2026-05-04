@@ -77,6 +77,7 @@ import {
 } from "./ambientBlobs";
 import {
   buildAnchorSceneAccents,
+  buildBiomeThresholdLandmarks,
   buildBiomeTransitionAccents,
   buildForestGroveAccents,
   buildGroundLayer,
@@ -1204,6 +1205,10 @@ export class WorldRenderer {
     buildBiomeTransitionAccents(),
     "biome-transition-batch",
   );
+  private readonly biomeThresholdLandmarks = batchStaticDecorations(
+    buildBiomeThresholdLandmarks(),
+    "biome-threshold-landmark-batch",
+  );
   private readonly waterBankAccents = batchStaticDecorations(buildWaterBankAccents(), "water-bank-batch");
   private readonly anchorSceneAccents = batchStaticDecorations(buildAnchorSceneAccents(), "anchor-scene-batch");
   private readonly highlandAccents = batchStaticDecorations(buildHighlandAccents(), "highland-accent-batch");
@@ -1343,6 +1348,7 @@ export class WorldRenderer {
     scene.add(this.treeClusters);
     scene.add(this.forestGroveAccents);
     scene.add(this.biomeTransitionAccents);
+    scene.add(this.biomeThresholdLandmarks);
     scene.add(this.waterBankAccents);
     scene.add(this.anchorSceneAccents);
     scene.add(this.highlandAccents);
@@ -1573,6 +1579,7 @@ export class WorldRenderer {
     this.collectCameraColliders(this.shrine);
     this.collectCameraColliders(this.treeClusters);
     this.collectCameraColliders(this.biomeTransitionAccents);
+    this.collectCameraColliders(this.biomeThresholdLandmarks);
     this.collectCameraColliders(this.anchorSceneAccents);
     this.collectCameraColliders(this.highlandAccents);
     this.collectCameraColliders(this.landmarkTrees);
@@ -1582,6 +1589,7 @@ export class WorldRenderer {
       this.treeClusters,
       this.forestGroveAccents,
       this.biomeTransitionAccents,
+      this.biomeThresholdLandmarks,
       this.waterBankAccents,
       this.anchorSceneAccents,
       this.highlandAccents,
@@ -1593,6 +1601,7 @@ export class WorldRenderer {
       this.treeClusters,
       this.forestGroveAccents,
       this.biomeTransitionAccents,
+      this.biomeThresholdLandmarks,
       this.waterBankAccents,
       this.anchorSceneAccents,
       this.highlandAccents,
@@ -1608,6 +1617,7 @@ export class WorldRenderer {
       this.treeClusters,
       this.forestGroveAccents,
       this.biomeTransitionAccents,
+      this.biomeThresholdLandmarks,
       this.waterBankAccents,
       this.anchorSceneAccents,
       this.highlandAccents,
@@ -2436,7 +2446,15 @@ export class WorldRenderer {
       (this.gameplayFog.density - decisionClarityWindow * 0.000075) * this.fogDensityScale,
     );
     this.environmentPulse = MathUtils.damp(this.environmentPulse, 0, 2.35, dt);
-    syncAtmosphereLighting(this.skyDome, this.clouds, this.sun, this.elevationMood, viewCamera, elapsed, this.worldLightingMood);
+    syncAtmosphereLighting(
+      this.skyDome,
+      this.clouds,
+      this.sun,
+      this.elevationMood,
+      viewCamera,
+      elapsed,
+      this.worldLightingMood,
+    );
     syncStylizedSkySun(this.skySun, this.sun, this.elevationMood, elapsed, this.worldLightingMood);
 
     getAtmosphereHorizonTints(

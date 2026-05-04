@@ -959,7 +959,8 @@ export function sampleRouteReadabilityClearing(x: number, z: number) {
     return Math.max(best, clear * strength);
   }, 0);
   const shoreWindow = Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z)) * 0.28;
-  return saturate(Math.max(ribbon, transitionGlade) + noisySpotWindow + shoreWindow);
+  const thresholdLandmark = sampleBiomeThresholdClearing(x, z);
+  return saturate(Math.max(ribbon, transitionGlade, thresholdLandmark) + noisySpotWindow + shoreWindow);
 }
 
 /**
@@ -2393,6 +2394,90 @@ export const scenicPockets: ScenicPocket[] = [
 
 export const startingPosition = new Vector3(-68, sampleTerrainHeight(-68, -140) + 2.2, -140);
 export const startingLookTarget = new Vector3(18, sampleTerrainHeight(18, 108) + 12, 108);
+
+/**
+ * Visual marker at a biome boundary — a hero prop placed where the terrain transitions
+ * from one zone into the next. The intent is to make crossings legible: the player sees
+ * an iconic shape on approach and knows "I'm entering somewhere new." Each landmark also
+ * contributes a clearing widening at its position so the prop reads cleanly without being
+ * tangled in canopy. Single source of truth for both visual placement (terrainDecorations)
+ * and route-readability sampling (sampleRouteReadabilityClearing).
+ */
+export type BiomeThresholdLandmarkKind = "moss_cairn" | "stone_cairn" | "hero_pine" | "wind_pine" | "prayer_cairn";
+
+export interface BiomeThresholdLandmark {
+  id: string;
+  fromZone: BiomeZone;
+  toZone: BiomeZone;
+  position: Vector3;
+  kind: BiomeThresholdLandmarkKind;
+  /** How far the clearing widening reaches at this landmark. */
+  clearingRadius: number;
+  /** 0–1 weight contributed to sampleRouteReadabilityClearing. */
+  clearingStrength: number;
+}
+
+export const biomeThresholdLandmarks: BiomeThresholdLandmark[] = [
+  {
+    id: "meadow-cusp-cairn",
+    fromZone: "plains",
+    toZone: "hills",
+    position: new Vector3(-12, sampleTerrainHeight(-12, -8), -8),
+    kind: "moss_cairn",
+    clearingRadius: 22,
+    clearingStrength: 0.62,
+  },
+  {
+    id: "fir-gate-sentinel",
+    fromZone: "hills",
+    toZone: "foothills",
+    position: new Vector3(28, sampleTerrainHeight(28, 84), 84),
+    kind: "hero_pine",
+    clearingRadius: 28,
+    clearingStrength: 0.78,
+  },
+  {
+    id: "alpine-cusp-cairn",
+    fromZone: "foothills",
+    toZone: "alpine",
+    position: new Vector3(36, sampleTerrainHeight(36, 95), 95),
+    kind: "stone_cairn",
+    clearingRadius: 26,
+    clearingStrength: 0.72,
+  },
+  {
+    id: "windstep-sentinel",
+    fromZone: "alpine",
+    toZone: "ridge",
+    position: new Vector3(14, sampleTerrainHeight(14, 115), 115),
+    kind: "wind_pine",
+    clearingRadius: 30,
+    clearingStrength: 0.74,
+  },
+  {
+    id: "shrine-approach-cairn",
+    fromZone: "ridge",
+    toZone: "peak_shrine",
+    position: new Vector3(8, sampleTerrainHeight(8, 204), 204),
+    kind: "prayer_cairn",
+    clearingRadius: 28,
+    clearingStrength: 0.78,
+  },
+];
+
+/** Clearing widening contribution from biome threshold landmarks. */
+export function sampleBiomeThresholdClearing(x: number, z: number): number {
+  let best = 0;
+  for (const landmark of biomeThresholdLandmarks) {
+    const distance = Math.hypot(x - landmark.position.x, z - landmark.position.z);
+    const clear = 1 - smootherStep(landmark.clearingRadius * 0.32, landmark.clearingRadius * 1.25, distance);
+    const contribution = clear * landmark.clearingStrength;
+    if (contribution > best) {
+      best = contribution;
+    }
+  }
+  return best;
+}
 
 export function sampleObjectiveText(progress?: {
   catalogedLandmarkIds?: ReadonlySet<string>;
