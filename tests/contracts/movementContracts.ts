@@ -522,46 +522,67 @@ export function runMovementContracts() {
     );
   }
 
-  // Variable jump height: holding Space yields a higher arc than tap-and-release.
-  // We integrate height (sum of dt * vy) since position.y is clamped by ground/water resolution
-  // outside of applyMovementPhysics.
+  // Variable jump height. Two coupled mechanics share one charge window:
+  //   - Hold-to-charge thrust grows vy during ascent (taller arc the longer you hold).
+  //   - Release inside the charge window cuts vy (taps become short hops).
+  // We integrate height (Σ dt·vy) since position.y is clamped by ground resolution outside
+  // applyMovementPhysics.
   function simulateJumpArc(holdFrames: number) {
     const player = makePlayer();
     const runtime = createPlayerSimulationRuntime();
     const scratch = createMovementScratch();
     let height = 0;
     let peakHeight = 0;
+    let peakVy = -Infinity;
     let postReleaseVy = NaN;
-    for (let i = 0; i < 30; i += 1) {
+    for (let i = 0; i < 60; i += 1) {
       const dt = 1 / 60;
       const held = i < holdFrames;
       const inp = { ...baseInput, jumpHeld: held, jumpPressed: i === 0 };
       tickMovementTimers(player, inp, dt, runtime);
       applyMovementPhysics(player, save, inp, 0, dt, runtime, scratch);
-      // Integrate height from velocity each frame, ignoring ground clamps.
-      if (!player.grounded) height += dt * player.velocity.y;
+      if (!player.grounded) {
+        height += dt * player.velocity.y;
+        peakVy = Math.max(peakVy, player.velocity.y);
+      }
       peakHeight = Math.max(peakHeight, height);
       if (i === holdFrames) postReleaseVy = player.velocity.y;
     }
-    return { peakHeight, postReleaseVy };
+    return { peakHeight, peakVy, postReleaseVy };
   }
 
-  const heldArc = simulateJumpArc(60); // hold for entire arc
-  const tapArc = simulateJumpArc(2); // release on frame 2
+  const heldArc = simulateJumpArc(60); // hold past the charge window — thrust runs to natural end
+  const tapArc = simulateJumpArc(2); // release on frame 2 — inside charge window, cut fires
 
+  // Charge thrust (JUMP_HOLD_THRUST > GRAVITY) means peak vy during a held jump exceeds the
+  // initial JUMP_VELOCITY. Without thrust, peak vy would equal JUMP_VELOCITY (no way to grow).
   assert(
-    tapArc.postReleaseVy < JUMP_VELOCITY * (JUMP_RELEASE_CUT_MULTIPLIER + 0.15),
-    `releasing jump on frame 2 cuts vy roughly to JUMP_RELEASE_CUT_MULTIPLIER: post=${tapArc.postReleaseVy.toFixed(2)}`,
+    heldArc.peakVy > JUMP_VELOCITY,
+    `held jump grows vy past initial JUMP_VELOCITY (proves charge thrust active): peakVy=${heldArc.peakVy.toFixed(2)} vs JUMP_VELOCITY=${JUMP_VELOCITY}`,
+  );
+  // The charged arc must clear what a no-thrust ballistic jump could reach
+  // (JUMP_VELOCITY²/(2·GRAVITY) ≈ 7.9m at the current tuning).
+  assert(
+    heldArc.peakHeight > 12,
+    `charged hold reaches significantly higher than a ballistic jump's ~7.9m peak: held=${heldArc.peakHeight.toFixed(2)}`,
+  );
+  // Tap inside the charge window cuts vy, then gravity drops it further on the same tick.
+  // We just check the cut clamped vy below the no-cut natural trajectory.
+  assert(
+    tapArc.postReleaseVy < JUMP_VELOCITY * (JUMP_RELEASE_CUT_MULTIPLIER + 0.2),
+    `releasing during the charge window cuts vy: post=${tapArc.postReleaseVy.toFixed(2)}`,
   );
   assert(
-    heldArc.peakHeight > tapArc.peakHeight * 1.5,
-    `holding jump reaches a meaningfully higher arc than a tap: held=${heldArc.peakHeight.toFixed(2)} tap=${tapArc.peakHeight.toFixed(2)}`,
+    heldArc.peakHeight > tapArc.peakHeight * 4,
+    `holding to charge reaches a much higher arc than a tap: held=${heldArc.peakHeight.toFixed(2)} tap=${tapArc.peakHeight.toFixed(2)}`,
   );
 
-  // Cut only fires once per jump — re-pressing and releasing in air shouldn't re-cut.
+  // Cut only fires inside the charge window — re-pressing after the window expired should
+  // not re-trigger cut on a subsequent release.
   const repeatCutPlayer = makePlayer();
   const repeatCutRuntime = createPlayerSimulationRuntime();
   const repeatCutScratch = createMovementScratch();
+  // Frames 0-1: jump and hold briefly. Frame 2: release → cut fires inside window.
   for (let i = 0; i < 4; i += 1) {
     const dt = 1 / 60;
     const inp = { ...baseInput, jumpHeld: i < 2, jumpPressed: i === 0 };
@@ -569,14 +590,15 @@ export function runMovementContracts() {
     applyMovementPhysics(repeatCutPlayer, save, inp, 0, dt, repeatCutRuntime, repeatCutScratch);
   }
   const vyAfterFirstCut = repeatCutPlayer.velocity.y;
-  // Now press-release again mid-air; cut latch is consumed so vy should not get clamped a second time.
+  // Now re-press and re-release mid-air. Window has been zeroed by the cut, so this should
+  // be ineligible for a second cut and only natural gravity applies.
   for (let i = 0; i < 2; i += 1) {
     const dt = 1 / 60;
     const inp = { ...baseInput, jumpHeld: i < 1, jumpPressed: false };
     tickMovementTimers(repeatCutPlayer, inp, dt, repeatCutRuntime);
     applyMovementPhysics(repeatCutPlayer, save, inp, 0, dt, repeatCutRuntime, repeatCutScratch);
   }
-  // After 2 frames of gravity at GRAVITY=38, vy should fall by ~38*2/60 = ~1.27 — not be clamped again.
+  // Two frames of GRAVITY=38 at dt=1/60 ≈ 1.27 m/s drop. Anything more would mean a second cut.
   assert(
     repeatCutPlayer.velocity.y >= vyAfterFirstCut - 2,
     `mid-air re-press-and-release does not re-cut velocity: before=${vyAfterFirstCut.toFixed(2)} after=${repeatCutPlayer.velocity.y.toFixed(2)}`,

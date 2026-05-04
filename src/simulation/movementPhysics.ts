@@ -20,6 +20,8 @@ import {
   GROUND_DECELERATION,
   GROUND_TURN_ACCELERATION,
   JUMP_BUFFER_TIME,
+  JUMP_HOLD_MAX_DURATION,
+  JUMP_HOLD_THRUST,
   JUMP_MIN_RELEASE_VELOCITY,
   JUMP_RELEASE_CUT_MULTIPLIER,
   JUMP_VELOCITY,
@@ -357,7 +359,7 @@ export function applyMovementPhysics(
     runtime.airMomentumSpeedLimitBonus = player.rolling ? ROLL_AIR_SPEED_BONUS : AIR_MOMENTUM_SPEED_LIMIT_BONUS;
     runtime.coyoteTimeRemaining = 0;
     runtime.jumpBufferRemaining = 0;
-    runtime.jumpReleaseCutConsumed = false;
+    runtime.jumpHoldThrustRemaining = JUMP_HOLD_MAX_DURATION;
   }
 
   const canFloat = save.unlockedAbilities.has("breeze_float");
@@ -372,24 +374,38 @@ export function applyMovementPhysics(
   const isFloating = wantsFloat && player.stamina > STAMINA_ACTION_THRESHOLD;
   player.floating = isFloating;
 
-  // Variable jump height: releasing the jump key while still rising damps remaining upward
-  // velocity so taps become short hops. Skipped while floating (jump key is the float input)
-  // and once vy has already fallen below the useful arc.
+  // Variable jump height has two coupled mechanics gated by the same charge window:
+  //   1. Hold-to-charge thrust: while jump is still held and we're still inside the charge
+  //      window AND vy is still positive AND not floating, apply upward thrust each frame.
+  //      Net effect (with default tuning): vy slowly grows during the window for a taller arc.
+  //   2. Release-cut: releasing jump WHILE still inside the charge window cuts upward velocity.
+  //      Releasing AFTER the window has expired leaves the charged arc alone — long holds
+  //      are not punished, only mid-window bails.
+  // Floating supersedes thrust because the float ability does its own gravity scaling.
   const jumpJustReleased = runtime.jumpHeldPrevFrame && !input.jumpHeld;
+  const inChargeWindow = runtime.jumpHoldThrustRemaining > 0;
   if (
+    inChargeWindow &&
+    input.jumpHeld &&
+    !player.grounded &&
+    !player.swimming &&
+    !isFloating &&
+    player.velocity.y > 0
+  ) {
+    player.velocity.y += JUMP_HOLD_THRUST * dt;
+    runtime.jumpHoldThrustRemaining = Math.max(0, runtime.jumpHoldThrustRemaining - dt);
+  } else if (
     jumpJustReleased &&
-    !runtime.jumpReleaseCutConsumed &&
+    inChargeWindow &&
     !player.grounded &&
     !player.swimming &&
     !isFloating &&
     player.velocity.y > JUMP_MIN_RELEASE_VELOCITY
   ) {
     player.velocity.y *= JUMP_RELEASE_CUT_MULTIPLIER;
-    runtime.jumpReleaseCutConsumed = true;
-  }
-  // Landing always resets the cut latch so the next jump is eligible for cut again.
-  if (player.grounded) {
-    runtime.jumpReleaseCutConsumed = true;
+    runtime.jumpHoldThrustRemaining = 0;
+  } else if (player.grounded) {
+    runtime.jumpHoldThrustRemaining = 0;
   }
   runtime.jumpHeldPrevFrame = input.jumpHeld;
 

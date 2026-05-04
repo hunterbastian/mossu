@@ -94,6 +94,18 @@ export const JUMP_MIN_RELEASE_VELOCITY = 9;
  */
 export const APEX_HANG_GRAVITY_SCALE = 0.62;
 export const APEX_HANG_VELOCITY_THRESHOLD = 5.5;
+/**
+ * Hold-to-charge upward thrust applied each second while Space is held during ascent.
+ * Slightly stronger than gravity so vy actually grows during the charge window — the longer
+ * you hold, the higher Mossu climbs (until the window expires or input releases). 40 m/s²
+ * with 38 m/s² gravity = +2 m/s² net rise during the window.
+ */
+export const JUMP_HOLD_THRUST = 40;
+/**
+ * Maximum charge window in seconds. Past this, thrust releases naturally and the jump
+ * coasts ballistically even if Space is still held. Keeps "hold to charge" bounded.
+ */
+export const JUMP_HOLD_MAX_DURATION = 0.35;
 
 export interface SurfaceTraction {
   /** Multiplier on acceleration when input pushes movement (grip on push). */

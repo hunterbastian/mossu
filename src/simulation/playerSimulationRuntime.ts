@@ -12,10 +12,16 @@ export interface PlayerSimulationRuntime {
   landingMomentumGraceRemaining: number;
   smoothedMoveX: number;
   smoothedMoveY: number;
-  /** Was jump held on the previous physics tick — used to detect release-cut. */
+  /** Was jump held on the previous physics tick — used to detect release inside the charge window. */
   jumpHeldPrevFrame: boolean;
-  /** True once the active jump's release-cut has fired, so we only damp once per jump. */
-  jumpReleaseCutConsumed: boolean;
+  /**
+   * Seconds of hold-to-charge thrust remaining for the active jump. Initialized on jump fire
+   * to JUMP_HOLD_MAX_DURATION, decremented each frame while thrust applies, zeroed on land
+   * or on release-cut. Doubles as the eligibility window for variable-jump-cut: releasing
+   * while > 0 cuts upward velocity (tap = short hop); releasing after the window has expired
+   * leaves the charged arc alone (hold = high jump).
+   */
+  jumpHoldThrustRemaining: number;
 }
 
 export function createPlayerSimulationRuntime(): PlayerSimulationRuntime {
@@ -32,6 +38,6 @@ export function createPlayerSimulationRuntime(): PlayerSimulationRuntime {
     smoothedMoveX: 0,
     smoothedMoveY: 0,
     jumpHeldPrevFrame: false,
-    jumpReleaseCutConsumed: true,
+    jumpHoldThrustRemaining: 0,
   };
 }
