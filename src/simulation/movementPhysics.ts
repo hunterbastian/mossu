@@ -137,52 +137,14 @@ export function applyMovementPhysics(
   runtime: PlayerSimulationRuntime,
   scratch: MovementScratch,
 ): MovementPhysicsResult {
-  scratch.moveVector.set(input.moveX, 0, input.moveY);
-  if (scratch.moveVector.lengthSq() > 1) {
-    scratch.moveVector.normalize();
-  }
-
-  const hasRawInput = scratch.moveVector.lengthSq() > 0.0001;
-  const inputDamping = hasRawInput ? INPUT_RISE_DAMPING : INPUT_RELEASE_DAMPING;
-  runtime.smoothedMoveX = MathUtils.damp(runtime.smoothedMoveX, scratch.moveVector.x, inputDamping, dt);
-  runtime.smoothedMoveY = MathUtils.damp(runtime.smoothedMoveY, scratch.moveVector.z, inputDamping, dt);
-  if (!hasRawInput && Math.hypot(runtime.smoothedMoveX, runtime.smoothedMoveY) < INPUT_DEADZONE) {
-    runtime.smoothedMoveX = 0;
-    runtime.smoothedMoveY = 0;
-  }
-
-  scratch.moveVector.set(runtime.smoothedMoveX, 0, runtime.smoothedMoveY);
-  if (scratch.moveVector.lengthSq() > 1) {
-    scratch.moveVector.normalize();
-  }
+  const { hasRawInput } = smoothPlayerInputIntoScratch(input, runtime, scratch, dt);
   sampleTerrainNormalInto(scratch.groundNormal, player.position.x, player.position.z);
   // Surface traction is only meaningful while grounded — air/swim paths bypass these multipliers.
   const surface =
     player.grounded && !player.swimming
       ? lookupSurfaceTraction(player.position.x, player.position.z)
       : NEUTRAL_SURFACE_TRACTION;
-
-  if (scratch.moveVector.lengthSq() > 0.0001) {
-    const inputMagnitude = MathUtils.clamp(scratch.moveVector.length(), 0, 1);
-    scratch.moveVector.normalize();
-    scratch.cameraForward.set(Math.sin(cameraYaw), 0, Math.cos(cameraYaw)).normalize();
-    scratch.cameraRight.set(-scratch.cameraForward.z, 0, scratch.cameraForward.x).normalize();
-    scratch.worldMove
-      .copy(scratch.cameraRight)
-      .multiplyScalar(scratch.moveVector.x)
-      .addScaledVector(scratch.cameraForward, scratch.moveVector.z)
-      .normalize();
-
-    if (player.grounded && !player.swimming) {
-      scratch.worldMove.projectOnPlane(scratch.groundNormal);
-      if (scratch.worldMove.lengthSq() > 0.0001) {
-        scratch.worldMove.normalize();
-      }
-    }
-    scratch.worldMove.multiplyScalar(inputMagnitude);
-  } else {
-    scratch.worldMove.setScalar(0);
-  }
+  computeWorldMoveIntoScratch(player, cameraYaw, scratch);
 
   player.rolling = input.rollHeld && !player.swimming;
   runtime.rollModeHoldSeconds = player.rolling ? runtime.rollModeHoldSeconds + dt : 0;
@@ -372,6 +334,66 @@ export function applyMovementPhysics(
     isFloating,
     horizontalSpeed,
   };
+}
+
+/**
+ * Smooths raw stick input into runtime.smoothedMoveX/Y with rise/release damping
+ * (snappier on press, gentler on release), then writes the smoothed values into
+ * scratch.moveVector for downstream camera-relative transformation. Snaps to zero
+ * when below INPUT_DEADZONE so velocity doesn't drift after release.
+ */
+function smoothPlayerInputIntoScratch(
+  input: InputSnapshot,
+  runtime: PlayerSimulationRuntime,
+  scratch: MovementScratch,
+  dt: number,
+): { hasRawInput: boolean } {
+  scratch.moveVector.set(input.moveX, 0, input.moveY);
+  if (scratch.moveVector.lengthSq() > 1) {
+    scratch.moveVector.normalize();
+  }
+  const hasRawInput = scratch.moveVector.lengthSq() > 0.0001;
+  const inputDamping = hasRawInput ? INPUT_RISE_DAMPING : INPUT_RELEASE_DAMPING;
+  runtime.smoothedMoveX = MathUtils.damp(runtime.smoothedMoveX, scratch.moveVector.x, inputDamping, dt);
+  runtime.smoothedMoveY = MathUtils.damp(runtime.smoothedMoveY, scratch.moveVector.z, inputDamping, dt);
+  if (!hasRawInput && Math.hypot(runtime.smoothedMoveX, runtime.smoothedMoveY) < INPUT_DEADZONE) {
+    runtime.smoothedMoveX = 0;
+    runtime.smoothedMoveY = 0;
+  }
+  scratch.moveVector.set(runtime.smoothedMoveX, 0, runtime.smoothedMoveY);
+  if (scratch.moveVector.lengthSq() > 1) {
+    scratch.moveVector.normalize();
+  }
+  return { hasRawInput };
+}
+
+/**
+ * Transforms scratch.moveVector (camera-relative input) into scratch.worldMove (world-space
+ * movement direction scaled by input magnitude). On grounded surfaces the move direction is
+ * projected onto the terrain plane via scratch.groundNormal so movement follows slopes
+ * rather than launching off them. Caller must populate scratch.groundNormal before calling.
+ */
+function computeWorldMoveIntoScratch(player: PlayerState, cameraYaw: number, scratch: MovementScratch): void {
+  if (scratch.moveVector.lengthSq() <= 0.0001) {
+    scratch.worldMove.setScalar(0);
+    return;
+  }
+  const inputMagnitude = MathUtils.clamp(scratch.moveVector.length(), 0, 1);
+  scratch.moveVector.normalize();
+  scratch.cameraForward.set(Math.sin(cameraYaw), 0, Math.cos(cameraYaw)).normalize();
+  scratch.cameraRight.set(-scratch.cameraForward.z, 0, scratch.cameraForward.x).normalize();
+  scratch.worldMove
+    .copy(scratch.cameraRight)
+    .multiplyScalar(scratch.moveVector.x)
+    .addScaledVector(scratch.cameraForward, scratch.moveVector.z)
+    .normalize();
+  if (player.grounded && !player.swimming) {
+    scratch.worldMove.projectOnPlane(scratch.groundNormal);
+    if (scratch.worldMove.lengthSq() > 0.0001) {
+      scratch.worldMove.normalize();
+    }
+  }
+  scratch.worldMove.multiplyScalar(inputMagnitude);
 }
 
 /**
