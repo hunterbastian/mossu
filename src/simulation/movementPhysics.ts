@@ -465,6 +465,7 @@ function applyVariableJumpHeight(
 ): void {
   const jumpJustReleased = runtime.jumpHeldPrevFrame && !input.jumpHeld;
   const inChargeWindow = runtime.jumpHoldThrustRemaining > 0;
+  const chargeRemainingBefore = runtime.jumpHoldThrustRemaining;
   if (
     inChargeWindow &&
     input.jumpHeld &&
@@ -475,6 +476,12 @@ function applyVariableJumpHeight(
   ) {
     player.velocity.y += JUMP_HOLD_THRUST * dt;
     runtime.jumpHoldThrustRemaining = Math.max(0, runtime.jumpHoldThrustRemaining - dt);
+    // Natural window expiry — emits release event without a cut so audio can play a
+    // satisfying "full charge" pop instead of the sharper "early bail" cut sound.
+    if (chargeRemainingBefore > 0 && runtime.jumpHoldThrustRemaining <= 0) {
+      player.jumpChargeReleasedThisFrame = true;
+      player.jumpChargeReleasedRatio = 1;
+    }
   } else if (
     jumpJustReleased &&
     inChargeWindow &&
@@ -485,6 +492,10 @@ function applyVariableJumpHeight(
   ) {
     player.velocity.y *= JUMP_RELEASE_CUT_MULTIPLIER;
     runtime.jumpHoldThrustRemaining = 0;
+    // Cut bailed inside the charge window — emit release with the proportion of the
+    // window that was actually used so audio modulates short-tap vs late-bail differently.
+    player.jumpChargeReleasedThisFrame = true;
+    player.jumpChargeReleasedRatio = 1 - chargeRemainingBefore / JUMP_HOLD_MAX_DURATION;
   } else if (player.grounded) {
     runtime.jumpHoldThrustRemaining = 0;
   }
@@ -519,6 +530,7 @@ function applyAirBoost(player: PlayerState, runtime: PlayerSimulationRuntime, in
     player.velocity.x += dirX * AIR_BOOST_IMPULSE;
     player.velocity.z += dirZ * AIR_BOOST_IMPULSE;
     runtime.airBoostAvailable = false;
+    player.airBoostFiredThisFrame = true;
   }
   if (player.grounded || player.swimming) {
     runtime.airBoostAvailable = true;

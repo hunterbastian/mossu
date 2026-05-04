@@ -191,7 +191,8 @@ export class ModelViewerApp {
     ).join("");
 
     const lightingButtons = LIGHTING_OPTIONS.map(
-      (option) => `<button class="model-viewer__chip" type="button" data-lighting="${option.id}">${option.label}</button>`,
+      (option) =>
+        `<button class="model-viewer__chip" type="button" data-lighting="${option.id}">${option.label}</button>`,
     ).join("");
 
     return `
@@ -257,9 +258,7 @@ export class ModelViewerApp {
 
   private getInitialModel(): ModelViewerModel {
     const requestedModel = new URLSearchParams(window.location.search).get("model");
-    return requestedModel === "karu" || requestedModel === "mossu"
-      ? requestedModel
-      : "mossu";
+    return requestedModel === "karu" || requestedModel === "mossu" ? requestedModel : "mossu";
   }
 
   private installControls() {
@@ -442,7 +441,13 @@ export class ModelViewerApp {
     karu.group.position.y = 0.06 + bounce;
     karu.group.rotation.y = rolling ? Math.sin(time * 1.2) * 0.16 : Math.sin(time * 0.45) * 0.18;
     karu.root.position.y = rest ? -0.08 * scale + sleepyBreath * scale : hop * 0.1 * scale;
-    karu.root.rotation.x = rolling ? -0.1 + Math.sin(rollSpin) * 0.36 : sniff ? -0.18 + Math.sin(cycle) * 0.04 : rest ? -0.18 : -0.04 + hop * 0.1;
+    karu.root.rotation.x = rolling
+      ? -0.1 + Math.sin(rollSpin) * 0.36
+      : sniff
+        ? -0.18 + Math.sin(cycle) * 0.04
+        : rest
+          ? -0.18
+          : -0.04 + hop * 0.1;
     karu.root.rotation.z = rolling ? Math.cos(rollSpin * 0.72) * 0.18 : Math.sin(time * 1.8) * 0.035;
 
     const squash = rolling ? 1.12 : rest ? 1.13 + sleepyBreath : 1 - hop * 0.08;
@@ -451,7 +456,8 @@ export class ModelViewerApp {
     karu.body.position.y = 0.62 * scale - (rest ? 0.08 * scale : 0);
 
     karu.face.rotation.y = sniff ? Math.sin(time * 4.8) * 0.18 : Math.sin(time * 1.7) * 0.08;
-    karu.face.position.y = 0.73 * scale + (sniff ? Math.max(0, Math.sin(time * 5.4)) * 0.05 * scale : 0) - (rest ? 0.08 * scale : 0);
+    karu.face.position.y =
+      0.73 * scale + (sniff ? Math.max(0, Math.sin(time * 5.4)) * 0.05 * scale : 0) - (rest ? 0.08 * scale : 0);
     karu.face.position.z = 0.56 * scale + (sniff ? 0.05 * scale : 0) + (rolling ? -0.04 * scale : 0);
 
     const blink = rest ? 0.58 : Math.max(0, Math.sin(time * 0.9 - 0.8)) > 0.96 ? 1 : 0;
@@ -481,7 +487,11 @@ export class ModelViewerApp {
       foot.position.set(
         MathUtils.lerp(homeX * scale, homeX * 0.28 * scale, rollBlend),
         MathUtils.lerp(0.09 * scale + step * 0.04 * scale - (rest ? 0.045 * scale : 0), 0.16 * scale, rollBlend),
-        MathUtils.lerp(homeZ * scale + (sniff && homeZ > 0 ? 0.05 * scale : 0), (homeZ * 0.24 + 0.04) * scale, rollBlend),
+        MathUtils.lerp(
+          homeZ * scale + (sniff && homeZ > 0 ? 0.05 * scale : 0),
+          (homeZ * 0.24 + 0.04) * scale,
+          rollBlend,
+        ),
       );
       const footSize = homeZ > 0 ? 1 : 0.9;
       foot.scale.set(
@@ -524,6 +534,9 @@ export class ModelViewerApp {
       justLanded: false,
       justRespawned: false,
       landingImpact: 0,
+      jumpChargeReleasedThisFrame: false,
+      jumpChargeReleasedRatio: 0,
+      airBoostFiredThisFrame: false,
     };
   }
 
@@ -595,10 +608,8 @@ export class ModelViewerApp {
 
   private updateCamera(dt: number) {
     const orbit = this.manualOrbit + (this.turntable ? this.time * 0.24 : 0);
-    const radius =
-      this.selectedModel === "mossu" ? 11.3 : 8.6;
-    const height =
-      this.selectedModel === "mossu" ? 5.7 : 4.2;
+    const radius = this.selectedModel === "mossu" ? 11.3 : 8.6;
+    const height = this.selectedModel === "mossu" ? 5.7 : 4.2;
     this.cameraPosition.set(Math.sin(orbit) * radius, height, Math.cos(orbit) * radius);
     this.camera.position.lerp(this.cameraPosition, 1 - Math.exp(-dt * 7));
     this.camera.lookAt(this.getCameraTarget());
@@ -629,9 +640,7 @@ export class ModelViewerApp {
 
     const heading = this.root.querySelector<HTMLElement>("[data-viewer-heading]");
     if (heading) {
-      heading.textContent =
-        this.selectedModel === "mossu" ? "Mossu" :
-          "Karu Companion";
+      heading.textContent = this.selectedModel === "mossu" ? "Mossu" : "Karu Companion";
     }
 
     const playButton = this.root.querySelector<HTMLButtonElement>("[data-toggle-play]");

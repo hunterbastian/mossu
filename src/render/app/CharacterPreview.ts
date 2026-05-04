@@ -46,6 +46,9 @@ export class CharacterPreview {
     justLanded: false,
     justRespawned: false,
     landingImpact: 0,
+    jumpChargeReleasedThisFrame: false,
+    jumpChargeReleasedRatio: 0,
+    airBoostFiredThisFrame: false,
   };
   private readonly stageShadow: Mesh;
   private readonly cameraPosition = new Vector3();
@@ -119,11 +122,7 @@ export class CharacterPreview {
     this.mossu.update(this.previewPlayer, dt);
 
     this.stageShadow.scale.setScalar(1 + Math.sin(this.time * 1.1) * 0.04);
-    this.cameraPosition.set(
-      Math.sin(this.time * 0.22) * 1.1,
-      7.2 + Math.sin(this.time * 0.4) * 0.18,
-      15.2,
-    );
+    this.cameraPosition.set(Math.sin(this.time * 0.22) * 1.1, 7.2 + Math.sin(this.time * 0.4) * 0.18, 15.2);
     this.camera.position.copy(this.cameraPosition);
     this.camera.lookAt(CAMERA_TARGET);
     this.renderer.render(this.scene, this.camera);

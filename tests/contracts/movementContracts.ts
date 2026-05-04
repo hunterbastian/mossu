@@ -85,6 +85,9 @@ function makePlayer(): PlayerState {
     justLanded: false,
     justRespawned: false,
     landingImpact: 0,
+    jumpChargeReleasedThisFrame: false,
+    jumpChargeReleasedRatio: 0,
+    airBoostFiredThisFrame: false,
   };
 }
 

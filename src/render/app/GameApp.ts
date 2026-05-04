@@ -784,6 +784,7 @@ export class GameApp {
     let faunaRegroupPressed = false;
     let preZoneForFeedback: typeof this.state.frame.currentZone | null = null;
     let preSwimForFeedback: boolean | null = null;
+    let preRollingForFeedback: boolean | null = null;
 
     if (this.titleScreenOpen) {
       this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
@@ -842,6 +843,7 @@ export class GameApp {
         }
         preZoneForFeedback = this.state.frame.currentZone;
         preSwimForFeedback = this.state.frame.player.swimming;
+        preRollingForFeedback = this.state.frame.player.rolling;
         this.state.update(dt, input, this.followCamera.getYaw());
       }
     }
@@ -868,6 +870,22 @@ export class GameApp {
       if (frame.lastCatalogedLandmarkId || frame.lastGatheredForageableId) {
         this.gameplayFeedback.playInteract();
         this.followCamera.kickCinematic({ polar: 0.018, distance: 0.48, shoulder: -0.05 });
+      }
+      // Roll engagement: false→true transition only, so the rumble fires once when Mossu
+      // becomes a ball and not on every frame Shift is held.
+      if (preRollingForFeedback === false && frame.player.rolling) {
+        this.gameplayFeedback.playRollEngage();
+      }
+      // Charge-jump release: physics sets jumpChargeReleasedThisFrame on either natural
+      // window expiry (full charge) or release-cut (early bail). Ratio modulates pitch
+      // sweep + duration so taps and full holds sound like distinct moments.
+      if (frame.player.jumpChargeReleasedThisFrame) {
+        this.gameplayFeedback.playJumpRelease(frame.player.jumpChargeReleasedRatio);
+      }
+      // Air-boost whoosh: one-shot when Shift fires the in-air planar dash.
+      if (frame.player.airBoostFiredThisFrame) {
+        this.gameplayFeedback.playAirBoost();
+        this.followCamera.kickCinematic({ polar: 0.012, distance: 0.45, shoulder: 0.06 });
       }
       if (frame.lastCatalogedLandmarkId === "peak-shrine" && !this.summitCompletionSeen) {
         this.summitCompletionSeen = true;

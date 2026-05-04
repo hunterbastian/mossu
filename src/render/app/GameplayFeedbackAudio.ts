@@ -10,11 +10,16 @@ export class GameplayFeedbackAudio {
 
   unlock() {
     this.unlocked = true;
-    void this.ensureContext()?.resume().catch(() => {});
+    void this.ensureContext()
+      ?.resume()
+      .catch(() => {});
   }
 
   private ensureContext(): AudioContext | null {
-    const AC = typeof AudioContext !== "undefined" ? AudioContext : (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const AC =
+      typeof AudioContext !== "undefined"
+        ? AudioContext
+        : (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) {
       return null;
     }
@@ -137,6 +142,122 @@ export class GameplayFeedbackAudio {
     g.connect(ctx.destination);
     o.start(t);
     o.stop(t + 0.08);
+  }
+
+  /**
+   * Charge-jump release. chargeRatio in 0..1: 0 = quick tap (sharp short pop), 1 = full
+   * hold (longer satisfying "thwip" with a higher pitch sweep). The two extremes feel
+   * like different actions even though they're the same input.
+   */
+  playJumpRelease(chargeRatio: number) {
+    if (!this.unlocked) {
+      return;
+    }
+    const ctx = this.ensureContext();
+    if (!ctx) {
+      return;
+    }
+
+    const ratio = MathUtils.clamp(chargeRatio, 0, 1);
+    const t = ctx.currentTime;
+    // Pitch sweep: short tap stays low, full charge sweeps higher to feel "lifted."
+    const startFreq = 240 + ratio * 80;
+    const endFreq = startFreq + 240 + ratio * 360;
+    const duration = 0.09 + ratio * 0.11;
+    const peakGain = 0.025 + ratio * 0.04;
+
+    const o = ctx.createOscillator();
+    const filt = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(startFreq, t);
+    o.frequency.exponentialRampToValueAtTime(endFreq, t + duration * 0.55);
+    filt.type = "bandpass";
+    filt.frequency.setValueAtTime(640 + ratio * 280, t);
+    filt.Q.setValueAtTime(1.6, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peakGain, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    o.connect(filt);
+    filt.connect(g);
+    g.connect(ctx.destination);
+    o.start(t);
+    o.stop(t + duration + 0.02);
+  }
+
+  /**
+   * Air-boost — short filtered-noise whoosh when Shift fires the in-air planar dash.
+   * Mid-band band-pass for "air rush," very brief so it doesn't muddy other audio.
+   */
+  playAirBoost() {
+    if (!this.unlocked) {
+      return;
+    }
+    const ctx = this.ensureContext();
+    if (!ctx) {
+      return;
+    }
+
+    const t = ctx.currentTime;
+    const bufferSize = Math.floor(ctx.sampleRate * 0.18);
+    const noise = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = noise.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      // Decaying noise envelope baked into the buffer so the whoosh trails off cleanly.
+      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = noise;
+    const filt = ctx.createBiquadFilter();
+    filt.type = "bandpass";
+    // Sweep band-pass center upward to imply forward motion.
+    filt.frequency.setValueAtTime(560, t);
+    filt.frequency.exponentialRampToValueAtTime(1120, t + 0.08);
+    filt.Q.setValueAtTime(1.4, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.055, t + 0.018);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    src.connect(filt);
+    filt.connect(g);
+    g.connect(ctx.destination);
+    src.start(t);
+    src.stop(t + 0.18);
+  }
+
+  /**
+   * Roll engagement — a soft low rumble onset when the player transitions into rolling
+   * on the ground. Single-shot (caller must detect false→true transition); designed to
+   * feel like the moment Mossu becomes a ball, not a sustained loop.
+   */
+  playRollEngage() {
+    if (!this.unlocked) {
+      return;
+    }
+    const ctx = this.ensureContext();
+    if (!ctx) {
+      return;
+    }
+
+    const t = ctx.currentTime;
+    // Low triangle oscillator with subtle pitch wobble = "vroom" not "beep."
+    const osc = ctx.createOscillator();
+    const filt = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(110, t);
+    osc.frequency.exponentialRampToValueAtTime(82, t + 0.16);
+    filt.type = "lowpass";
+    filt.frequency.setValueAtTime(380, t);
+    filt.Q.setValueAtTime(0.9, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.045, t + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    osc.connect(filt);
+    filt.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.24);
   }
 
   dispose() {

@@ -51,6 +51,12 @@ export interface PlayerState {
   justLanded: boolean;
   justRespawned: boolean;
   landingImpact: number;
+  /** True for one frame when the variable-jump charge window ended (release-cut OR natural expiry). Drives charge-release audio. */
+  jumpChargeReleasedThisFrame: boolean;
+  /** 0..1 — how much of the JUMP_HOLD_MAX_DURATION window was used before release. Modulates audio intensity. */
+  jumpChargeReleasedRatio: number;
+  /** True for one frame when the air-boost (Shift in air) fired. Drives air-boost audio. */
+  airBoostFiredThisFrame: boolean;
 }
 
 export interface SaveState {
@@ -150,6 +156,9 @@ export class GameState {
     player.justRespawned = false;
     player.landingImpact = 0;
     player.floating = false;
+    player.jumpChargeReleasedThisFrame = false;
+    player.jumpChargeReleasedRatio = 0;
+    player.airBoostFiredThisFrame = false;
     this.frame.lastCatalogedLandmarkId = null;
     tickStaminaCooldown(runtime, dt);
     tickMovementTimers(player, input, dt, runtime);
@@ -267,5 +276,8 @@ function createInitialPlayerState(): PlayerState {
     justLanded: false,
     justRespawned: false,
     landingImpact: 0,
+    jumpChargeReleasedThisFrame: false,
+    jumpChargeReleasedRatio: 0,
+    airBoostFiredThisFrame: false,
   };
 }

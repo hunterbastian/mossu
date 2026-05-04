@@ -1,11 +1,6 @@
 import { MathUtils, Vector3 } from "three";
 import type { FrameState, PlayerState } from "./gameState";
-import {
-  sampleTerrainHeight,
-  sampleWaterState,
-  worldForageables,
-  worldLandmarks,
-} from "./world";
+import { sampleTerrainHeight, sampleWaterState, worldForageables, worldLandmarks } from "./world";
 
 const DEFAULT_REMOTE_COUNT = 3;
 const MAX_REMOTE_COUNT = 4;
@@ -98,6 +93,9 @@ function createRemotePlayer(): PlayerState {
     justLanded: false,
     justRespawned: false,
     landingImpact: 0,
+    jumpChargeReleasedThisFrame: false,
+    jumpChargeReleasedRatio: 0,
+    airBoostFiredThisFrame: false,
   };
 }
 
@@ -107,9 +105,7 @@ export function getCoopStressRemoteCount(params: URLSearchParams) {
   }
 
   const raw = params.get("coopStress");
-  const parsed = raw === null || raw === "" || raw === "true"
-    ? DEFAULT_REMOTE_COUNT
-    : Number(raw);
+  const parsed = raw === null || raw === "" || raw === "true" ? DEFAULT_REMOTE_COUNT : Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return DEFAULT_REMOTE_COUNT;
   }
@@ -172,13 +168,7 @@ export class CoopStressSimulator {
     };
   }
 
-  private updateRemote(
-    remote: RemoteActorRuntime,
-    index: number,
-    frame: FrameState,
-    elapsed: number,
-    dt: number,
-  ) {
+  private updateRemote(remote: RemoteActorRuntime, index: number, frame: FrameState, elapsed: number, dt: number) {
     const player = remote.player;
     const local = frame.player;
     const forward = remote.forward.set(Math.sin(local.heading), 0, Math.cos(local.heading));
@@ -188,10 +178,7 @@ export class CoopStressSimulator {
     const lead = MathUtils.clamp(speed * 0.26, 0, 7.2);
     const trail = Math.sin(elapsed * 0.36 + remote.phase) * 2.4;
     const x =
-      local.position.x +
-      Math.cos(angle) * remote.orbitRadius +
-      side.x * trail +
-      forward.x * (lead - index * 1.4);
+      local.position.x + Math.cos(angle) * remote.orbitRadius + side.x * trail + forward.x * (lead - index * 1.4);
     const z =
       local.position.z +
       Math.sin(angle) * (remote.orbitRadius * 0.72) +
@@ -214,7 +201,10 @@ export class CoopStressSimulator {
     const nextPosition = remote.nextPosition.set(x, y, z);
 
     if (dt > 0) {
-      player.velocity.copy(nextPosition).sub(remote.previousPosition).multiplyScalar(1 / dt);
+      player.velocity
+        .copy(nextPosition)
+        .sub(remote.previousPosition)
+        .multiplyScalar(1 / dt);
     } else {
       player.velocity.set(0, 0, 0);
     }
@@ -294,10 +284,7 @@ export class CoopStressSimulator {
 
   private findNearbyUngatheredForageable(remote: RemoteActorRuntime, frame: FrameState) {
     return worldForageables.find((forageable) => {
-      if (
-        frame.save.gatheredForageableIds.has(forageable.id) ||
-        this.sharedForageableIds.has(forageable.id)
-      ) {
+      if (frame.save.gatheredForageableIds.has(forageable.id) || this.sharedForageableIds.has(forageable.id)) {
         return false;
       }
       return forageable.position.distanceTo(remote.player.position) <= (forageable.interactionRadius ?? 8) + 18;
@@ -306,10 +293,7 @@ export class CoopStressSimulator {
 
   private findNearbyUncatalogedLandmark(remote: RemoteActorRuntime, frame: FrameState) {
     return worldLandmarks.find((landmark) => {
-      if (
-        frame.save.catalogedLandmarkIds.has(landmark.id) ||
-        this.sharedLandmarkIds.has(landmark.id)
-      ) {
+      if (frame.save.catalogedLandmarkIds.has(landmark.id) || this.sharedLandmarkIds.has(landmark.id)) {
         return false;
       }
       return landmark.position.distanceTo(remote.player.position) <= (landmark.interactionRadius ?? 16) + 18;
