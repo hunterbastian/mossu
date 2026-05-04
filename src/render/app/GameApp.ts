@@ -1394,9 +1394,7 @@ export class GameApp {
 
   private handleQualitySettingInput = (event: Event) => {
     const control =
-      event.target instanceof Element
-        ? event.target.closest<HTMLInputElement>("input[data-quality-setting]")
-        : null;
+      event.target instanceof Element ? event.target.closest<HTMLInputElement>("input[data-quality-setting]") : null;
     if (!control) {
       return;
     }
@@ -1634,6 +1632,15 @@ export class GameApp {
     this.openingSequenceOverlay.classList.remove("opening-sequence--visible");
     this.openingSequenceOverlay.setAttribute("aria-hidden", "true");
     this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
+    // Guarantee the deferred world build is complete before the player can see it.
+    // Normally the title + opening cover (~1-2s @ 3 slices/frame) drains the 12-slice
+    // queue easily, but if rAF was throttled (background tab) or the player skipped
+    // the opening sequence early, the queue can still have pending slices. Without
+    // this flush, the first frame of gameplay shows trees/mountains/clouds half-built.
+    const pendingDuringComplete = this.world.flushDeferredWorldSlices();
+    if (pendingDuringComplete > 0 && typeof console !== "undefined") {
+      console.info(`mossu: flushed ${pendingDuringComplete} deferred world slice(s) at gameplay start`);
+    }
     this.syncHud();
     this.focusGameplaySurface();
   }
