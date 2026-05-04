@@ -347,24 +347,75 @@ export function applyMovementPhysics(
   player.velocity.x = scratch.planarVelocity.x;
   player.velocity.z = scratch.planarVelocity.z;
 
-  const canJump = !player.swimming && (player.grounded || runtime.coyoteTimeRemaining > 0);
-  if (canJump && runtime.jumpBufferRemaining > 0) {
-    if (player.rolling && scratch.planarVelocity.lengthSq() > 0.001) {
-      scratch.planarDirection.copy(scratch.planarVelocity).normalize();
-      player.velocity.x += scratch.planarDirection.x * ROLL_JUMP_FORWARD_BONUS;
-      player.velocity.z += scratch.planarDirection.z * ROLL_JUMP_FORWARD_BONUS;
+  tryFireJump(player, runtime, scratch.planarVelocity, scratch.planarDirection);
+
+  const isFloating = computeIsFloating(player, save, runtime, input);
+  player.floating = isFloating;
+  const horizontalSpeed = Math.hypot(player.velocity.x, player.velocity.z);
+
+  applyVariableJumpHeight(player, runtime, input, isFloating, dt);
+
+  if (!player.swimming) {
+    player.velocity.y -= GRAVITY * (isFloating ? FLOAT_GRAVITY_SCALE : 1) * dt;
+
+    if (isFloating && horizontalSpeed > 0.15) {
+      const boost = FLOAT_FORWARD_BONUS * dt;
+      player.velocity.x += (player.velocity.x / horizontalSpeed) * boost;
+      player.velocity.z += (player.velocity.z / horizontalSpeed) * boost;
     }
-    player.velocity.y = JUMP_VELOCITY;
-    player.grounded = false;
-    runtime.airMomentumGraceRemaining = player.rolling ? ROLL_AIR_MOMENTUM_GRACE_TIME : AIR_MOMENTUM_GRACE_TIME;
-    runtime.airMomentumSpeedLimitBonus = player.rolling ? ROLL_AIR_SPEED_BONUS : AIR_MOMENTUM_SPEED_LIMIT_BONUS;
-    runtime.coyoteTimeRemaining = 0;
-    runtime.jumpBufferRemaining = 0;
-    runtime.jumpHoldThrustRemaining = JUMP_HOLD_MAX_DURATION;
   }
 
+  applyAirBoost(player, runtime, input);
+
+  return {
+    sustainedRolling,
+    isFloating,
+    horizontalSpeed,
+  };
+}
+
+/**
+ * Fires a jump if the player has eligibility (grounded or coyote-time remaining) and
+ * has a buffered jump press. Applies the roll-jump-forward-bonus when rolling, sets
+ * vy to JUMP_VELOCITY, transitions to airborne, and arms the charge-window for
+ * applyVariableJumpHeight to consume.
+ */
+function tryFireJump(
+  player: PlayerState,
+  runtime: PlayerSimulationRuntime,
+  planarVelocity: Vector3,
+  planarDirection: Vector3,
+): void {
+  const canJump = !player.swimming && (player.grounded || runtime.coyoteTimeRemaining > 0);
+  if (!canJump || runtime.jumpBufferRemaining <= 0) {
+    return;
+  }
+  if (player.rolling && planarVelocity.lengthSq() > 0.001) {
+    planarDirection.copy(planarVelocity).normalize();
+    player.velocity.x += planarDirection.x * ROLL_JUMP_FORWARD_BONUS;
+    player.velocity.z += planarDirection.z * ROLL_JUMP_FORWARD_BONUS;
+  }
+  player.velocity.y = JUMP_VELOCITY;
+  player.grounded = false;
+  runtime.airMomentumGraceRemaining = player.rolling ? ROLL_AIR_MOMENTUM_GRACE_TIME : AIR_MOMENTUM_GRACE_TIME;
+  runtime.airMomentumSpeedLimitBonus = player.rolling ? ROLL_AIR_SPEED_BONUS : AIR_MOMENTUM_SPEED_LIMIT_BONUS;
+  runtime.coyoteTimeRemaining = 0;
+  runtime.jumpBufferRemaining = 0;
+  runtime.jumpHoldThrustRemaining = JUMP_HOLD_MAX_DURATION;
+}
+
+/**
+ * Computes whether Mossu is actively floating this tick. Float requires the ability
+ * unlock, airborne, not swimming, a hold input (jump or ability) within the buffer
+ * window, vy under the float-engagement ceiling, and stamina above the action threshold.
+ */
+function computeIsFloating(
+  player: PlayerState,
+  save: SaveState,
+  runtime: PlayerSimulationRuntime,
+  input: InputSnapshot,
+): boolean {
   const canFloat = save.unlockedAbilities.has("breeze_float");
-  const horizontalSpeed = Math.hypot(player.velocity.x, player.velocity.z);
   const wantsFloatInput = input.jumpHeld || input.abilityHeld || runtime.breezeFloatBufferRemaining > 0;
   const wantsFloat =
     canFloat &&
@@ -372,17 +423,24 @@ export function applyMovementPhysics(
     !player.swimming &&
     wantsFloatInput &&
     player.velocity.y < BREEZE_FLOAT_MAX_UPWARD_VELOCITY;
-  const isFloating = wantsFloat && player.stamina > STAMINA_ACTION_THRESHOLD;
-  player.floating = isFloating;
+  return wantsFloat && player.stamina > STAMINA_ACTION_THRESHOLD;
+}
 
-  // Variable jump height has two coupled mechanics gated by the same charge window:
-  //   1. Hold-to-charge thrust: while jump is still held and we're still inside the charge
-  //      window AND vy is still positive AND not floating, apply upward thrust each frame.
-  //      Net effect (with default tuning): vy slowly grows during the window for a taller arc.
-  //   2. Release-cut: releasing jump WHILE still inside the charge window cuts upward velocity.
-  //      Releasing AFTER the window has expired leaves the charged arc alone — long holds
-  //      are not punished, only mid-window bails.
-  // Floating supersedes thrust because the float ability does its own gravity scaling.
+/**
+ * Variable jump height — two coupled mechanics share one charge window:
+ * (1) Hold-to-charge thrust grows vy during ascent (taller arc the longer Space is held).
+ * (2) Release inside the charge window cuts vy (taps become short hops).
+ * Releasing AFTER the window has expired leaves the charged arc alone — long holds
+ * are not punished, only mid-window bails. Floating supersedes thrust because the
+ * float ability does its own gravity scaling.
+ */
+function applyVariableJumpHeight(
+  player: PlayerState,
+  runtime: PlayerSimulationRuntime,
+  input: InputSnapshot,
+  isFloating: boolean,
+  dt: number,
+): void {
   const jumpJustReleased = runtime.jumpHeldPrevFrame && !input.jumpHeld;
   const inChargeWindow = runtime.jumpHoldThrustRemaining > 0;
   if (
@@ -409,21 +467,15 @@ export function applyMovementPhysics(
     runtime.jumpHoldThrustRemaining = 0;
   }
   runtime.jumpHeldPrevFrame = input.jumpHeld;
+}
 
-  if (!player.swimming) {
-    player.velocity.y -= GRAVITY * (isFloating ? FLOAT_GRAVITY_SCALE : 1) * dt;
-
-    if (isFloating && horizontalSpeed > 0.15) {
-      const boost = FLOAT_FORWARD_BONUS * dt;
-      player.velocity.x += (player.velocity.x / horizontalSpeed) * boost;
-      player.velocity.z += (player.velocity.z / horizontalSpeed) * boost;
-    }
-  }
-
-  // Air-boost: one-shot planar impulse on the first Shift press while airborne.
-  // Direction: current planar motion if any, else player heading. Resets on grounded
-  // or swimming so each new jump/fall gets its own boost. Disabled while jump-buffered
-  // (so a press that triggers the jump on the same frame doesn't double-fire).
+/**
+ * Air-boost — one-shot planar impulse on the first Shift press while airborne. Direction
+ * follows current planar motion if there is any, else player heading. Resets on grounded
+ * or swimming so each new jump/fall gets its own boost. Disabled during coyote-time so a
+ * pre-jump Shift press doesn't double-fire as both ground roll-jump-bonus and air-boost.
+ */
+function applyAirBoost(player: PlayerState, runtime: PlayerSimulationRuntime, input: InputSnapshot): void {
   const rollJustPressed = !runtime.rollHeldPrevFrame && input.rollHeld;
   if (
     rollJustPressed &&
@@ -450,12 +502,6 @@ export function applyMovementPhysics(
     runtime.airBoostAvailable = true;
   }
   runtime.rollHeldPrevFrame = input.rollHeld;
-
-  return {
-    sustainedRolling,
-    isFloating,
-    horizontalSpeed,
-  };
 }
 
 function moveTowards(current: number, target: number, maxDelta: number) {
