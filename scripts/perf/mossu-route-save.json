@@ -12,8 +12,8 @@
   },
   "save": {
     "player": {
-      "x": -68,
-      "z": -140,
+      "x": -88,
+      "z": -132,
       "heading": 0
     },
     "save": {
@@ -37,8 +37,8 @@
       {
         "label": "Burrow Hollow stamp",
         "target": {
-          "x": -68,
-          "z": -140
+          "x": -88,
+          "z": -132
         },
         "arrivalRadius": 15,
         "landmarkId": "start-burrow",

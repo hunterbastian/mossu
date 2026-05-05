@@ -251,6 +251,13 @@ export const OPENING_LAKE_CENTER_X = -34;
 export const OPENING_LAKE_CENTER_Z = -112;
 export const OPENING_LAKE_RADIUS = 11.5;
 export const OPENING_LAKE_SURFACE_OFFSET = 3.8;
+const STARTING_NEST_X = -88;
+const STARTING_NEST_Z = -132;
+const STARTING_LOOK_X = 18;
+const STARTING_LOOK_Z = 108;
+const STARTING_PLAYER_HEIGHT_OFFSET = 2.2;
+const OPENING_ROUTE_BEAT_X = -68;
+const OPENING_ROUTE_BEAT_Z = -140;
 export const STARTING_WATER_POOLS: readonly StartingWaterPool[] = [
   {
     id: "opening-lake",
@@ -841,8 +848,8 @@ function sampleIslandContour(x: number, z: number) {
 
 /** Path half-width (world units) per polyline leg — steps up with journey so each zone feels more open. */
 const ROUTE_TERRACE_SEGMENTS = [
-  [-68, -140, -68, -140, 26, 0.58],
-  [-68, -140, -4, -38, 30, 0.44],
+  [STARTING_NEST_X, STARTING_NEST_Z, OPENING_ROUTE_BEAT_X, OPENING_ROUTE_BEAT_Z, 24, 0.28],
+  [OPENING_ROUTE_BEAT_X, OPENING_ROUTE_BEAT_Z, -4, -38, 30, 0.44],
   [-4, -38, riverCenter(24), 24, 34, 0.5],
   [riverCenter(24), 24, 24, 88, 38, 0.64],
   [24, 88, 20, 108, 44, 0.76],
@@ -856,7 +863,8 @@ const ROUTE_TERRACE_SEGMENTS = [
 
 /** Radial “pocket” glades; radii also rise with z so grass clearings read wider zone-to-zone. */
 const PAINTED_GROUND_CLEARINGS = [
-  [-68, -140, 34, 0.5],
+  [STARTING_NEST_X, STARTING_NEST_Z, 34, 0.54],
+  [OPENING_ROUTE_BEAT_X, OPENING_ROUTE_BEAT_Z, 30, 0.38],
   [-4, -38, 40, 0.44],
   [24, 88, 52, 0.46],
   [20, 108, 56, 0.44],
@@ -925,14 +933,24 @@ function sampleRoutePathInfo(x: number, z: number) {
   );
 }
 
+export function sampleOpeningNestExitPathMask(x: number, z: number) {
+  const segment = distanceToSegment2D(x, z, STARTING_NEST_X, STARTING_NEST_Z, OPENING_ROUTE_BEAT_X, OPENING_ROUTE_BEAT_Z);
+  const grain = fbmNoise(x * 0.094 + 2.8, z * 0.094 - 9.1, 2) * 0.5 + 0.5;
+  const core = 1 - smootherStep(3.4, 9.2, segment.distance);
+  const brushedEdge = 1 - smootherStep(8.2, 14.5, segment.distance);
+  return saturate(core * (0.82 + grain * 0.24) + brushedEdge * 0.16);
+}
+
 function sampleRouteSmoothMask(x: number, z: number) {
   const route = sampleRoutePathInfo(x, z);
   const breakup = fbmNoise(x * 0.04 + 9.2, z * 0.04 - 13.7, 2) * 0.12;
-  return saturate(route.core * 0.86 + route.paint * 0.28 + route.shoulder * 0.18 + breakup);
+  const nestExit = sampleOpeningNestExitPathMask(x, z);
+  return saturate(route.core * 0.86 + route.paint * 0.28 + route.shoulder * 0.18 + nestExit * 0.22 + breakup);
 }
 
 export function samplePaintedGroundMask(x: number, z: number) {
   const route = sampleRoutePathInfo(x, z);
+  const nestExit = sampleOpeningNestExitPathMask(x, z);
   const routeBreakup = 0.82 + fbmNoise(x * 0.038 - 4.2, z * 0.038 + 6.1, 3) * 0.18;
   const pocketClear = PAINTED_GROUND_CLEARINGS.reduce((best, [cx, cz, radius, strength]) => {
     const distance = Math.hypot(x - cx, z - cz);
@@ -942,11 +960,12 @@ export function samplePaintedGroundMask(x: number, z: number) {
   const bankShape = sampleWaterBankShape(x, z);
   const shoreWear =
     Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z), bankShape.dampBand) * 0.46;
-  return saturate(route.paint * routeBreakup + route.shoulder * 0.36 + pocketClear + shoreWear);
+  return saturate(route.paint * routeBreakup + route.shoulder * 0.36 + nestExit * 0.72 + pocketClear + shoreWear);
 }
 
 export function sampleRouteReadabilityClearing(x: number, z: number) {
   const route = sampleRoutePathInfo(x, z);
+  const nestExit = sampleOpeningNestExitPathMask(x, z);
   const ribbon = saturate(route.core * 0.58 + route.paint * 0.46 + route.shoulder * 0.58);
   const transitionGlade = ROUTE_TRANSITION_CLEARINGS.reduce((best, [cx, cz, radius, strength]) => {
     const distance = Math.hypot(x - cx, z - cz);
@@ -960,7 +979,7 @@ export function sampleRouteReadabilityClearing(x: number, z: number) {
   }, 0);
   const shoreWindow = Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z)) * 0.28;
   const thresholdLandmark = sampleBiomeThresholdClearing(x, z);
-  return saturate(Math.max(ribbon, transitionGlade, thresholdLandmark) + noisySpotWindow + shoreWindow);
+  return saturate(Math.max(ribbon, transitionGlade, thresholdLandmark, nestExit * 0.92) + noisySpotWindow + shoreWindow);
 }
 
 /**
@@ -969,11 +988,12 @@ export function sampleRouteReadabilityClearing(x: number, z: number) {
  */
 export function sampleRouteDirtPathMask(x: number, z: number) {
   const route = sampleRoutePathInfo(x, z);
+  const nestExit = sampleOpeningNestExitPathMask(x, z);
   const grain = fbmNoise(x * 0.071 + 3.1, z * 0.071 - 2.2, 2) * 0.5 + 0.5;
   const coreLift = Math.pow(saturate(route.core), 1.2);
-  const warmTread = coreLift * (0.62 + grain * 0.46);
+  const warmTread = Math.max(coreLift, nestExit * 0.86) * (0.62 + grain * 0.46);
   const readableShoulder = route.paint * 0.25 + route.shoulder * 0.14;
-  const raw = warmTread + readableShoulder;
+  const raw = warmTread + readableShoulder + nestExit * 0.24;
   const waterBlock = saturate(
     sampleRiverSurfaceMask(x, z) * 0.98 +
       Math.max(sampleStartingWaterSurfaceMask(x, z), sampleStartingWaterRenderSurfaceMask(x, z) * 0.96) * 0.99,
@@ -1877,6 +1897,7 @@ export function sampleGrassDensity(x: number, z: number) {
   const lakeGap = sampleStartingWaterWetness(x, z);
   const routeDirt = sampleRouteDirtPathMask(x, z);
   const routeClearing = sampleRouteReadabilityClearing(x, z);
+  const nestExit = sampleOpeningNestExitPathMask(x, z);
   const biomeTransitionOpen = sampleBiomeTransitionOpen(x, z, height);
   const base =
     zone === "plains"
@@ -1891,7 +1912,7 @@ export function sampleGrassDensity(x: number, z: number) {
               ? 0.32
               : 0.08;
 
-  const startClear = Math.exp(-(((x + 58) / 32) ** 2) - ((z + 150) / 24) ** 2) * 0.34;
+  const startClear = Math.exp(-(((x - STARTING_NEST_X) / 34) ** 2) - ((z - STARTING_NEST_Z) / 26) ** 2) * 0.38;
   const passClear = Math.exp(-(((x - 18) / 26) ** 2) - ((z - 106) / 28) ** 2) * 0.18;
   const meadowLushness = zone === "plains" ? 1 : zone === "hills" ? 0.9 : zone === "foothills" ? 0.64 : 0.3;
   const patchNoise = fbmNoise(x * 0.032 + 4.2, z * 0.032 - 1.4, 4) * 0.5 + 0.5;
@@ -1918,17 +1939,31 @@ export function sampleGrassDensity(x: number, z: number) {
       startClear -
       passClear -
       routeClearing * 0.08 * (1 - habitat.meadow * 0.6) -
-      routeDirt * 0.28,
+      routeDirt * 0.28 -
+      nestExit * 0.42,
   );
 }
+
+const startingNestGroundY = sampleTerrainHeight(STARTING_NEST_X, STARTING_NEST_Z);
+export const startingNestGroundPosition = new Vector3(STARTING_NEST_X, startingNestGroundY, STARTING_NEST_Z);
+export const startingPosition = new Vector3(
+  STARTING_NEST_X,
+  startingNestGroundY + STARTING_PLAYER_HEIGHT_OFFSET,
+  STARTING_NEST_Z,
+);
+export const startingLookTarget = new Vector3(
+  STARTING_LOOK_X,
+  sampleTerrainHeight(STARTING_LOOK_X, STARTING_LOOK_Z) + 12,
+  STARTING_LOOK_Z,
+);
 
 export const worldLandmarks: WorldLandmark[] = [
   {
     id: "start-burrow",
     type: "burrow",
-    position: new Vector3(-68, sampleTerrainHeight(-68, -140), -140),
+    position: startingNestGroundPosition.clone(),
     title: "Burrow Hollow",
-    flavorPing: "The hollow still hums with the memory of first shelter.",
+    flavorPing: "The hillside nest still hums with the memory of first shelter.",
     interactionRadius: 16,
     inventoryEntry: {
       title: "Moss Quilt Scrap",
@@ -2093,7 +2128,7 @@ export const worldMapMarkers: readonly WorldMapMarker[] = [
     id: "poi-burrow",
     kind: "poi",
     title: "Burrow Hollow",
-    position: new Vector3(-44, sampleTerrainHeight(-44, -134), -134),
+    position: startingNestGroundPosition.clone(),
     landmarkId: "start-burrow",
   },
   {
@@ -2391,9 +2426,6 @@ export const scenicPockets: ScenicPocket[] = [
     radius: 18,
   },
 ];
-
-export const startingPosition = new Vector3(-68, sampleTerrainHeight(-68, -140) + 2.2, -140);
-export const startingLookTarget = new Vector3(18, sampleTerrainHeight(18, 108) + 12, 108);
 
 /**
  * Visual marker at a biome boundary — a hero prop placed where the terrain transitions

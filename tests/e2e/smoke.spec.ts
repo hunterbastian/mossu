@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { startingPosition } from "../../src/simulation/world";
 
 test.describe("Mossu smoke", () => {
   test.describe.configure({ timeout: 180_000 });
@@ -147,8 +148,8 @@ test.describe("Mossu smoke", () => {
     expect(state.save?.gatheredForageableIds ?? []).toEqual([]);
     expect(state.save?.recruitedKaruIds ?? []).toEqual([]);
     expect(state.save?.catalogedLandmarkIds ?? []).toContain("start-burrow");
-    expect(Math.round(state.player?.x ?? 0)).toBe(-68);
-    expect(Math.round(state.player?.z ?? 0)).toBe(-140);
+    expect(Math.round(state.player?.x ?? 0)).toBe(Math.round(startingPosition.x));
+    expect(Math.round(state.player?.z ?? 0)).toBe(Math.round(startingPosition.z));
   });
 
   test("debug route jumps land on named inspection spots", async ({ page }) => {

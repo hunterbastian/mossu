@@ -273,11 +273,15 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
     depthWrite: false,
     depthTest: true,
     uniforms: {
+      uTime: { value: 0 },
       uSunDir: { value: new Vector3(-0.86, 0.2, -0.41).normalize() },
       uSunColor: { value: new Color("#fff0cf") },
       uElevationMood: { value: 0 },
       uSunHaze: { value: 0 },
+      uWarmHaze: { value: 0 },
+      uWatercolorFog: { value: 0 },
       uLandmarkGlow: { value: 0 },
+      uSilhouetteContrast: { value: 0 },
     },
     vertexShader: `
       varying vec3 vWorldDirection;
@@ -289,11 +293,15 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
       }
     `,
     fragmentShader: `
+      uniform float uTime;
       uniform vec3 uSunDir;
       uniform vec3 uSunColor;
       uniform float uElevationMood;
       uniform float uSunHaze;
+      uniform float uWarmHaze;
+      uniform float uWatercolorFog;
       uniform float uLandmarkGlow;
+      uniform float uSilhouetteContrast;
 
       varying vec3 vWorldDirection;
 
@@ -370,6 +378,42 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
         float aquaLift = smoothstep(0.08, 0.72, dir.y) * (1.0 - smoothstep(0.76, 1.0, dir.y));
         color += vec3(0.075, 0.26, 0.24) * aquaLift * (0.046 - mood * 0.01);
 
+        vec2 dirFlat = normalize(dir.xz + vec2(0.0001, -0.0001));
+        vec2 sunFlat = normalize(sunDir.xz + vec2(0.0001, -0.0001));
+        float sunAzimuth = max(dot(dirFlat, sunFlat), 0.0);
+        float antiSunAzimuth = max(dot(dirFlat, -sunFlat), 0.0);
+        float horizonCore = smoothstep(-0.22, 0.025, dir.y) * (1.0 - smoothstep(0.075, 0.24, dir.y));
+        float horizonShelf = smoothstep(-0.16, 0.18, dir.y) * (1.0 - smoothstep(0.27, 0.58, dir.y));
+        float horizonGrain = fbm(vec2(atan(dir.z, dir.x) * 1.46 + uTime * 0.012, dir.y * 5.2 + 4.0));
+        float atmosphericDepth = horizonShelf * (0.5 + uWatercolorFog * 0.34 + uWarmHaze * 0.18);
+        float warmHorizon = horizonShelf * pow(sunAzimuth, 1.55) * (0.4 + uSunHaze * 0.34 + uLandmarkGlow * 0.12);
+        float coolHorizon = horizonCore * pow(antiSunAzimuth, 1.35) * (0.13 + mood * 0.06 + uSilhouetteContrast * 0.04);
+        vec3 creamAir = mix(vec3(0.99, 0.985, 0.86), vec3(1.0, 0.9, 0.58), 0.2 + uWarmHaze * 0.28);
+        vec3 sunMilk = mix(vec3(1.0, 0.95, 0.72), sunCream, 0.56);
+        vec3 coolDistantAir = mix(vec3(0.84, 0.97, 1.0), vec3(0.78, 0.9, 1.0), mood);
+        color = mix(color, creamAir, atmosphericDepth * (0.16 + horizonGrain * 0.06));
+        color = mix(color, sunMilk, warmHorizon * (0.22 + horizonGrain * 0.08));
+        color = mix(color, coolDistantAir, coolHorizon);
+
+        float viewAz = atan(dir.z, dir.x);
+        float sunAz = atan(sunDir.z, sunDir.x);
+        float azDelta = atan(sin(viewAz - sunAz), cos(viewAz - sunAz));
+        float fan = 1.0 - smoothstep(0.02, 1.42, abs(azDelta));
+        float lowAir = pow(1.0 - smoothstep(0.24, 0.88, dir.y), 1.18);
+        float rayAltitude = smoothstep(-0.07, 0.26, dir.y) * (1.0 - smoothstep(0.72, 1.0, dir.y));
+        float rayFlow = uTime * 0.027;
+        float broadRayNoise = fbm(vec2(azDelta * 2.8 + rayFlow, dir.y * 4.4 - rayFlow * 0.65));
+        float fineRayWave = 0.5 + 0.5 * sin(azDelta * 17.0 + broadRayNoise * 6.0 + uTime * 0.075);
+        float brokenBands = smoothstep(0.34, 0.72, broadRayNoise) * (0.45 + smoothstep(0.48, 0.9, fineRayWave) * 0.55);
+        float volumeShafts =
+          fan *
+          lowAir *
+          rayAltitude *
+          brokenBands *
+          (0.028 + uSunHaze * 0.028 + uWarmHaze * 0.014 + uLandmarkGlow * 0.012);
+        color += sunMilk * volumeShafts;
+        color = mix(color, coolDistantAir, fan * lowAir * rayAltitude * (1.0 - brokenBands) * 0.012);
+
         float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
         color += (dither - 0.5) * 0.0038;
 
@@ -398,14 +442,26 @@ export function syncAtmosphereLighting(
   camera.updateMatrixWorld();
   const skyMat = skyDome.material;
   if (skyMat instanceof ShaderMaterial && skyMat.uniforms.uSunDir) {
+    if (skyMat.uniforms.uTime) {
+      skyMat.uniforms.uTime.value = timeSeconds;
+    }
     skyMat.uniforms.uSunDir.value.copy(_sunDirScratch);
     (skyMat.uniforms.uSunColor.value as Color).copy(sun.color);
     skyMat.uniforms.uElevationMood.value = mood;
     if (skyMat.uniforms.uSunHaze) {
       skyMat.uniforms.uSunHaze.value = worldMood?.sunHaze ?? 0;
     }
+    if (skyMat.uniforms.uWarmHaze) {
+      skyMat.uniforms.uWarmHaze.value = worldMood?.warmHaze ?? 0;
+    }
+    if (skyMat.uniforms.uWatercolorFog) {
+      skyMat.uniforms.uWatercolorFog.value = worldMood?.watercolorFog ?? 0;
+    }
     if (skyMat.uniforms.uLandmarkGlow) {
       skyMat.uniforms.uLandmarkGlow.value = worldMood?.landmarkGlow ?? 0;
+    }
+    if (skyMat.uniforms.uSilhouetteContrast) {
+      skyMat.uniforms.uSilhouetteContrast.value = worldMood?.silhouetteContrast ?? 0;
     }
   }
   const cloudMat = clouds.userData.cloudMaterial as ShaderMaterial | MeshBasicMaterial | undefined;

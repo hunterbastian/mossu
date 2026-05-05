@@ -6,9 +6,11 @@ import {
   sampleRiverSurfaceMask,
   sampleRouteDirtPathMask,
   sampleBiomeThresholdClearing,
+  sampleOpeningNestExitPathMask,
   sampleRouteReadabilityClearing,
   sampleStartingWaterSurfaceMask,
   sampleTerrainHeight,
+  startingPosition,
   worldLandmarks,
 } from "../../src/simulation/world";
 import { assert, assertEqual } from "./testHarness";
@@ -67,6 +69,20 @@ export function runRouteContracts() {
     assert(
       dirt > 0.06 || inRiver || inStartPool,
       `route segment ${index} (${point.x.toFixed(1)}, ${point.z.toFixed(1)}) should read as dirt (dirt=${dirt.toFixed(3)}) or be water-covered (river=${inRiver} pool=${inStartPool})`,
+    );
+  });
+
+  const openingNestExitSamples = [
+    { label: "hillside nest", x: startingPosition.x, z: startingPosition.z },
+    { label: "nest exit midpoint", ...getRouteDirtContractSamples()[0] },
+  ];
+  openingNestExitSamples.forEach((point) => {
+    const exitMask = sampleOpeningNestExitPathMask(point.x, point.z);
+    const dirt = sampleRouteDirtPathMask(point.x, point.z);
+    const clearing = sampleRouteReadabilityClearing(point.x, point.z);
+    assert(
+      exitMask > 0.24 && dirt > 0.38 && clearing > 0.55,
+      `${point.label} should read as a pressed-grass exit path (exit=${exitMask.toFixed(3)} dirt=${dirt.toFixed(3)} clearing=${clearing.toFixed(3)})`,
     );
   });
 

@@ -314,8 +314,18 @@ function buildOpeningNestVista() {
 
   const forward = new Vector3().subVectors(startingLookTarget, startingPosition).setY(0).normalize();
   const right = new Vector3(forward.z, 0, -forward.x).normalize();
-  const nestCenter = startingPosition.clone().addScaledVector(forward, 25).addScaledVector(right, -0.7);
+  const nestCenter = startingPosition.clone();
   nestCenter.y = sampleTerrainHeight(nestCenter.x, nestCenter.z);
+  const terrainNormal = sampleTerrainNormal(nestCenter.x, nestCenter.z);
+  const uphill = new Vector3(-terrainNormal.x, 0, -terrainNormal.z);
+  if (uphill.lengthSq() < 0.001) {
+    uphill.copy(right).multiplyScalar(-1);
+  }
+  uphill.normalize();
+  const downhill = uphill.clone().multiplyScalar(-1);
+  const rimSide = new Vector3(uphill.z, 0, -uphill.x).normalize();
+  const trailForward = forward.clone().addScaledVector(downhill, 0.18).normalize();
+  const trailRight = new Vector3(trailForward.z, 0, -trailForward.x).normalize();
 
   const nestFloorMaterial = new MeshLambertMaterial({
     color: "#b9a978",
@@ -331,12 +341,26 @@ function buildOpeningNestVista() {
   const pebbleMaterial = new MeshStandardMaterial({ color: "#c8c3aa", roughness: 1, metalness: 0 });
   const flowerMaterial = new MeshBasicMaterial({ color: "#f7f4d6", transparent: true, opacity: 0.92 });
   const pollenMaterial = new MeshBasicMaterial({ color: "#ffd76a", transparent: true, opacity: 0.88 });
+  const pressedGrassMaterial = new MeshLambertMaterial({
+    color: "#9fb86a",
+    transparent: true,
+    opacity: 0.44,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const warmTreadMaterial = new MeshLambertMaterial({
+    color: "#c7b879",
+    transparent: true,
+    opacity: 0.34,
+    depthWrite: false,
+    side: DoubleSide,
+  });
 
   const floor = new Mesh(new CircleGeometry(1, 34), nestFloorMaterial);
   floor.rotation.x = -Math.PI / 2;
   floor.rotation.z = Math.atan2(forward.x, forward.z) + 0.2;
-  floor.position.set(nestCenter.x, nestCenter.y + 0.045, nestCenter.z);
-  floor.scale.set(5.9, 3.6, 1);
+  floor.position.set(nestCenter.x, nestCenter.y + 0.075, nestCenter.z);
+  floor.scale.set(6.6, 4.15, 1);
   group.add(floor);
 
   for (let i = 0; i < 28; i += 1) {
@@ -353,6 +377,20 @@ function buildOpeningNestVista() {
     group.add(clump);
   }
 
+  for (let i = 0; i < 18; i += 1) {
+    const lateral = (i - 8.5) * 0.46 + Math.sin(i * 1.9) * 0.24;
+    const depth = 3.35 + (i % 4) * 0.22 + Math.sin(i * 0.83) * 0.32;
+    const x = nestCenter.x + uphill.x * depth + rimSide.x * lateral;
+    const z = nestCenter.z + uphill.z * depth + rimSide.z * lateral;
+    const y = sampleTerrainHeight(x, z);
+    const material = i % 4 === 0 ? mossLeafMaterial : i % 3 === 0 ? darkLeafMaterial : softLeafMaterial;
+    const backWall = new Mesh(new SphereGeometry(1, 10, 8), material);
+    backWall.position.set(x, y + 0.26 + (i % 3) * 0.035, z);
+    backWall.rotation.y = Math.atan2(rimSide.x, rimSide.z) + Math.sin(i * 1.1) * 0.18;
+    backWall.scale.set(1.08 + (i % 3) * 0.18, 0.18 + (i % 4) * 0.025, 0.58 + (i % 5) * 0.08);
+    group.add(backWall);
+  }
+
   for (let i = 0; i < 13; i += 1) {
     const angle = (i / 13) * Math.PI * 2 + 0.28;
     const radius = 2.3 + (i % 4) * 0.42;
@@ -364,11 +402,26 @@ function buildOpeningNestVista() {
     group.add(twig);
   }
 
+  for (let i = 0; i < 13; i += 1) {
+    const distance = 4.8 + i * 2.15;
+    const lateral = Math.sin(i * 1.62) * 0.62 + (i % 2 === 0 ? -0.18 : 0.18);
+    const x = nestCenter.x + trailForward.x * distance + trailRight.x * lateral;
+    const z = nestCenter.z + trailForward.z * distance + trailRight.z * lateral;
+    const y = sampleTerrainHeight(x, z);
+    const patch = new Mesh(new CircleGeometry(1, 14), i % 3 === 0 ? warmTreadMaterial : pressedGrassMaterial);
+    patch.position.set(x, y + 0.072, z);
+    patch.rotation.x = -Math.PI / 2;
+    patch.rotation.z = Math.atan2(trailForward.x, trailForward.z) + Math.sin(i * 0.91) * 0.18;
+    patch.scale.set(1.9 + (i % 4) * 0.22, 0.66 + (i % 3) * 0.08, 1);
+    patch.renderOrder = 1;
+    group.add(patch);
+  }
+
   for (let i = 0; i < 14; i += 1) {
     const distance = 6.2 + i * 2.6;
     const lateral = Math.sin(i * 1.42) * 1.4 + (i % 2 === 0 ? -0.28 : 0.28);
-    const x = nestCenter.x + forward.x * distance + right.x * lateral;
-    const z = nestCenter.z + forward.z * distance + right.z * lateral;
+    const x = nestCenter.x + trailForward.x * distance + trailRight.x * lateral;
+    const z = nestCenter.z + trailForward.z * distance + trailRight.z * lateral;
     const y = sampleTerrainHeight(x, z);
     const stone = new Mesh(new SphereGeometry(1, 10, 8), pebbleMaterial);
     stone.position.set(x, y + 0.11, z);
@@ -381,8 +434,8 @@ function buildOpeningNestVista() {
     const distance = 9 + (i % 9) * 4.2;
     const side = i < 9 ? -1 : 1;
     const lateral = side * (3.3 + Math.sin(i * 1.37) * 1.2);
-    const x = nestCenter.x + forward.x * distance + right.x * lateral;
-    const z = nestCenter.z + forward.z * distance + right.z * lateral;
+    const x = nestCenter.x + trailForward.x * distance + trailRight.x * lateral;
+    const z = nestCenter.z + trailForward.z * distance + trailRight.z * lateral;
     const y = sampleTerrainHeight(x, z);
     const stem = new Mesh(new ConeGeometry(0.06, 0.62 + (i % 3) * 0.08, 6), mossLeafMaterial);
     stem.position.set(x, y + 0.3, z);

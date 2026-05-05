@@ -41,7 +41,7 @@ import {
   wantsUnderwaterDive,
 } from "../../src/simulation/waterTraversal";
 import type { WaterState } from "../../src/simulation/world";
-import { startingPosition } from "../../src/simulation/world";
+import { sampleTerrainHeight } from "../../src/simulation/world";
 import { assert } from "./testHarness";
 
 const baseInput: InputSnapshot = {
@@ -62,9 +62,11 @@ const baseInput: InputSnapshot = {
   escapePressed: false,
 };
 
+const movementContractPosition = new Vector3(-68, sampleTerrainHeight(-68, -140) + 2.2, -140);
+
 function makePlayer(): PlayerState {
   return {
-    position: startingPosition.clone(),
+    position: movementContractPosition.clone(),
     velocity: new Vector3(),
     heading: 0,
     stamina: 100,
