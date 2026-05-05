@@ -189,7 +189,7 @@ export class GameState {
 
     if (player.swimming && waterStateAtStart) {
       applySwimForces(player, waterStateAtStart, input.abilityHeld, dt);
-      clampSwimVelocity(player, input.jumpHeld, input.abilityHeld, dt);
+      clampSwimVelocity(player, input.jumpHeld, input.abilityHeld, dt, runtime);
     }
 
     player.position.addScaledVector(player.velocity, dt);

@@ -16,7 +16,9 @@
 - Heavy **grass / tree / decor** setup in **`WorldRenderer`** can be **staged** through a **`startupContentQueue`** (per-frame and/or idle) to reduce synchronous constructor cost; keep ordering coherent with deferred world slices (e.g. clouds) so nothing double-runs.
 - **`?e2e=1`** on the game URL uses a small `render_game_to_text` payload and keeps **Playwright / headless** reliable; **`window.__MOSSU_E2E__`** exposes `{ ready, mode }` after the first frame post-`start()`. Prefer `npm run test:e2e:smoke` for the browser smoke tests.
 - Visual, shader, and interaction validation should be checked in a **real desktop browser**, not only headless or embedded automation.
+- `npm run art:review` builds the production bundle, opens headed Chrome, uses `mossuDebug.jumpTo()` for named route checkpoints, and writes screenshots/JSON to `output/art-review-route/`; use it for visual passes that need fast real-browser judgement.
 - Focused playtesting can follow `docs/PLAYTEST_CHECKLIST.md` (e.g. a walk from Burrow to Moss Crown).
+- `Mossu weekly wiki sync` is a local weekly cron automation that compares repo docs/progress with `/Users/hunterbastian/wiki` Mossu pages after larger passes.
 - Project-level Three.js skill files from `cloudai-x/threejs-skills` are installed under `.claude/skills/`. For Three.js rendering, lighting, materials, shaders, postprocessing, loaders, animation, geometry, textures, or interaction work, consult the matching skill before changing code. Mossu's current TypeScript setup resolves Three.js add-ons through `three/examples/jsm/...`; do not switch those imports to `three/addons/...` unless the module resolution/types are updated and `tsc --noEmit` passes.
 
 ## Waza Workflow For Mossu
@@ -27,3 +29,14 @@
 - For visual/UI/art-direction work, use `design` plus the relevant `.claude/skills/threejs-*` file before editing render, material, geometry, lighting, shader, postprocessing, texture, animation, or interaction code.
 - For bugs, regressions, or unexpected runtime behavior, use `hunt` and confirm the root cause before patching.
 - Before considering a substantial Mossu pass done, use `check`-style review discipline: inspect the diff for scope drift, verify dependencies did not change unintentionally, run `npm run qa`, and do a real-browser visual check when the change touches rendering or interaction.
+
+## Documentation Discipline For Mossu
+
+- Treat `progress.md` as the chronological implementation log, not the current spec.
+- Start with `docs/CURRENT_STATE.md` for the short present-tense project snapshot and `docs/NEXT_PASSES.md` for the prioritized queue.
+- After meaningful implementation or verification work, update `progress.md` with scope, files, verification, artifacts, and the next risk.
+- If current mechanics, art direction, or product priorities changed, update `docs/GAME_MEMORY.md`.
+- If the short current-state snapshot changed, update `docs/CURRENT_STATE.md`.
+- If priority order changed, update `docs/NEXT_PASSES.md`.
+- If a blocker, caveat, security note, or browser/tooling risk changed, update `docs/KNOWN_ISSUES.md`.
+- Sync wiki pages only after repo docs are current; wiki summarizes decisions and sourcebook direction, it does not replace repo docs.

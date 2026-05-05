@@ -1,10 +1,6 @@
 import type { PlayerState } from "./gameState";
 import type { WaterState } from "./world";
-import {
-  SWIM_ENTRY_MARGIN,
-  SWIM_EXIT_MARGIN,
-  SWIM_MIN_DEPTH,
-} from "./playerSimulationConstants";
+import { SWIM_ENTRY_MARGIN, SWIM_EXIT_MARGIN, SWIM_MIN_DEPTH } from "./playerSimulationConstants";
 
 export type PlayerWaterMovementState = "onLand" | "wading" | "swimmingSurface" | "underwater";
 
@@ -35,11 +31,7 @@ export class SwimmingController {
     return player.position.y <= waterState.surfaceY + entryMargin;
   }
 
-  classify(
-    player: PlayerState,
-    waterState: WaterState | null,
-    swimming = player.swimming,
-  ): PlayerWaterMovementState {
+  classify(player: PlayerState, waterState: WaterState | null, swimming = player.swimming): PlayerWaterMovementState {
     if (!waterState || waterState.depth < this.tuning.wadeDepthThreshold) {
       return "onLand";
     }

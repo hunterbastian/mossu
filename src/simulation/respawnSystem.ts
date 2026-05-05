@@ -10,8 +10,10 @@ import {
 import { isInsideIslandPlayableBounds, sampleIslandVoidThreshold, startingPosition } from "./world";
 
 export function shouldStartVoidFall(player: PlayerState) {
-  return !isInsideIslandPlayableBounds(player.position.x, player.position.z)
-    && player.position.y <= sampleIslandVoidThreshold(player.position.x, player.position.z);
+  return (
+    !isInsideIslandPlayableBounds(player.position.x, player.position.z) &&
+    player.position.y <= sampleIslandVoidThreshold(player.position.x, player.position.z)
+  );
 }
 
 export function beginVoidFall(player: PlayerState, runtime: PlayerSimulationRuntime) {

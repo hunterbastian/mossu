@@ -1,5 +1,19 @@
 import { expect, test } from "@playwright/test";
-import { startingPosition } from "../../src/simulation/world";
+import { startingLookTarget, startingPosition } from "../../src/simulation/world";
+
+function openingKaruPosition(forwardOffset: number, rightOffset: number) {
+  const forwardX = startingLookTarget.x - startingPosition.x;
+  const forwardZ = startingLookTarget.z - startingPosition.z;
+  const length = Math.hypot(forwardX, forwardZ) || 1;
+  const normalizedForwardX = forwardX / length;
+  const normalizedForwardZ = forwardZ / length;
+  const rightX = normalizedForwardZ;
+  const rightZ = -normalizedForwardX;
+  return {
+    x: startingPosition.x + normalizedForwardX * forwardOffset + rightX * rightOffset,
+    z: startingPosition.z + normalizedForwardZ * forwardOffset + rightZ * rightOffset,
+  };
+}
 
 test.describe("Mossu smoke", () => {
   test.describe.configure({ timeout: 180_000 });
@@ -150,6 +164,81 @@ test.describe("Mossu smoke", () => {
     expect(state.save?.catalogedLandmarkIds ?? []).toContain("start-burrow");
     expect(Math.round(state.player?.x ?? 0)).toBe(Math.round(startingPosition.x));
     expect(Math.round(state.player?.z ?? 0)).toBe(Math.round(startingPosition.z));
+  });
+
+  test("Karu recruitment requires holding E near each individual", async ({ page }) => {
+    await page.goto("/?e2e=1&qaDebug=1", { waitUntil: "domcontentloaded", timeout: 60_000 });
+
+    await page.waitForFunction(
+      () => window.__MOSSU_E2E__?.ready === true && typeof window.render_game_to_text === "function",
+      { timeout: 120_000 },
+    );
+
+    type SmokeState = {
+      save?: { recruitedKaruIds?: string[] };
+      player?: { x?: number; z?: number };
+    };
+    const readState = async () =>
+      JSON.parse(await page.evaluate(() => window.render_game_to_text?.() ?? "{}")) as SmokeState;
+    const step = async (ms = 160) => {
+      await page.evaluate((duration) => window.advanceTime?.(duration), ms);
+    };
+    const holdInteract = async () => {
+      await page.keyboard.down("KeyE");
+      await page.waitForTimeout(820);
+      await step(120);
+      await page.keyboard.up("KeyE");
+      await step(220);
+    };
+
+    await page.keyboard.press("Enter");
+    await step(400);
+    await page.evaluate(
+      (start) => {
+        window.mossuDebug?.completeOpeningSequence?.();
+        window.mossuDebug?.applySaveState?.({
+          player: { x: start.x, z: start.z, heading: 0.42 },
+          save: {
+            unlockedAbilities: [],
+            catalogedLandmarkIds: ["start-burrow"],
+            gatheredForageableIds: [],
+            recruitedKaruIds: [],
+          },
+        });
+      },
+      { x: startingPosition.x, z: startingPosition.z },
+    );
+    await step(650);
+
+    await page.keyboard.press("KeyE");
+    await step(260);
+    let state = await readState();
+    expect(state.save?.recruitedKaruIds ?? []).toEqual([]);
+
+    await holdInteract();
+    state = await readState();
+    expect(state.save?.recruitedKaruIds ?? []).toHaveLength(1);
+    const firstRecruit = state.save?.recruitedKaruIds ?? [];
+
+    await holdInteract();
+    state = await readState();
+    expect(state.save?.recruitedKaruIds ?? []).toEqual(firstRecruit);
+
+    const secondKaru = openingKaruPosition(11.2, 1.8);
+    await page.evaluate(
+      (target) => {
+        window.mossuDebug?.applySaveState?.({
+          player: { x: target.x, z: target.z, heading: 0.42 },
+          save: { recruitedKaruIds: target.recruitedKaruIds },
+        });
+      },
+      { ...secondKaru, recruitedKaruIds: firstRecruit },
+    );
+    await step(500);
+
+    await holdInteract();
+    state = await readState();
+    expect(new Set(state.save?.recruitedKaruIds ?? []).size).toBe(2);
   });
 
   test("debug route jumps land on named inspection spots", async ({ page }) => {

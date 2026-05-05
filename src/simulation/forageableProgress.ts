@@ -27,22 +27,21 @@ export function updateForageableProgress(
   gatherPressed = false,
 ): ForageableProgressSnapshot {
   const nearbyForageable = findNearbyForageable(playerPosition.x, playerPosition.z, gatheredForageableIds);
-  const lastGatheredForageableId = gatherPressed && nearbyForageable
-    ? gatherForageable(gatheredForageableIds, nearbyForageable.id)
-    : null;
+  const lastGatheredForageableId =
+    gatherPressed && nearbyForageable ? gatherForageable(gatheredForageableIds, nearbyForageable.id) : null;
   const forageableTarget = lastGatheredForageableId ? null : nearbyForageable;
 
   return {
     forageableTarget: forageableTarget
       ? {
-        forageableId: forageableTarget.id,
-        title: forageableTarget.title,
-        kind: forageableTarget.kind,
-        distance: Math.sqrt(
-          (playerPosition.x - forageableTarget.position.x) ** 2 +
-          (playerPosition.z - forageableTarget.position.z) ** 2,
-        ),
-      }
+          forageableId: forageableTarget.id,
+          title: forageableTarget.title,
+          kind: forageableTarget.kind,
+          distance: Math.sqrt(
+            (playerPosition.x - forageableTarget.position.x) ** 2 +
+              (playerPosition.z - forageableTarget.position.z) ** 2,
+          ),
+        }
       : null,
     lastGatheredForageableId,
   };

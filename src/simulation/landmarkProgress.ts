@@ -78,10 +78,7 @@ function buildInteractionTarget(
     return null;
   }
 
-  landmarkScratch.set(
-    playerPosition.x - landmark.position.x,
-    playerPosition.z - landmark.position.z,
-  );
+  landmarkScratch.set(playerPosition.x - landmark.position.x, playerPosition.z - landmark.position.z);
 
   return {
     landmarkId: landmark.id,

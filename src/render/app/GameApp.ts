@@ -25,7 +25,7 @@ import {
   OPENING_SEQUENCE_SECONDS,
   OPENING_SEQUENCE_SKIP_AFTER_SECONDS,
   PAUSED_INPUT,
-  POST_PROCESSING_RESUME_DELAY_SECONDS,
+  POST_PROCESSING_MIN_PIXEL_RATIO,
   hasControlActivity,
   isLowQuality,
   type DebugSaveStatePayload,
@@ -55,12 +55,11 @@ import {
 } from "./appPerformance";
 import {
   createPostProcessingRuntime,
-  getPostProcessingSuppressedMs,
   getRenderPath,
   markPostProcessingScheduled,
+  shouldUseBloomPass as shouldUseBloomPassRuntime,
   shouldUsePostProcessing as shouldUsePostProcessingRuntime,
   shouldUseRetroTexture as shouldUseRetroTextureRuntime,
-  suppressPostProcessing as suppressPostProcessingRuntime,
   updateAnimeColorGradePass,
   updateRenderPath,
   updateRetroTexturePass,
@@ -104,6 +103,10 @@ import {
 import { createOpeningSequenceOverlay, createTitleScreen } from "./appTitleScreen";
 import { serializeE2eGameTextState, serializeGameTextState } from "./appTextState";
 import { ANIME_COLOR_GRADE_SHADER } from "./animeColorGradeShader";
+
+const KARU_RECRUIT_HOLD_SECONDS = 0.68;
+const KARU_RECRUIT_PROMPT_RADIUS = 11.5;
+const KARU_REGROUP_HOLD_SECONDS = 0.45;
 
 type DebugRouteJumpId = "fir-gate" | "highland-basin" | "ridge-saddle" | "shrine";
 
@@ -236,6 +239,7 @@ export class GameApp {
   private cachedWorldPerfStatsAt = -Infinity;
   private waterDepthDebugEnabled = false;
   private idleControlSeconds = 0;
+  private faunaRecruitReady = true;
   private faunaRegroupReady = true;
   private firstKaruEncounterSeen = false;
   private summitCompletionSeen = false;
@@ -252,7 +256,9 @@ export class GameApp {
     const params = new URLSearchParams(window.location.search);
     const rendererBundle = await createRendererBundle(params);
     const { WorldRenderer } = await import("../world/WorldRenderer");
-    return new GameApp(container, params, rendererBundle, WorldRenderer);
+    const app = new GameApp(container, params, rendererBundle, WorldRenderer);
+    await app.preparePostProcessing();
+    return app;
   }
 
   private constructor(
@@ -369,7 +375,6 @@ export class GameApp {
       return;
     }
 
-    this.schedulePostProcessingInit();
     const loop = () => {
       const rawDt = Math.min(0.1, this.clock.getDelta());
       const dt = Math.min(0.033, rawDt);
@@ -430,18 +435,19 @@ export class GameApp {
     }
   }
 
-  private schedulePostProcessingInit() {
+  private async preparePostProcessing() {
+    if (this.e2eMinimal) {
+      return;
+    }
+
     if (!markPostProcessingScheduled(this.postProcessing, this.qualityLow, this.renderer)) {
       return;
     }
 
-    const start = () => {
-      void this.initializePostProcessing();
-    };
-    if ("requestIdleCallback" in window) {
-      window.requestIdleCallback(start, { timeout: 1500 });
-    } else {
-      globalThis.setTimeout(start, 700);
+    try {
+      await this.initializePostProcessing();
+    } catch (error) {
+      console.warn("Mossu postprocessing init failed", error);
     }
   }
 
@@ -494,7 +500,6 @@ export class GameApp {
     this.animeColorGradePass = animeColorGradePass;
     this.retroTexturePass = retroTexturePass;
     this.updateBloomSettings();
-    this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
     this.logRenderPathEvent("postprocessing-ready");
   }
 
@@ -726,6 +731,7 @@ export class GameApp {
         openingSequence,
         pauseMenuOpen: this.pauseMenuOpen,
         characterScreenOpen: this.characterScreenOpen,
+        faunaStats: this.world.getFaunaStats(),
         coopStressSnapshot: this.latestCoopStressSnapshot,
         camera: this.followCamera.getDebugState(),
         qualitySettings: this.qualitySettings,
@@ -780,6 +786,10 @@ export class GameApp {
     };
 
     const input = this.input.sample();
+    const previousFaunaStats = this.world.getFaunaStats();
+    const recruitableKaruNearby =
+      previousFaunaStats.nearestRecruitableDistance !== null &&
+      previousFaunaStats.nearestRecruitableDistance <= KARU_RECRUIT_PROMPT_RADIUS;
     let faunaRecruitPressed = false;
     let faunaRegroupPressed = false;
     let preZoneForFeedback: typeof this.state.frame.currentZone | null = null;
@@ -833,12 +843,27 @@ export class GameApp {
         this.openMap();
         this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
       } else {
-        faunaRecruitPressed = input.interactPressed && !this.state.frame.forageableTarget;
-        if (input.interactHeld && input.interactHoldSeconds >= 0.45 && this.faunaRegroupReady) {
+        const canInviteKaru = recruitableKaruNearby && !this.state.frame.forageableTarget;
+        if (
+          canInviteKaru &&
+          input.interactHeld &&
+          input.interactHoldSeconds >= KARU_RECRUIT_HOLD_SECONDS &&
+          this.faunaRecruitReady
+        ) {
+          faunaRecruitPressed = true;
+          this.faunaRecruitReady = false;
+        }
+        if (
+          !canInviteKaru &&
+          input.interactHeld &&
+          input.interactHoldSeconds >= KARU_REGROUP_HOLD_SECONDS &&
+          this.faunaRegroupReady
+        ) {
           faunaRegroupPressed = true;
           this.faunaRegroupReady = false;
         }
         if (!input.interactHeld) {
+          this.faunaRecruitReady = true;
           this.faunaRegroupReady = true;
         }
         preZoneForFeedback = this.state.frame.currentZone;
@@ -925,6 +950,7 @@ export class GameApp {
     const faunaStats = this.world.getFaunaStats();
     if (faunaStats.recruitedThisFrame > 0) {
       this.state.markSaveDirty();
+      this.gameplayFeedback.playKaruChirp("join");
     }
     if (
       faunaStats.firstEncounterActive &&
@@ -937,6 +963,7 @@ export class GameApp {
     ) {
       this.firstKaruEncounterSeen = true;
       this.followCamera.kickCinematic({ polar: -0.026, distance: 2.4, shoulder: 0.34 });
+      this.gameplayFeedback.playKaruChirp("notice");
       this.hud.showFlavorPing("A Karu pauses in the grass.");
       this.syncHud();
     }
@@ -1011,23 +1038,36 @@ export class GameApp {
 
   private renderScene() {
     const postProcessingEnabled = this.shouldUsePostProcessing();
+    const bloomEnabled = this.shouldUseBloomPass(postProcessingEnabled);
+    const retroTextureEnabled = this.shouldUseRetroTexturePass(postProcessingEnabled);
     const renderPath = getRenderPath(postProcessingEnabled, this.composer);
     if (updateRenderPath(this.postProcessing, renderPath)) {
       this.logRenderPathEvent(`render-path-${renderPath}`);
     }
     if (this.bloomPass) {
-      this.bloomPass.enabled = postProcessingEnabled && this.qualitySettings.bloomEnabled;
+      this.bloomPass.enabled = bloomEnabled;
     }
     if (this.animeColorGradePass) {
       this.animeColorGradePass.enabled = postProcessingEnabled;
     }
     if (this.retroTexturePass) {
-      this.retroTexturePass.enabled = this.shouldUseRetroTexture();
+      this.retroTexturePass.enabled = retroTextureEnabled;
     }
     if (postProcessingEnabled && this.composer) {
       updateAnimeColorGradePass(this.animeColorGradePass, this.elapsed, this.activePixelRatio);
       updateRetroTexturePass(this.retroTexturePass, this.elapsed, this.activePixelRatio);
-      this.composer.render();
+      if (isWebGlRenderer(this.renderer)) {
+        const previousAutoReset = this.renderer.info.autoReset;
+        this.renderer.info.reset();
+        this.renderer.info.autoReset = false;
+        try {
+          this.composer.render();
+        } finally {
+          this.renderer.info.autoReset = previousAutoReset;
+        }
+      } else {
+        this.composer.render();
+      }
       return;
     }
 
@@ -1035,31 +1075,32 @@ export class GameApp {
   }
 
   private shouldUsePostProcessing() {
-    const overlayBlocksPostProcessing =
-      this.titleScreenOpen ||
-      this.openingSequenceActive ||
-      this.pauseMenuOpen ||
-      this.characterScreenOpen ||
-      this.viewMode === "map_lookdown";
     return shouldUsePostProcessingRuntime({
       composer: this.composer,
-      overlayBlocksPostProcessing,
-      elapsed: this.elapsed,
-      runtime: this.postProcessing,
+      activePixelRatio: this.activePixelRatio,
+      minPixelRatio: POST_PROCESSING_MIN_PIXEL_RATIO,
+    });
+  }
+
+  private shouldUseBloom() {
+    return this.shouldUseBloomPass(this.shouldUsePostProcessing());
+  }
+
+  private shouldUseRetroTexture() {
+    return this.shouldUseRetroTexturePass(this.shouldUsePostProcessing());
+  }
+
+  private shouldUseBloomPass(postProcessingEnabled: boolean) {
+    return shouldUseBloomPassRuntime({
+      postProcessingEnabled,
+      bloomEnabled: this.qualitySettings.bloomEnabled,
       activePixelRatio: this.activePixelRatio,
       minPixelRatio: BLOOM_MIN_PIXEL_RATIO,
     });
   }
 
-  private shouldUseBloom() {
-    return this.shouldUsePostProcessing() && this.qualitySettings.bloomEnabled;
-  }
-
-  private shouldUseRetroTexture() {
-    return shouldUseRetroTextureRuntime(
-      this.retroRenderEnabled && this.qualitySettings.visualPreset !== "crisp",
-      this.shouldUsePostProcessing(),
-    );
+  private shouldUseRetroTexturePass(postProcessingEnabled: boolean) {
+    return shouldUseRetroTextureRuntime(this.retroRenderEnabled, postProcessingEnabled);
   }
 
   private syncHudForFrame(dt: number) {
@@ -1192,7 +1233,7 @@ export class GameApp {
       retroTextureEnabled: this.retroTexturePass !== null && this.shouldUseRetroTexture(),
       renderPath: this.postProcessing.activeRenderPath,
       postProcessingReady: this.composer !== null,
-      postProcessingSuppressedMs: getPostProcessingSuppressedMs(this.postProcessing, this.elapsed),
+      postProcessingSuppressedMs: 0,
       waterDepthDebug: this.waterDepthDebugEnabled,
       underwaterIntensity: this.underwaterEffect.getIntensity(),
       webGlContextLostCount: this.webGlContextLostCount,
@@ -1477,7 +1518,6 @@ export class GameApp {
   private closePauseMenu() {
     this.pauseMenuOpen = false;
     this.syncHud();
-    this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
     this.focusGameplaySurface();
   }
 
@@ -1494,7 +1534,6 @@ export class GameApp {
     if (this.viewMode !== "third_person") {
       this.setViewMode("third_person");
       this.followCamera.kickCinematic({ polar: 0.012, distance: 1.1, shoulder: -0.08 });
-      this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
       this.focusGameplaySurface();
     }
   }
@@ -1531,7 +1570,6 @@ export class GameApp {
     this.movementAudio.stop();
     this.hud.showFlavorPing("Fresh start saved. Mossu is back at Burrow Hollow.");
     this.syncHud();
-    this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
     this.focusGameplaySurface();
   }
 
@@ -1604,7 +1642,6 @@ export class GameApp {
     this.openingSequenceOverlay.classList.add("opening-sequence--visible");
     this.openingSequenceOverlay.setAttribute("aria-hidden", "false");
     this.followCamera.setOpeningSequenceProgress(0);
-    this.suppressPostProcessing(OPENING_SEQUENCE_SECONDS + POST_PROCESSING_RESUME_DELAY_SECONDS);
     this.syncHud();
     this.focusGameplaySurface();
   };
@@ -1649,7 +1686,6 @@ export class GameApp {
     this.followCamera.setOpeningSequenceProgress(null);
     this.openingSequenceOverlay.classList.remove("opening-sequence--visible");
     this.openingSequenceOverlay.setAttribute("aria-hidden", "true");
-    this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
     // Guarantee the deferred world build is complete before the player can see it.
     // Normally the title + opening cover (~1-2s @ 3 slices/frame) drains the 12-slice
     // queue easily, but if rAF was throttled (background tab) or the player skipped
@@ -1661,10 +1697,6 @@ export class GameApp {
     }
     this.syncHud();
     this.focusGameplaySurface();
-  }
-
-  private suppressPostProcessing(seconds: number) {
-    suppressPostProcessingRuntime(this.postProcessing, this.elapsed, seconds);
   }
 
   private logRenderPathEvent(event: string) {
@@ -1681,7 +1713,7 @@ export class GameApp {
       character: this.characterScreenOpen,
       viewMode: this.viewMode,
       postReady: this.composer !== null,
-      suppressedMs: getPostProcessingSuppressedMs(this.postProcessing, this.elapsed),
+      suppressedMs: 0,
       pixelRatio: Number(this.activePixelRatio.toFixed(2)),
       contextLost: this.webGlContextLostCount,
     });
@@ -1695,7 +1727,6 @@ export class GameApp {
 
   private handleWebGlContextRestored = () => {
     this.webGlContextRestoredCount += 1;
-    this.suppressPostProcessing(POST_PROCESSING_RESUME_DELAY_SECONDS);
     this.logRenderPathEvent("webgl-context-restored");
   };
 

@@ -5,3 +5,10 @@ node_modules
 output
 playwright-report
 test-results
+.claude/skills
+.deepsec/.env*.local
+.deepsec/node_modules
+.deepsec/data/*/files
+.deepsec/data/*/runs
+.deepsec/data/*/reports
+.deepsec/data/*/project.json

@@ -10,6 +10,11 @@ export interface PlayerSimulationRuntime {
   airMomentumGraceRemaining: number;
   airMomentumSpeedLimitBonus: number;
   landingMomentumGraceRemaining: number;
+  rollExitCarryRemaining: number;
+  rollExitSpeedCarryBonus: number;
+  floatExitGravityGraceRemaining: number;
+  swimEntryMomentumGraceRemaining: number;
+  wadeBlend: number;
   smoothedMoveX: number;
   smoothedMoveY: number;
   /** Was jump held on the previous physics tick — used to detect release inside the charge window. */
@@ -43,6 +48,11 @@ export function createPlayerSimulationRuntime(): PlayerSimulationRuntime {
     airMomentumGraceRemaining: 0,
     airMomentumSpeedLimitBonus: 0,
     landingMomentumGraceRemaining: 0,
+    rollExitCarryRemaining: 0,
+    rollExitSpeedCarryBonus: 0,
+    floatExitGravityGraceRemaining: 0,
+    swimEntryMomentumGraceRemaining: 0,
+    wadeBlend: 0,
     smoothedMoveX: 0,
     smoothedMoveY: 0,
     jumpHeldPrevFrame: false,

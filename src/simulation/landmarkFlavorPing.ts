@@ -14,11 +14,7 @@ export function getFlavorPingText(landmark: WorldLandmark): string {
 }
 
 /** Nearest landmark within ping radius that has not been shown this session. */
-export function findFlavorPingLandmark(
-  x: number,
-  z: number,
-  shownIds: ReadonlySet<string>,
-): WorldLandmark | null {
+export function findFlavorPingLandmark(x: number, z: number, shownIds: ReadonlySet<string>): WorldLandmark | null {
   let best: WorldLandmark | null = null;
   let bestD2 = Infinity;
   for (const lm of worldLandmarks) {

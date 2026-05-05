@@ -5,7 +5,6 @@ import { isWebGlRenderer } from "./rendererBackend";
 
 export type PostProcessingRuntime = {
   initStarted: boolean;
-  suppressedUntil: number;
   activeRenderPath: RenderPath;
   lastLoggedRenderPath: RenderPath;
 };
@@ -13,7 +12,6 @@ export type PostProcessingRuntime = {
 export function createPostProcessingRuntime(): PostProcessingRuntime {
   return {
     initStarted: false,
-    suppressedUntil: 0,
     activeRenderPath: "direct",
     lastLoggedRenderPath: "direct",
   };
@@ -32,39 +30,34 @@ export function markPostProcessingScheduled(
   return true;
 }
 
-export function suppressPostProcessing(runtime: PostProcessingRuntime, elapsed: number, seconds: number) {
-  runtime.suppressedUntil = Math.max(runtime.suppressedUntil, elapsed + seconds);
-}
-
-export function getPostProcessingSuppressedMs(runtime: PostProcessingRuntime, elapsed: number) {
-  return Math.max(0, Math.round((runtime.suppressedUntil - elapsed) * 1000));
-}
-
 export function shouldUsePostProcessing({
   composer,
-  overlayBlocksPostProcessing,
-  elapsed,
-  runtime,
   activePixelRatio,
   minPixelRatio,
 }: {
   composer: EffectComposer | null;
-  overlayBlocksPostProcessing: boolean;
-  elapsed: number;
-  runtime: PostProcessingRuntime;
   activePixelRatio: number;
   minPixelRatio: number;
 }) {
-  return (
-    composer !== null &&
-    !overlayBlocksPostProcessing &&
-    elapsed >= runtime.suppressedUntil &&
-    activePixelRatio >= minPixelRatio
-  );
+  return composer !== null && activePixelRatio >= minPixelRatio;
 }
 
 export function shouldUseRetroTexture(retroRenderEnabled: boolean, postProcessingEnabled: boolean) {
   return retroRenderEnabled && postProcessingEnabled;
+}
+
+export function shouldUseBloomPass({
+  postProcessingEnabled,
+  bloomEnabled,
+  activePixelRatio,
+  minPixelRatio,
+}: {
+  postProcessingEnabled: boolean;
+  bloomEnabled: boolean;
+  activePixelRatio: number;
+  minPixelRatio: number;
+}) {
+  return postProcessingEnabled && bloomEnabled && activePixelRatio >= minPixelRatio;
 }
 
 export function getRenderPath(postProcessingEnabled: boolean, composer: EffectComposer | null): RenderPath {

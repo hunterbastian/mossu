@@ -43,10 +43,7 @@ function assertRenderedWaterClearsTerrain(
   const gameplaySurfaceY = sampleFilledWaterSurfaceY(flatSurfaceY, x, z, bank, edgeBlend);
   const renderedSurfaceY = sampleRenderedWaterSurfaceY(flatSurfaceY, x, z, bank, edgeBlend);
   assertApprox(renderedSurfaceY, gameplaySurfaceY, 0.001, `${label} rendered water uses filled gameplay surface`);
-  assert(
-    renderedSurfaceY >= terrainY + 0.02,
-    `${label} rendered water clears terrain`,
-  );
+  assert(renderedSurfaceY >= terrainY + 0.02, `${label} rendered water clears terrain`);
   assert(
     renderedSurfaceY <= gameplaySurfaceY + 0.001,
     `${label} rendered water does not overfill above gameplay height`,
@@ -77,7 +74,10 @@ export function runWaterContracts() {
     assert(surfaceMask > 0.95, `main river center has rendered surface at z=${z}`);
     assert(water !== null, `main river center has gameplay water at z=${z}`);
     assert(water.depth > 0.2, `main river center has positive depth at z=${z}`);
-    assert(edge.zone === "shallow_water" || edge.zone === "swim_water", `main river center edge zone is water at z=${z}`);
+    assert(
+      edge.zone === "shallow_water" || edge.zone === "swim_water",
+      `main river center edge zone is water at z=${z}`,
+    );
     assert(ambience.proximity > 0.95, `main river center has strong water ambience at z=${z}`);
     assert(ambience.kind === "river", `main river center ambience resolves to river at z=${z}`);
     assertFlowVector(water.flowDirection, `main river z=${z}`);
@@ -87,9 +87,13 @@ export function runWaterContracts() {
     const bankEdge = sampleRiverEdgeState(dryBankX, z);
     const bankShape = sampleWaterBankShape(dryBankX, z);
     assert(bankWater === null, `outside rendered main river edge is not gameplay water at z=${z}`);
-    assert(bankEdge.zone === "damp_bank" || bankEdge.zone === "dry", `outside rendered main river edge is bank/dry at z=${z}`);
     assert(
-      Math.max(bankShape.dampBand, bankShape.dryLip, bankShape.pebbleBand, bankShape.coveCut, bankShape.shelfCut) > 0.08,
+      bankEdge.zone === "damp_bank" || bankEdge.zone === "dry",
+      `outside rendered main river edge is bank/dry at z=${z}`,
+    );
+    assert(
+      Math.max(bankShape.dampBand, bankShape.dryLip, bankShape.pebbleBand, bankShape.coveCut, bankShape.shelfCut) >
+        0.08,
       `outside rendered main river edge has shaped bank mask at z=${z}`,
     );
 
@@ -195,7 +199,11 @@ export function runWaterContracts() {
     );
     assertFlowVector(water.flowDirection, `${pool.id}`);
 
-    for (const [nx, nz] of [[0.42, 0.1], [-0.34, 0.38], [0.72, -0.18]] as const) {
+    for (const [nx, nz] of [
+      [0.42, 0.1],
+      [-0.34, 0.38],
+      [0.72, -0.18],
+    ] as const) {
       const x = pool.x + pool.renderRadiusX * STARTING_WATER_VISUAL_FILL_SCALE * nx;
       const z = pool.z + pool.renderRadiusZ * STARTING_WATER_VISUAL_FILL_SCALE * nz;
       const visualDistance = Math.sqrt(nx * nx + nz * nz);

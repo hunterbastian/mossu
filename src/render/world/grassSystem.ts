@@ -367,7 +367,7 @@ export function createGrassMesh(
       lastOriginZ: Number.POSITIVE_INFINITY,
       activeCount: count,
       lastVisitedCells: 0,
-      lastVisitedSources: count,
+      lastVisitedSources: 0,
     } satisfies GrassLodSource;
   }
 

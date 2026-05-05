@@ -284,7 +284,10 @@ export function createMossbackTitanRig(scale = 1): MossbackTitanRig {
     const treeScale = 0.68 + (i % 3) * 0.18;
     const trunk = new Mesh(new CylinderGeometry(0.12, 0.17, 1.1 * treeScale, 6), trunkMaterial);
     trunk.position.set(x, 12.14 + 0.48 * treeScale, z);
-    const lowerLeaves = new Mesh(new ConeGeometry(0.52 * treeScale, 1.06 * treeScale, 7), i % 2 === 0 ? treeDarkLeafMaterial : treeLeafMaterial);
+    const lowerLeaves = new Mesh(
+      new ConeGeometry(0.52 * treeScale, 1.06 * treeScale, 7),
+      i % 2 === 0 ? treeDarkLeafMaterial : treeLeafMaterial,
+    );
     lowerLeaves.position.set(x, 12.92 + 0.55 * treeScale, z);
     const upperLeaves = new Mesh(new ConeGeometry(0.36 * treeScale, 0.76 * treeScale, 7), treeLeafMaterial);
     upperLeaves.position.set(x, 13.48 + 0.82 * treeScale, z);
@@ -299,7 +302,10 @@ export function createMossbackTitanRig(scale = 1): MossbackTitanRig {
   }
 
   for (let i = 0; i < 28; i += 1) {
-    const tuft = new Mesh(new SphereGeometry(0.58 + (i % 4) * 0.08, 8, 6), i % 3 === 0 ? darkMossMaterial : mossMaterial);
+    const tuft = new Mesh(
+      new SphereGeometry(0.58 + (i % 4) * 0.08, 8, 6),
+      i % 3 === 0 ? darkMossMaterial : mossMaterial,
+    );
     tuft.scale.set(1.18 + (i % 3) * 0.12, 0.38 + (i % 2) * 0.08, 0.92 + (i % 4) * 0.06);
     tuft.position.set(-6.7 + (i % 7) * 2.1, 11.3 + Math.sin(i) * 0.24, -5.2 + Math.floor(i / 7) * 2.35);
     tuft.rotation.set(0.1, i * 0.7, 0.05);
@@ -356,23 +362,22 @@ export function createMossbackTitanRig(scale = 1): MossbackTitanRig {
 }
 
 function updateMossbackTitanRig(rig: MossbackTitanRig, time: number, pose: MossbackTitanPose) {
-  const speed =
-    pose === "roll" ? 1 :
-      pose === "hop" ? 0.72 :
-        pose === "glide" ? 0.42 :
-          pose === "rest" ? 0.08 :
-            0.28;
+  const speed = pose === "roll" ? 1 : pose === "hop" ? 0.72 : pose === "glide" ? 0.42 : pose === "rest" ? 0.08 : 0.28;
   const alert = pose === "sniff" ? 0.82 : pose === "roll" ? 1 : pose === "hop" ? 0.52 : 0.2;
   const stride = time * MathUtils.lerp(1.45, 3.25, speed);
   const breath = Math.sin(time * (pose === "rest" ? 0.42 : 0.8)) * 0.5 + 0.5;
   const stepLift = Math.sin(stride) * speed;
   const idleMouth = Math.max(0, Math.sin(time * 1.65 - 0.45)) ** 2;
   const mouthOpen =
-    pose === "sniff" ? 0.72 + Math.max(0, Math.sin(time * 3.2)) * 0.28 :
-      pose === "roll" ? 0.36 + Math.max(0, Math.sin(time * 5.6)) * 0.38 :
-        pose === "hop" ? 0.34 :
-          pose === "rest" ? 0.04 :
-            0.08 + idleMouth * 0.22;
+    pose === "sniff"
+      ? 0.72 + Math.max(0, Math.sin(time * 3.2)) * 0.28
+      : pose === "roll"
+        ? 0.36 + Math.max(0, Math.sin(time * 5.6)) * 0.38
+        : pose === "hop"
+          ? 0.34
+          : pose === "rest"
+            ? 0.04
+            : 0.08 + idleMouth * 0.22;
 
   rig.body.position.y = 6.45 + breath * 0.28 + Math.abs(stepLift) * 0.24;
   rig.body.rotation.x = Math.sin(stride * 0.5) * 0.025;

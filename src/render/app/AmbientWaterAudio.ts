@@ -44,9 +44,7 @@ export class AmbientWaterAudio {
   private distanceToWater: number | null = null;
 
   constructor() {
-    this.waterLoops = typeof Audio === "undefined"
-      ? []
-      : [this.createLoopSlot(), this.createLoopSlot()];
+    this.waterLoops = typeof Audio === "undefined" ? [] : [this.createLoopSlot(), this.createLoopSlot()];
   }
 
   unlock() {
@@ -55,15 +53,16 @@ export class AmbientWaterAudio {
       return;
     }
 
-    void Promise.allSettled(this.waterLoops.map((loop) => {
-      loop.volume = 0;
-      loop.playbackRate = this.currentRate;
-      return loop.play()
-        .then(() => {
+    void Promise.allSettled(
+      this.waterLoops.map((loop) => {
+        loop.volume = 0;
+        loop.playbackRate = this.currentRate;
+        return loop.play().then(() => {
           loop.pause();
           loop.currentTime = 0;
         });
-    })).catch(() => {
+      }),
+    ).catch(() => {
       // Browser gesture policies can reject warm-up playback; update() will
       // retry once the player is near water after a valid page interaction.
     });
@@ -81,9 +80,10 @@ export class AmbientWaterAudio {
     const proximityCurve = this.currentProximity * this.currentProximity;
     const flowLift = MathUtils.clamp(ambience.flowStrength * WATER_FLOW_VOLUME_LIFT, 0, 0.09);
     const contactLift = ambience.insideWater ? WATER_CONTACT_VOLUME_LIFT : 0;
-    this.targetVolume = muted || this.currentProximity <= 0.01
-      ? 0
-      : MathUtils.clamp(WATER_BASE_VOLUME + proximityCurve * (WATER_MAX_VOLUME + flowLift) + contactLift, 0, 0.135);
+    this.targetVolume =
+      muted || this.currentProximity <= 0.01
+        ? 0
+        : MathUtils.clamp(WATER_BASE_VOLUME + proximityCurve * (WATER_MAX_VOLUME + flowLift) + contactLift, 0, 0.135);
     const targetRate = MathUtils.clamp(0.9 + ambience.flowStrength * 0.08 + this.currentProximity * 0.025, 0.9, 1.01);
 
     this.currentVolume = MathUtils.damp(
@@ -218,11 +218,7 @@ export class AmbientWaterAudio {
     }
 
     this.crossfadeElapsed += dt;
-    const mix = MathUtils.smoothstep(
-      MathUtils.clamp(this.crossfadeElapsed / WATER_LOOP_CROSSFADE_SECONDS, 0, 1),
-      0,
-      1,
-    );
+    const mix = MathUtils.smoothstep(MathUtils.clamp(this.crossfadeElapsed / WATER_LOOP_CROSSFADE_SECONDS, 0, 1), 0, 1);
     this.applySlotVolumes(mix);
 
     if (mix >= 1) {

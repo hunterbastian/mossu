@@ -15,18 +15,34 @@ import {
 } from "three";
 import type { FrameState } from "../../simulation/gameState";
 import { PLAYER_RADIUS } from "../../simulation/playerSimulationConstants";
-import { sampleTerrainHeight, sampleWaterState, scenicPockets, startingLookTarget, startingPosition } from "../../simulation/world";
+import {
+  sampleTerrainHeight,
+  sampleWaterState,
+  scenicPockets,
+  startingLookTarget,
+  startingPosition,
+} from "../../simulation/world";
 import { easeOutBack } from "../motionCurves";
 import { createKaruModelRig } from "../objects/KaruAvatar";
 import { scatterAroundPocket } from "./sceneHelpers";
 
 export type KaruMood = "curious" | "shy" | "brave" | "sleepy";
+export type KaruIdlePose =
+  | "none"
+  | "look_left"
+  | "look_right"
+  | "sniff"
+  | "settle"
+  | "groom"
+  | "listen"
+  | "watch_water";
 
 export interface AmbientBlob {
   id: string;
   group: Group;
   root: Group;
   body: Mesh;
+  glow: Mesh;
   face: Group;
   leftEye: Mesh;
   rightEye: Mesh;
@@ -57,7 +73,7 @@ export interface AmbientBlob {
   nextIdlePoseAt: number;
   idlePoseStartAt: number;
   idlePoseUntil: number;
-  idlePose: "none" | "look_left" | "look_right" | "sniff" | "settle";
+  idlePose: KaruIdlePose;
   nextHopAt: number;
   hopUntil: number;
   mode: "rest" | "wander" | "curious" | "shy";
@@ -87,12 +103,11 @@ export interface AmbientBlobUpdateStats {
   dominantMood: KaruMood;
   regroupActive: boolean;
   callHeardActive: boolean;
+  idleRoutineCount: number;
 }
 
 export const AMBIENT_BLOB_SPECIES_NAME = "Karu";
-const FAUNA_RECRUIT_RADIUS = 14.5;
-const FAUNA_CLUSTER_RECRUIT_RADIUS = 16;
-const FAUNA_CLUSTER_PLAYER_RADIUS = 19;
+const FAUNA_RECRUIT_RADIUS = 8.25;
 const FAUNA_FOLLOW_NEIGHBOR_RADIUS = 13.5;
 const FAUNA_SEPARATION_RADIUS = 3.5;
 const FAUNA_PLAYER_PERSONAL_SPACE = 3.1;
@@ -220,26 +235,21 @@ function planarDistance(a: Vector3, b: Vector3) {
 }
 
 function clampTargetAroundNest(blob: AmbientBlob, target: Vector3, radius: number) {
-  ambientNestOffset
-    .subVectors(target, blob.nestCenter)
-    .setY(0);
+  ambientNestOffset.subVectors(target, blob.nestCenter).setY(0);
   const distance = ambientNestOffset.length();
   if (distance > radius && distance > 0.001) {
     ambientNestOffset.multiplyScalar(radius / distance);
-    target.set(
-      blob.nestCenter.x + ambientNestOffset.x,
-      blob.nestCenter.y,
-      blob.nestCenter.z + ambientNestOffset.z,
-    );
+    target.set(blob.nestCenter.x + ambientNestOffset.x, blob.nestCenter.y, blob.nestCenter.z + ambientNestOffset.z);
   }
   target.y = sampleTerrainHeight(target.x, target.z);
 }
 
 function collisionRadiusForBlob(blob: AmbientBlob) {
-  const baseRadius =
-    blob.rolling ? FAUNA_ROLL_COLLISION_RADIUS :
-    blob.recruited ? FAUNA_RECRUITED_COLLISION_RADIUS :
-    FAUNA_IDLE_COLLISION_RADIUS;
+  const baseRadius = blob.rolling
+    ? FAUNA_ROLL_COLLISION_RADIUS
+    : blob.recruited
+      ? FAUNA_RECRUITED_COLLISION_RADIUS
+      : FAUNA_IDLE_COLLISION_RADIUS;
   return baseRadius * MathUtils.clamp(blob.creatureScale / 1.22, 0.92, 1.18);
 }
 
@@ -316,44 +326,64 @@ function findNearestRecruitable(blobs: AmbientBlob[], playerPosition: Vector3) {
   };
 }
 
-/** One press recruits the nearest Karu plus same-herd mates nearby (small-cluster). */
-function recruitNearbyBlobs(
-  blobs: AmbientBlob[],
-  sourceBlob: AmbientBlob,
-  playerPosition: Vector3,
-  elapsed: number,
-  recruitedKaruIds: Set<string>,
-) {
-  let recruitedCount = 0;
-
-  blobs.forEach((blob) => {
-    if (blob.recruited) {
-      return;
+function hasNearbyWaterInterest(point: Vector3) {
+  for (let radius = 4; radius <= 10; radius += 3) {
+    for (let step = 0; step < 8; step += 1) {
+      const angle = (step / 8) * Math.PI * 2;
+      const water = sampleWaterState(point.x + Math.cos(angle) * radius, point.z + Math.sin(angle) * radius);
+      if (water && water.depth > FAUNA_SHALLOW_WATER_DEPTH) {
+        return true;
+      }
     }
+  }
+  return false;
+}
 
-    const isSource = blob === sourceBlob;
-    const sameSmallHerd = blob.herdId === sourceBlob.herdId;
-    const closeToSource = planarDistance(blob.group.position, sourceBlob.group.position) <= FAUNA_CLUSTER_RECRUIT_RADIUS;
-    const closeToPlayer = planarDistance(blob.group.position, playerPosition) <= FAUNA_CLUSTER_PLAYER_RADIUS;
-    if (!isSource && (!sameSmallHerd || !closeToSource || !closeToPlayer)) {
-      return;
-    }
+function chooseIdlePose(blob: AmbientBlob, elapsed: number, waterInterest: boolean): KaruIdlePose {
+  const idleRoll = (Math.sin(blob.poseSeed * 3.1 + elapsed * 0.58) + 1) * 0.5;
+  if (waterInterest && idleRoll < 0.16) {
+    return "watch_water";
+  }
+  if (blob.recruited && idleRoll < 0.28) {
+    return "listen";
+  }
+  if (idleRoll < 0.2) {
+    return "look_left";
+  }
+  if (idleRoll < 0.4) {
+    return "look_right";
+  }
+  if (idleRoll < 0.62) {
+    return "sniff";
+  }
+  if (idleRoll < 0.82) {
+    return "groom";
+  }
+  return "settle";
+}
 
-    blob.recruited = true;
-    recruitedKaruIds.add(blob.id);
-    blob.recruitedAt = elapsed;
-    blob.regroupUntil = elapsed + 1.6;
-    blob.callRespondUntil = elapsed + 0.3;
-    blob.callWaveStartAt = elapsed + 0.04 + blob.leaderSlot * 0.03;
-    blob.mode = "curious";
-    blob.avoidPlayerUntil = 0;
-    blob.investigateAgainAt = elapsed + 5;
-    blob.restUntil = elapsed + 0.18;
-    blob.target.copy(playerPosition);
-    recruitedCount += 1;
-  });
+function countIdleRoutines(blobs: readonly AmbientBlob[], elapsed: number) {
+  return blobs.filter((blob) => blob.idlePose !== "none" && blob.idlePoseUntil > elapsed).length;
+}
 
-  return recruitedCount;
+/** Held interaction invites only the nearest Karu, so players move up to each one. */
+function recruitSingleBlob(blob: AmbientBlob, playerPosition: Vector3, elapsed: number, recruitedKaruIds: Set<string>) {
+  if (blob.recruited) {
+    return 0;
+  }
+
+  blob.recruited = true;
+  recruitedKaruIds.add(blob.id);
+  blob.recruitedAt = elapsed;
+  blob.regroupUntil = elapsed + 1.6;
+  blob.callRespondUntil = elapsed + 0.3;
+  blob.callWaveStartAt = elapsed + 0.04 + blob.leaderSlot * 0.03;
+  blob.mode = "curious";
+  blob.avoidPlayerUntil = 0;
+  blob.investigateAgainAt = elapsed + 5;
+  blob.restUntil = elapsed + 0.18;
+  blob.target.copy(playerPosition);
+  return 1;
 }
 
 function syncAmbientBlobRecruitmentFromSave(
@@ -518,7 +548,11 @@ export function buildAmbientBlobNests(blobs: readonly AmbientBlob[]) {
       const z = center.z + Math.sin(angle) * radius * 0.72;
       const twig = new Mesh(new CylinderGeometry(0.03, 0.045, radius * 0.78, 6), twigMaterial);
       twig.position.set(x, sampleTerrainHeight(x, z) + 0.18, z);
-      twig.rotation.set(0.08 * Math.sin(i + blob.poseSeed), angle + Math.PI / 2, Math.PI / 2 + Math.sin(i * 0.8) * 0.16);
+      twig.rotation.set(
+        0.08 * Math.sin(i + blob.poseSeed),
+        angle + Math.PI / 2,
+        Math.PI / 2 + Math.sin(i * 0.8) * 0.16,
+      );
       nest.add(twig);
     }
 
@@ -705,6 +739,7 @@ export function updateAmbientBlobs(
       dominantMood: dominantMood(blobs),
       regroupActive: false,
       callHeardActive: false,
+      idleRoutineCount: countIdleRoutines(blobs, elapsed),
     };
   }
 
@@ -719,7 +754,7 @@ export function updateAmbientBlobs(
     nearestBeforeRecruit.blob &&
     nearestBeforeRecruit.distance !== null &&
     nearestBeforeRecruit.distance <= FAUNA_RECRUIT_RADIUS
-      ? recruitNearbyBlobs(blobs, nearestBeforeRecruit.blob, playerPosition, elapsed, frame.save.recruitedKaruIds)
+      ? recruitSingleBlob(nearestBeforeRecruit.blob, playerPosition, elapsed, frame.save.recruitedKaruIds)
       : 0;
   let mossuCollisionCount = 0;
   let firstEncounterActive = false;
@@ -781,9 +816,7 @@ export function updateAmbientBlobs(
         return;
       }
 
-      ambientNeighborOffset
-        .subVectors(otherBlob.group.position, blob.group.position)
-        .setY(0);
+      ambientNeighborOffset.subVectors(otherBlob.group.position, blob.group.position).setY(0);
       const neighborDistance = ambientNeighborOffset.length();
       if (neighborDistance <= 0.001) {
         return;
@@ -811,9 +844,7 @@ export function updateAmbientBlobs(
     }
     ambientGroupCenter.y = groundY;
 
-    const herdOffset = ambientCohesion
-      .subVectors(ambientGroupCenter, blob.group.position)
-      .setY(0);
+    const herdOffset = ambientCohesion.subVectors(ambientGroupCenter, blob.group.position).setY(0);
     const herdDistance = herdOffset.length();
     if (herdDistance > 0.001) {
       herdOffset.multiplyScalar(1 / herdDistance);
@@ -822,10 +853,7 @@ export function updateAmbientBlobs(
       herdDistance > 4.8 || (herdMateCount > 1 && nearbyMateCount === 0 && nearestMateDistance > 6.4);
     const herdPullStrength = herdDistance > 2.2 ? MathUtils.clamp((herdDistance - 2.2) / 4.4, 0, 1.25) : 0;
     const separationStrength = ambientSeparation.length();
-    const nestDistance = ambientNestOffset
-      .subVectors(blob.group.position, blob.nestCenter)
-      .setY(0)
-      .length();
+    const nestDistance = ambientNestOffset.subVectors(blob.group.position, blob.nestCenter).setY(0).length();
     const awayFromNest = !blob.recruited && nestDistance > FAUNA_NEST_RETURN_RADIUS && elapsed >= blob.avoidPlayerUntil;
 
     if (blob.mode === "curious" && blob.restUntil < elapsed) {
@@ -859,16 +887,16 @@ export function updateAmbientBlobs(
       const callWaveTighten = waitingForCallWave ? 1.18 : 1;
       const rollFollowTighten = playerRolling ? 0.8 : 1;
       const followBackDistance =
-        (5.6 + slotRow * 2.45 + (blob.leaderSlot % 2) * 0.45 + tuning.backOffset)
-        * regroupTighten
-        * callWaveTighten
-        * rollFollowTighten;
+        (5.6 + slotRow * 2.45 + (blob.leaderSlot % 2) * 0.45 + tuning.backOffset) *
+        regroupTighten *
+        callWaveTighten *
+        rollFollowTighten;
       const followSideDistance =
-        (slotColumn * (3.25 + slotRow * 0.28) + slotJitter)
-        * tuning.sideScale
-        * regroupTighten
-        * callWaveTighten
-        * rollFollowTighten;
+        (slotColumn * (3.25 + slotRow * 0.28) + slotJitter) *
+        tuning.sideScale *
+        regroupTighten *
+        callWaveTighten *
+        rollFollowTighten;
       ambientLeaderSlot
         .copy(playerPosition)
         .addScaledVector(ambientFollowDirection, -followBackDistance)
@@ -888,14 +916,11 @@ export function updateAmbientBlobs(
         planarToPlayer < FAUNA_RECRUITED_IDLE_MAX_DISTANCE &&
         formationDistance < FAUNA_RECRUITED_IDLE_SLOT_DISTANCE;
       if (recruitedIdleWanderActive) {
-        const moodOrbitSpeed =
-          blob.mood === "sleepy" ? 0.12 :
-          blob.mood === "brave" ? 0.2 :
-          0.16;
+        const moodOrbitSpeed = blob.mood === "sleepy" ? 0.12 : blob.mood === "brave" ? 0.2 : 0.16;
         const orbitAngle = elapsed * moodOrbitSpeed + blob.poseSeed * 2.4 + blob.leaderSlot * 1.37;
         const orbitRadius =
-          (4.6 + (blob.leaderSlot % 3) * 0.82 + Math.floor(blob.leaderSlot / 3) * 0.38)
-          * (blob.mood === "shy" ? 1.16 : blob.mood === "sleepy" ? 0.92 : 1);
+          (4.6 + (blob.leaderSlot % 3) * 0.82 + Math.floor(blob.leaderSlot / 3) * 0.38) *
+          (blob.mood === "shy" ? 1.16 : blob.mood === "sleepy" ? 0.92 : 1);
         const orbitBreath = Math.sin(elapsed * 0.37 + blob.poseSeed) * 0.42;
         ambientLeaderSlot
           .copy(playerPosition)
@@ -929,9 +954,7 @@ export function updateAmbientBlobs(
           return;
         }
 
-        ambientNeighborOffset
-          .subVectors(otherBlob.group.position, blob.group.position)
-          .setY(0);
+        ambientNeighborOffset.subVectors(otherBlob.group.position, blob.group.position).setY(0);
         const neighborDistance = ambientNeighborOffset.length();
         if (neighborDistance <= 0.001) {
           return;
@@ -960,17 +983,13 @@ export function updateAmbientBlobs(
           ambientBoidCohesion.normalize();
         }
 
-        ambientAlignment
-          .multiplyScalar(1 / recruitedNeighborCount)
-          .setY(0);
+        ambientAlignment.multiplyScalar(1 / recruitedNeighborCount).setY(0);
         if (ambientAlignment.lengthSq() > 0.001) {
           ambientAlignment.normalize();
         }
       }
 
-      ambientFollowSteer
-        .subVectors(ambientLeaderSlot, blob.group.position)
-        .setY(0);
+      ambientFollowSteer.subVectors(ambientLeaderSlot, blob.group.position).setY(0);
       const followDistance = ambientFollowSteer.length();
       if (followDistance > 0.001) {
         ambientFollowSteer.multiplyScalar(1 / followDistance);
@@ -1015,19 +1034,14 @@ export function updateAmbientBlobs(
       const targetLead = recruitedIdleWanderActive
         ? MathUtils.clamp(followDistance * 0.2 + 1.18, 1.1, 3.2)
         : MathUtils.clamp(
-          followDistance * (blob.rolling ? 0.36 : playerRolling ? 0.34 : 0.3) + (blob.rolling ? 3.35 : playerRolling ? 3.1 : 2.4),
-          2.2,
-          blob.rolling ? 8.8 : playerRolling ? 8.2 : 7.4,
-        );
-      blob.target
-        .copy(blob.group.position)
-        .addScaledVector(ambientBoidSteer, targetLead);
+            followDistance * (blob.rolling ? 0.36 : playerRolling ? 0.34 : 0.3) +
+              (blob.rolling ? 3.35 : playerRolling ? 3.1 : 2.4),
+            2.2,
+            blob.rolling ? 8.8 : playerRolling ? 8.2 : 7.4,
+          );
+      blob.target.copy(blob.group.position).addScaledVector(ambientBoidSteer, targetLead);
       blob.target.y = ambientLeaderSlot.y;
-      recruitedMoveStrength =
-        followDistance > 18 ? 5.6 :
-        followDistance > 9 ? 4.1 :
-        followDistance > 3.4 ? 2.55 :
-        1.15;
+      recruitedMoveStrength = followDistance > 18 ? 5.6 : followDistance > 9 ? 4.1 : followDistance > 3.4 ? 2.55 : 1.15;
       recruitedMoveStrength *=
         tuning.speedScale *
         (regroupActive && !waitingForCallWave ? 1.12 : 1) *
@@ -1057,7 +1071,7 @@ export function updateAmbientBlobs(
       blob.target.y = sampleTerrainHeight(blob.target.x, blob.target.z);
       blob.restUntil = Math.max(blob.restUntil, elapsed + 0.78 + (index % 2) * 0.12);
       blob.nextHopAt = Math.max(blob.nextHopAt, elapsed + 0.72);
-      blob.idlePose = planarToPlayer < 12.5 ? "sniff" : (index % 2 === 0 ? "look_left" : "look_right");
+      blob.idlePose = planarToPlayer < 12.5 ? "sniff" : index % 2 === 0 ? "look_left" : "look_right";
       blob.idlePoseStartAt = elapsed;
       blob.idlePoseUntil = elapsed + 0.86;
       blob.investigateAgainAt = Math.max(blob.investigateAgainAt, elapsed + 1.7);
@@ -1069,11 +1083,7 @@ export function updateAmbientBlobs(
       if (herdPullStrength > 0) {
         ambientDesiredTarget.addScaledVector(herdOffset, 1.6 + herdPullStrength * 1.5);
       }
-      blob.target.set(
-        ambientDesiredTarget.x,
-        blob.home.y,
-        ambientDesiredTarget.z,
-      );
+      blob.target.set(ambientDesiredTarget.x, blob.home.y, ambientDesiredTarget.z);
       clampTargetAroundNest(blob, blob.target, FAUNA_NEST_SHY_LIMIT_RADIUS);
       if (playerTooClose || playerApproaching) {
         blob.avoidPlayerUntil = Math.max(
@@ -1091,17 +1101,14 @@ export function updateAmbientBlobs(
     ) {
       blob.rolling = false;
       blob.mode = "curious";
-      blob.target.set(
-        playerPosition.x - toPlayer.x * 0.35,
-        playerPosition.y,
-        playerPosition.z - toPlayer.z * 0.35,
-      );
+      blob.target.set(playerPosition.x - toPlayer.x * 0.35, playerPosition.y, playerPosition.z - toPlayer.z * 0.35);
       blob.restUntil = elapsed + 1.3;
     } else if (blob.restUntil < elapsed) {
       blob.rolling = false;
       if (awayFromNest) {
         blob.mode = "wander";
-        const returnAngle = Math.atan2(blob.group.position.z - blob.nestCenter.z, blob.group.position.x - blob.nestCenter.x) + 0.65;
+        const returnAngle =
+          Math.atan2(blob.group.position.z - blob.nestCenter.z, blob.group.position.x - blob.nestCenter.x) + 0.65;
         blob.target.set(
           blob.nestCenter.x + Math.cos(returnAngle) * blob.nestRadius * 0.8,
           blob.nestCenter.y,
@@ -1143,12 +1150,7 @@ export function updateAmbientBlobs(
       planarToPlayer > 0.001 &&
       planarToPlayer < 21 &&
       (firstEncounterWatch || blob.mode === "curious");
-    blob.lookAtBlend = MathUtils.damp(
-      blob.lookAtBlend,
-      wantsLookAtPlayer ? 1 : 0,
-      wantsLookAtPlayer ? 4.6 : 7.2,
-      dt,
-    );
+    blob.lookAtBlend = MathUtils.damp(blob.lookAtBlend, wantsLookAtPlayer ? 1 : 0, wantsLookAtPlayer ? 4.6 : 7.2, dt);
     const lookAtT = easeOutBack(blob.lookAtBlend, 1.08);
 
     if (elapsed >= blob.nextBlinkAt) {
@@ -1156,33 +1158,46 @@ export function updateAmbientBlobs(
       blob.nextBlinkAt =
         elapsed +
         1.8 +
-        (((Math.sin(blob.poseSeed * 2.7 + elapsed * 0.42) + 1) * 0.5) * 2.4) +
+        (Math.sin(blob.poseSeed * 2.7 + elapsed * 0.42) + 1) * 0.5 * 2.4 +
         (blob.mode === "rest" ? 0.2 : 0);
     }
 
+    const slowRecruitedIdle =
+      blob.recruited &&
+      playerPlanarSpeed < FAUNA_RECRUITED_IDLE_PLAYER_SPEED &&
+      !frame.player.swimming &&
+      frame.player.grounded &&
+      !playerRolling &&
+      !playerFloating &&
+      blob.waterReaction !== "float" &&
+      blob.waterReaction !== "bank_wait" &&
+      planarToPlayer < FAUNA_RECRUITED_IDLE_MAX_DISTANCE &&
+      blob.velocity.length() < 1.35;
     const canDoIdlePose =
-      !blob.recruited &&
-      (blob.mode === "rest" || blob.mode === "wander") &&
-      elapsed >= blob.avoidPlayerUntil &&
-      planarToPlayer > 10.5;
+      !frame.player.fallingToVoid &&
+      ((!blob.recruited &&
+        (blob.mode === "rest" || blob.mode === "wander") &&
+        elapsed >= blob.avoidPlayerUntil &&
+        planarToPlayer > 10.5) ||
+        slowRecruitedIdle);
     if (canDoIdlePose && elapsed >= blob.nextIdlePoseAt) {
-      const idleRoll = (Math.sin(blob.poseSeed * 3.1 + elapsed * 0.58) + 1) * 0.5;
-      blob.idlePose =
-        idleRoll < 0.24 ? "look_left" :
-        idleRoll < 0.48 ? "look_right" :
-        idleRoll < 0.74 ? "sniff" :
-        "settle";
+      blob.idlePose = chooseIdlePose(blob, elapsed, hasNearbyWaterInterest(blob.group.position));
       const idleDuration =
-        blob.idlePose === "sniff" ? 0.9 :
-        blob.idlePose === "settle" ? 1.35 :
-        1.05;
+        blob.idlePose === "sniff"
+          ? 0.9
+          : blob.idlePose === "groom"
+            ? 1.1
+            : blob.idlePose === "listen"
+              ? 0.95
+              : blob.idlePose === "watch_water"
+                ? 1.35
+                : blob.idlePose === "settle"
+                  ? 1.35
+                  : 1.05;
       blob.idlePoseStartAt = elapsed;
       blob.idlePoseUntil = elapsed + idleDuration;
       blob.nextIdlePoseAt =
-        elapsed +
-        idleDuration +
-        1.8 +
-        (((Math.sin(blob.poseSeed * 1.6 + elapsed * 0.31) + 1) * 0.5) * 2.6);
+        elapsed + idleDuration + 1.8 + (Math.sin(blob.poseSeed * 1.6 + elapsed * 0.31) + 1) * 0.5 * 2.6;
       if (blob.mode === "rest") {
         blob.restUntil = Math.max(blob.restUntil, elapsed + idleDuration * 0.9);
       }
@@ -1199,10 +1214,7 @@ export function updateAmbientBlobs(
     if (canDoIdleHop && elapsed >= blob.nextHopAt) {
       blob.hopUntil = elapsed + 0.42;
       blob.nextHopAt =
-        elapsed +
-        2.8 +
-        (((Math.sin(blob.poseSeed * 1.9 + elapsed * 0.35) + 1) * 0.5) * 2.4) +
-        (index % 3) * 0.25;
+        elapsed + 2.8 + (Math.sin(blob.poseSeed * 1.9 + elapsed * 0.35) + 1) * 0.5 * 2.4 + (index % 3) * 0.25;
       if (blob.mode === "rest") {
         blob.restUntil = Math.max(blob.restUntil, elapsed + 0.45);
       }
@@ -1212,37 +1224,39 @@ export function updateAmbientBlobs(
 
     const moveStrength = blob.recruited
       ? recruitedMoveStrength
-      : blob.mode === "shy" ? 4.2 : blob.mode === "curious" ? 2.2 : blob.mode === "wander" ? 1.4 : 0;
+      : blob.mode === "shy"
+        ? 4.2
+        : blob.mode === "curious"
+          ? 2.2
+          : blob.mode === "wander"
+            ? 1.4
+            : 0;
     if (moveStrength > 0) {
       ambientDesiredTarget.copy(blob.target);
       if (!blob.recruited && herdPullStrength > 0 && blob.mode !== "curious") {
-        ambientDesiredTarget.addScaledVector(
-          herdOffset,
-          (blob.mode === "shy" ? 1.2 : 1.8) * herdPullStrength,
-        );
+        ambientDesiredTarget.addScaledVector(herdOffset, (blob.mode === "shy" ? 1.2 : 1.8) * herdPullStrength);
       }
       const activeSeparationStrength = blob.recruited ? ambientSeparation.length() : separationStrength;
       if (activeSeparationStrength > 0.001) {
-        ambientDesiredTarget.addScaledVector(
-          ambientSeparation,
-          blob.recruited ? 1.6 : blob.mode === "shy" ? 1.8 : 1.2,
-        );
+        ambientDesiredTarget.addScaledVector(ambientSeparation, blob.recruited ? 1.6 : blob.mode === "shy" ? 1.8 : 1.2);
       }
       if (!blob.recruited) {
-        const nestLimit = blob.mode === "shy"
-          ? FAUNA_NEST_SHY_LIMIT_RADIUS
-          : blob.mode === "curious"
-            ? FAUNA_NEST_SHY_LIMIT_RADIUS * 0.9
-          : Math.max(FAUNA_NEST_WANDER_RADIUS * 1.3, blob.nestRadius * 1.55);
+        const nestLimit =
+          blob.mode === "shy"
+            ? FAUNA_NEST_SHY_LIMIT_RADIUS
+            : blob.mode === "curious"
+              ? FAUNA_NEST_SHY_LIMIT_RADIUS * 0.9
+              : Math.max(FAUNA_NEST_WANDER_RADIUS * 1.3, blob.nestRadius * 1.55);
         clampTargetAroundNest(blob, ambientDesiredTarget, nestLimit);
       }
-      ambientTrailDirection
-        .subVectors(ambientDesiredTarget, blob.group.position)
-        .setY(0);
+      ambientTrailDirection.subVectors(ambientDesiredTarget, blob.group.position).setY(0);
       const distance = ambientTrailDirection.length();
       if (distance > 0.12) {
         ambientTrailDirection.normalize();
-        blob.velocity.lerp(ambientTrailDirection.multiplyScalar(moveStrength), 1 - Math.exp(-dt * (blob.rolling ? 4.1 : 2.6)));
+        blob.velocity.lerp(
+          ambientTrailDirection.multiplyScalar(moveStrength),
+          1 - Math.exp(-dt * (blob.rolling ? 4.1 : 2.6)),
+        );
         blob.group.position.addScaledVector(blob.velocity, dt);
       } else {
         blob.velocity.multiplyScalar(0.72);
@@ -1258,103 +1272,171 @@ export function updateAmbientBlobs(
       mossuCollisionCount += 1;
     }
 
-  const currentWater = sampleWaterState(blob.group.position.x, blob.group.position.z);
-  if (blob.recruited && currentWater && currentWater.depth > FAUNA_SHALLOW_WATER_DEPTH) {
-    const currentDeepWater = currentWater.swimAllowed && currentWater.depth >= FAUNA_DEEP_WATER_DEPTH;
-    if (currentDeepWater && (blob.mood === "brave" || blob.waterReaction === "float")) {
-      blob.waterReaction = "float";
-    } else if (!currentDeepWater) {
-      blob.waterReaction = "splash";
-    } else {
-      blob.waterReaction = "bank_wait";
+    const currentWater = sampleWaterState(blob.group.position.x, blob.group.position.z);
+    if (blob.recruited && currentWater && currentWater.depth > FAUNA_SHALLOW_WATER_DEPTH) {
+      const currentDeepWater = currentWater.swimAllowed && currentWater.depth >= FAUNA_DEEP_WATER_DEPTH;
+      if (currentDeepWater && (blob.mood === "brave" || blob.waterReaction === "float")) {
+        blob.waterReaction = "float";
+      } else if (!currentDeepWater) {
+        blob.waterReaction = "splash";
+      } else {
+        blob.waterReaction = "bank_wait";
+      }
+    } else if (!blob.recruited || !currentWater || currentWater.depth <= FAUNA_SHALLOW_WATER_DEPTH) {
+      blob.waterReaction = "dry";
     }
-  } else if (!blob.recruited || !currentWater || currentWater.depth <= FAUNA_SHALLOW_WATER_DEPTH) {
-    blob.waterReaction = "dry";
-  }
-  if (!blob.recruited || blob.waterReaction === "float" || blob.waterReaction === "bank_wait") {
-    blob.rolling = false;
-  }
+    if (!blob.recruited || blob.waterReaction === "float" || blob.waterReaction === "bank_wait") {
+      blob.rolling = false;
+    }
 
-  const planarSpeed = blob.velocity.length();
-  const wantsRollMimic = blob.rolling;
-  blob.rollBlend = MathUtils.damp(blob.rollBlend, wantsRollMimic ? 1 : 0, wantsRollMimic ? 8.5 : 6.5, dt);
-  const wantsBreezeMimic =
-    blob.recruited &&
-    playerFloating &&
-    !blob.rolling &&
-    blob.waterReaction !== "float" &&
-    blob.waterReaction !== "bank_wait" &&
-    planarToPlayer < 18;
-  blob.breezeBlend = MathUtils.damp(blob.breezeBlend, wantsBreezeMimic ? 1 : 0, wantsBreezeMimic ? 5.4 : 7.2, dt);
-  if (blob.rollBlend > 0.02) {
-    blob.rollSpin = (blob.rollSpin + (playerPlanarSpeed * 0.16 + planarSpeed * 0.36 + 1.6 + index * 0.08) * dt) % (Math.PI * 2);
-  }
-  const rollMimicT = blob.rollBlend;
-  const breezeMimicT = blob.breezeBlend;
-  const rollBounce = Math.max(0, Math.sin(blob.rollSpin * 2 + blob.poseSeed)) * rollMimicT;
-  const breezeBounce = (0.12 + Math.sin(elapsed * 2.5 + blob.poseSeed) * 0.045) * breezeMimicT;
-  const scale = blob.creatureScale;
-  const restPulse = Math.sin(elapsed * 2.3 + blob.poseSeed);
-  const curiousSway = Math.sin(elapsed * 2.1 + blob.poseSeed * 1.4);
-  const wanderHop = Math.max(0, Math.sin(elapsed * 6.8 + blob.poseSeed));
-  const shyHop = Math.max(0, Math.sin(elapsed * 9.6 + blob.poseSeed));
-  const blinkT = blob.blinkUntil > elapsed ? 1 - (blob.blinkUntil - elapsed) / 0.12 : 0;
-  const blink = blinkT > 0 && blinkT < 1 ? Math.sin(blinkT * Math.PI) : 0;
-  const idlePoseDuration = Math.max(0.001, blob.idlePoseUntil - blob.idlePoseStartAt);
-  const idlePoseT =
-    blob.idlePoseUntil > elapsed && elapsed >= blob.idlePoseStartAt
-      ? MathUtils.clamp((elapsed - blob.idlePoseStartAt) / idlePoseDuration, 0, 1)
-      : 0;
-  const idlePoseBlend = idlePoseT > 0 && idlePoseT < 1 ? Math.sin(idlePoseT * Math.PI) : 0;
-  const idleLookYaw =
-    blob.idlePose === "look_left" ? -0.42 * idlePoseBlend :
-    blob.idlePose === "look_right" ? 0.42 * idlePoseBlend :
-    0;
-  const idleSniff = blob.idlePose === "sniff" ? idlePoseBlend : 0;
-  const idleSettle = blob.idlePose === "settle" ? idlePoseBlend : 0;
-  const idleHopT = blob.hopUntil > elapsed ? 1 - (blob.hopUntil - elapsed) / 0.42 : 0;
-  const idleHop = idleHopT > 0 && idleHopT < 1 ? Math.sin(idleHopT * Math.PI) : 0;
-  const idleHopSettle = idleHopT > 0 && idleHopT < 0.2 ? 1 - idleHopT / 0.2 : 0;
-  const waterHop =
-    blob.waterReaction === "splash" ? Math.max(0, Math.sin(elapsed * 12.5 + blob.poseSeed)) * 0.28 * scale :
-    blob.waterReaction === "float" ? (0.1 + Math.sin(elapsed * 3.2 + blob.poseSeed) * 0.06) * scale :
-    blob.waterReaction === "bank_wait" ? Math.max(0, Math.sin(elapsed * 8.8 + blob.poseSeed)) * 0.08 * scale :
-    0;
-  const callWaveT =
-    blob.recruited && elapsed >= blob.callWaveStartAt && elapsed < blob.callWaveStartAt + 0.62
-      ? Math.sin(MathUtils.clamp((elapsed - blob.callWaveStartAt) / 0.62, 0, 1) * Math.PI)
-      : 0;
-  const callListenT =
-    blob.recruited && elapsed < blob.callRespondUntil
-      ? Math.sin(MathUtils.clamp(1 - (blob.callRespondUntil - elapsed) / FAUNA_CALL_LISTEN_SECONDS, 0, 1) * Math.PI)
-      : 0;
-  const groundedBob = Math.max(0, Math.sin(elapsed * 4.2 + blob.bobOffset)) * planarSpeed * 0.08;
-  const poseLift =
-    (blob.mode === "wander" ? Math.max(wanderHop * 0.2 * scale, idleHop * 0.15 * scale, waterHop, callWaveT * 0.34 * scale) :
-    blob.mode === "shy" ? shyHop * 0.16 * scale :
-    idleHop * 0.15 * scale) + rollBounce * 0.14 * scale + breezeBounce * scale;
+    const planarSpeed = blob.velocity.length();
+    const wantsRollMimic = blob.rolling;
+    blob.rollBlend = MathUtils.damp(blob.rollBlend, wantsRollMimic ? 1 : 0, wantsRollMimic ? 8.5 : 6.5, dt);
+    const wantsBreezeMimic =
+      blob.recruited &&
+      playerFloating &&
+      !blob.rolling &&
+      blob.waterReaction !== "float" &&
+      blob.waterReaction !== "bank_wait" &&
+      planarToPlayer < 18;
+    blob.breezeBlend = MathUtils.damp(blob.breezeBlend, wantsBreezeMimic ? 1 : 0, wantsBreezeMimic ? 5.4 : 7.2, dt);
+    if (blob.rollBlend > 0.02) {
+      blob.rollSpin =
+        (blob.rollSpin + (playerPlanarSpeed * 0.16 + planarSpeed * 0.36 + 1.6 + index * 0.08) * dt) % (Math.PI * 2);
+    }
+    const rollMimicT = blob.rollBlend;
+    const breezeMimicT = blob.breezeBlend;
+    const rollBounce = Math.max(0, Math.sin(blob.rollSpin * 2 + blob.poseSeed)) * rollMimicT;
+    const breezeBounce = (0.12 + Math.sin(elapsed * 2.5 + blob.poseSeed) * 0.045) * breezeMimicT;
+    const scale = blob.creatureScale;
+    const restPulse = Math.sin(elapsed * 2.3 + blob.poseSeed);
+    const curiousSway = Math.sin(elapsed * 2.1 + blob.poseSeed * 1.4);
+    const wanderHop = Math.max(0, Math.sin(elapsed * 6.8 + blob.poseSeed));
+    const shyHop = Math.max(0, Math.sin(elapsed * 9.6 + blob.poseSeed));
+    const blinkT = blob.blinkUntil > elapsed ? 1 - (blob.blinkUntil - elapsed) / 0.12 : 0;
+    const blink = blinkT > 0 && blinkT < 1 ? Math.sin(blinkT * Math.PI) : 0;
+    const idlePoseDuration = Math.max(0.001, blob.idlePoseUntil - blob.idlePoseStartAt);
+    const idlePoseT =
+      blob.idlePoseUntil > elapsed && elapsed >= blob.idlePoseStartAt
+        ? MathUtils.clamp((elapsed - blob.idlePoseStartAt) / idlePoseDuration, 0, 1)
+        : 0;
+    const idlePoseBlend = idlePoseT > 0 && idlePoseT < 1 ? Math.sin(idlePoseT * Math.PI) : 0;
+    const idleLookYaw =
+      blob.idlePose === "look_left" ? -0.42 * idlePoseBlend : blob.idlePose === "look_right" ? 0.42 * idlePoseBlend : 0;
+    const idleSniff = blob.idlePose === "sniff" ? idlePoseBlend : 0;
+    const idleSettle = blob.idlePose === "settle" ? idlePoseBlend : 0;
+    const idleGroom = blob.idlePose === "groom" ? idlePoseBlend : 0;
+    const idleListen = blob.idlePose === "listen" ? idlePoseBlend : 0;
+    const idleWaterWatch = blob.idlePose === "watch_water" ? idlePoseBlend : 0;
+    const idleHopT = blob.hopUntil > elapsed ? 1 - (blob.hopUntil - elapsed) / 0.42 : 0;
+    const idleHop = idleHopT > 0 && idleHopT < 1 ? Math.sin(idleHopT * Math.PI) : 0;
+    const idleHopSettle = idleHopT > 0 && idleHopT < 0.2 ? 1 - idleHopT / 0.2 : 0;
+    const waterHop =
+      blob.waterReaction === "splash"
+        ? Math.max(0, Math.sin(elapsed * 12.5 + blob.poseSeed)) * 0.28 * scale
+        : blob.waterReaction === "float"
+          ? (0.1 + Math.sin(elapsed * 3.2 + blob.poseSeed) * 0.06) * scale
+          : blob.waterReaction === "bank_wait"
+            ? Math.max(0, Math.sin(elapsed * 8.8 + blob.poseSeed)) * 0.08 * scale
+            : 0;
+    const callWaveT =
+      blob.recruited && elapsed >= blob.callWaveStartAt && elapsed < blob.callWaveStartAt + 0.62
+        ? Math.sin(MathUtils.clamp((elapsed - blob.callWaveStartAt) / 0.62, 0, 1) * Math.PI)
+        : 0;
+    const callListenT =
+      blob.recruited && elapsed < blob.callRespondUntil
+        ? Math.sin(MathUtils.clamp(1 - (blob.callRespondUntil - elapsed) / FAUNA_CALL_LISTEN_SECONDS, 0, 1) * Math.PI)
+        : 0;
+    const joinAge = blob.recruited ? elapsed - blob.recruitedAt : Number.POSITIVE_INFINITY;
+    const joinPulse = joinAge >= 0 && joinAge < 1.55 ? Math.sin(MathUtils.clamp(joinAge / 1.55, 0, 1) * Math.PI) : 0;
+    const companionAttentionT =
+      blob.recruited &&
+      !blob.rolling &&
+      !playerRolling &&
+      !playerFloating &&
+      playerPlanarSpeed < 0.72 &&
+      planarToPlayer < 15.5 &&
+      blob.waterReaction !== "float"
+        ? (0.55 + Math.sin(elapsed * 1.45 + blob.poseSeed) * 0.08) * (blob.mood === "sleepy" ? 0.7 : 1)
+        : 0;
+    const recruitedMoveT =
+      blob.recruited &&
+      !blob.rolling &&
+      blob.waterReaction !== "float" &&
+      blob.waterReaction !== "bank_wait" &&
+      planarSpeed > 0.18
+        ? MathUtils.clamp(planarSpeed / (blob.mood === "sleepy" ? 4.4 : 5.6), 0, 1)
+        : 0;
+    const recruitedHopSpeed =
+      blob.mood === "sleepy" ? 5.1 : blob.mood === "brave" ? 7.9 : blob.mood === "shy" ? 6.1 : 7;
+    const recruitedStepPhase = elapsed * recruitedHopSpeed + blob.poseSeed * 1.7 + blob.leaderSlot * 0.72;
+    const recruitedHop =
+      Math.max(0, Math.sin(recruitedStepPhase)) *
+      recruitedMoveT *
+      (blob.mood === "brave" ? 1.08 : blob.mood === "sleepy" ? 0.62 : blob.mood === "shy" ? 0.82 : 1);
+    const groundedBob = Math.max(0, Math.sin(elapsed * 4.2 + blob.bobOffset)) * planarSpeed * 0.08;
+    const poseLift =
+      (blob.mode === "wander"
+        ? Math.max(
+            wanderHop * 0.2 * scale,
+            recruitedHop * 0.18 * scale,
+            idleHop * 0.15 * scale,
+            waterHop,
+            callWaveT * 0.34 * scale,
+          )
+        : blob.mode === "shy"
+          ? shyHop * 0.16 * scale
+          : idleHop * 0.15 * scale) +
+      rollBounce * 0.14 * scale +
+      breezeBounce * scale +
+      joinPulse * 0.22 * scale +
+      companionAttentionT * 0.025 * scale;
     const poseDrop =
-    blob.mode === "rest" ? (0.03 + restPulse * 0.012 + idleHopSettle * 0.028 + idleSettle * 0.022) * scale :
-    blob.mode === "shy" ? (0.05 + (1 - shyHop) * 0.04) * scale :
-    (idleHopSettle * 0.024 + idleSettle * 0.016) * scale;
-  const baseStretch =
-    blob.mode === "wander" ? 1 + wanderHop * 0.08 + idleHop * 0.03 + (blob.mood === "sleepy" ? 0.025 : 0) :
-    blob.mode === "shy" ? 1 + shyHop * 0.05 :
-    1 + Math.max(0, restPulse) * 0.02 + idleHop * 0.05 + idleSniff * 0.03;
-  const stretch = MathUtils.lerp(baseStretch + breezeMimicT * 0.08, 0.92 + rollBounce * 0.04, rollMimicT * 0.68);
-  const baseSquash =
-    blob.mode === "rest" ? 1 - (0.06 + Math.max(0, -restPulse) * 0.04 + idleHopSettle * 0.05 + idleSettle * 0.05) :
-    blob.mode === "shy" ? 1 - (0.08 + (1 - shyHop) * 0.06) :
-    blob.mode === "wander" ? 1 - (wanderHop * 0.06 + idleHopSettle * 0.04 + idleSettle * 0.03 + (blob.waterReaction === "splash" ? 0.035 : 0)) :
-    1 - idleHop * 0.04;
-  const squash = MathUtils.lerp(baseSquash - breezeMimicT * 0.035, 1.15 - rollBounce * 0.04, rollMimicT * 0.68);
+      blob.mode === "rest"
+        ? (0.03 + restPulse * 0.012 + idleHopSettle * 0.028 + idleSettle * 0.022) * scale
+        : blob.mode === "shy"
+          ? (0.05 + (1 - shyHop) * 0.04) * scale
+          : (idleHopSettle * 0.024 + idleSettle * 0.016) * scale;
+    const baseStretch =
+      blob.mode === "wander"
+        ? 1 + wanderHop * 0.08 + recruitedHop * 0.065 + idleHop * 0.03 + (blob.mood === "sleepy" ? 0.025 : 0)
+        : blob.mode === "shy"
+          ? 1 + shyHop * 0.05
+          : 1 + Math.max(0, restPulse) * 0.02 + idleHop * 0.05 + idleSniff * 0.03;
+    const stretch = MathUtils.lerp(
+      baseStretch + breezeMimicT * 0.08 + joinPulse * 0.05 + companionAttentionT * 0.025,
+      0.92 + rollBounce * 0.04,
+      rollMimicT * 0.68,
+    );
+    const baseSquash =
+      blob.mode === "rest"
+        ? 1 - (0.06 + Math.max(0, -restPulse) * 0.04 + idleHopSettle * 0.05 + idleSettle * 0.05)
+        : blob.mode === "shy"
+          ? 1 - (0.08 + (1 - shyHop) * 0.06)
+          : blob.mode === "wander"
+            ? 1 -
+              (wanderHop * 0.06 +
+                recruitedHop * 0.045 +
+                idleHopSettle * 0.04 +
+                idleSettle * 0.03 +
+                (blob.waterReaction === "splash" ? 0.035 : 0))
+            : 1 - idleHop * 0.04;
+    const squash = MathUtils.lerp(
+      baseSquash - breezeMimicT * 0.035 - joinPulse * 0.035 - companionAttentionT * 0.018,
+      1.15 - rollBounce * 0.04,
+      rollMimicT * 0.68,
+    );
     const playerLookYaw = planarToPlayer > 0.001 ? Math.atan2(toPlayer.x, toPlayer.z) : blob.facingYaw;
     const desiredYaw =
-      callListenT > 0.001 && planarToPlayer > 0.001 ? playerLookYaw :
-      planarSpeed > 0.05 ? Math.atan2(blob.velocity.x, blob.velocity.z) :
-      blob.recruited && planarToPlayer > 0.001 ? playerLookYaw :
-      lookAtT > 0.04 ? playerLookYaw :
-      blob.facingYaw + (blob.mode === "rest" ? curiousSway * 0.06 : 0);
+      (callListenT > 0.001 || joinPulse > 0.001 || companionAttentionT > 0.04) && planarToPlayer > 0.001
+        ? playerLookYaw
+        : planarSpeed > 0.05
+          ? Math.atan2(blob.velocity.x, blob.velocity.z)
+          : blob.recruited && planarToPlayer > 0.001
+            ? playerLookYaw
+            : lookAtT > 0.04
+              ? playerLookYaw
+              : blob.facingYaw + (blob.mode === "rest" ? curiousSway * 0.06 : 0);
     const baseYawDamping = blob.mode === "shy" ? 8 : blob.recruited ? 6 : 4.6;
     const yawBlend = 1 - Math.exp(-dt * (baseYawDamping + lookAtT * 2.4));
     blob.facingYaw = MathUtils.lerp(blob.facingYaw, desiredYaw, yawBlend);
@@ -1364,110 +1446,188 @@ export function updateAmbientBlobs(
         ? currentWater.surfaceY + (blob.waterReaction === "float" ? 0.36 : 0.12)
         : groundY + 0.08;
     blob.group.position.y = visualWaterY + groundedBob;
-  blob.group.rotation.y = blob.facingYaw;
-  blob.root.position.y = poseLift - poseDrop;
-  const baseRootX =
-    callListenT > 0 ? -0.18 - callListenT * 0.08 :
-    blob.mode === "curious" ? -0.12 + curiousSway * 0.03 - lookAtT * 0.035 :
-    blob.mode === "shy" ? -0.08 :
-    blob.mode === "wander" ? -0.03 + wanderHop * 0.02 - idleSniff * 0.07 - idleSettle * 0.05 :
-    -0.02 + restPulse * 0.015 - idleHop * 0.03 - idleSniff * 0.12 - idleSettle * 0.06;
-  const baseRootZ =
-    blob.mode === "curious" ? curiousSway * 0.08 :
-    blob.mode === "wander" ? Math.sin(elapsed * 3.6 + blob.poseSeed) * 0.04 + idleLookYaw * 0.18 :
-    restPulse * 0.02 + idleLookYaw * 0.22;
-  blob.root.rotation.x = baseRootX + rollMimicT * blob.rollSpin - breezeMimicT * 0.1;
-  blob.root.rotation.z = baseRootZ + rollMimicT * Math.sin(blob.rollSpin * 0.7 + blob.poseSeed) * 0.16 + breezeMimicT * Math.sin(elapsed * 2.2 + blob.poseSeed) * 0.045;
-
-  blob.body.scale.set(1.16 * squash, 1.04 * stretch, 1.14 * MathUtils.lerp(squash, 0.92, rollMimicT * 0.36));
-  blob.body.position.y =
-    0.62 * scale +
-    (blob.mode === "rest" ? restPulse * 0.015 * scale : 0) -
-    idleSettle * 0.015 * scale;
-  blob.face.rotation.y =
-    callListenT > 0 ? Math.sin(elapsed * 9.5 + blob.poseSeed) * 0.06 :
-    blob.mode === "curious" ? curiousSway * 0.22 + lookAtT * Math.sin(elapsed * 3.4 + blob.poseSeed) * 0.045 :
-    (blob.mode === "rest" ? curiousSway * 0.08 : 0) + idleLookYaw;
-  blob.face.position.y =
-    0.73 * scale +
-    (blob.mode === "rest" ? restPulse * 0.012 * scale : 0) +
-    idleSniff * 0.05 * scale -
-    idleSettle * 0.015 * scale +
-    breezeMimicT * 0.035 * scale;
-  blob.face.position.z =
-    0.56 * scale +
-    (blob.mode === "shy" ? -0.03 * scale : 0) +
-    idleSniff * 0.045 * scale -
-    breezeMimicT * 0.04 * scale;
-
-  const baseEyeSquish =
-    callListenT > 0 ? 0.08 + blink * 0.4 :
-    blob.mode === "rest" ? 0.35 + Math.max(0, -restPulse) * 0.22 + idleSettle * 0.16 + blink * 1.35 :
-    blob.mode === "shy" ? 0.24 :
-    blink * 1.35 + idleSniff * 0.08;
-  const eyeSquish = Math.max(0, baseEyeSquish + rollMimicT * 0.12 - breezeMimicT * 0.05);
-  blob.leftEye.scale.set(0.72 + eyeSquish * 0.12, 1.58 - eyeSquish * 0.7, 0.32);
-  blob.rightEye.scale.copy(blob.leftEye.scale);
-
-  const tailWag = Math.sin(elapsed * 3.2 + blob.poseSeed) * (
-    blob.mode === "wander" ? 0.12 :
-    blob.mode === "curious" ? 0.08 :
-    0.045
-  ) + callListenT * 0.12;
-  blob.tail.position.set(
-    Math.sin(elapsed * 2.2 + blob.poseSeed) * 0.035 * scale,
-    0.46 * scale + wanderHop * 0.025 * scale - idleSettle * 0.012 * scale + breezeMimicT * 0.06 * scale,
-    -0.72 * scale + rollMimicT * 0.12 * scale,
-  );
-  blob.tail.rotation.y = tailWag + breezeMimicT * Math.sin(elapsed * 2.9 + blob.poseSeed) * 0.08;
-  blob.tail.rotation.x = -0.12 + rollMimicT * 0.46 - breezeMimicT * 0.2;
-  blob.tail.scale.set(
-    0.52 * MathUtils.lerp(1 + tailWag * 0.2, 0.58, rollMimicT),
-    0.5 * MathUtils.lerp(1 + wanderHop * 0.08, 0.48, rollMimicT),
-    0.82 * MathUtils.lerp(1, 0.62, rollMimicT),
-  );
-
-  blob.feet.forEach((foot, footIndex) => {
-    const homeX = typeof foot.userData.homeX === "number" ? foot.userData.homeX : (footIndex % 2 === 0 ? -0.3 : 0.3);
-    const homeZ = typeof foot.userData.homeZ === "number" ? foot.userData.homeZ : (footIndex < 2 ? 0.38 : -0.38);
-    const isFrontFoot = homeZ > 0;
-    const gaitPhase = footIndex % 2 === 0 ? 0 : Math.PI;
-    const footHop =
-      blob.mode === "wander" ? Math.max(0, Math.sin(elapsed * 6.8 + blob.poseSeed + gaitPhase + (isFrontFoot ? 0 : 0.55))) * 0.052 * scale :
-      blob.mode === "shy" ? Math.max(0, Math.sin(elapsed * 9.6 + blob.poseSeed + gaitPhase + (isFrontFoot ? 0.2 : 0.7))) * 0.036 * scale :
-      idleHop * (isFrontFoot ? 0.022 : 0.014) * scale;
-    const footTuck = Math.max(rollMimicT, breezeMimicT * 0.62);
-    foot.visible = ((blob.group.userData.fullDetail as boolean | undefined) ?? true) && footTuck < 0.86;
-    const footSide = MathUtils.lerp(homeX * scale, homeX * 0.28 * scale, footTuck);
-    const footHeight = MathUtils.lerp(0.09 * scale + footHop - idleSettle * 0.015 * scale, 0.16 * scale, footTuck);
-    const sniffOffset = idleSniff * (isFrontFoot ? 0.028 : -0.01) * scale;
-    const footForward = MathUtils.lerp(homeZ * scale + sniffOffset, (homeZ * 0.24 + 0.04) * scale, footTuck);
-    foot.position.set(
-      footSide,
-      footHeight,
-      footForward,
+    blob.group.rotation.y = blob.facingYaw;
+    blob.root.position.y = poseLift - poseDrop;
+    blob.root.scale.setScalar(1 + joinPulse * 0.035);
+    const glowMaterial = blob.glow.material;
+    const glowBaseOpacity = typeof blob.glow.userData.baseOpacity === "number" ? blob.glow.userData.baseOpacity : 0.18;
+    const glowBaseScale = blob.glow.userData.baseScale as { x?: number; y?: number; z?: number } | undefined;
+    const glowPulseScale = 1 + joinPulse * 0.22;
+    blob.glow.scale.set(
+      (glowBaseScale?.x ?? 1.22) * glowPulseScale,
+      (glowBaseScale?.y ?? 1.1) * (1 + joinPulse * 0.16),
+      (glowBaseScale?.z ?? 1.2) * glowPulseScale,
     );
-    const footSize = isFrontFoot ? 1 : 0.9;
-    foot.scale.set(
-      MathUtils.lerp(((isFrontFoot ? 1.1 : 0.94) - eyeSquish * 0.05) * footSize, 0.36, footTuck),
-      MathUtils.lerp(0.46 - eyeSquish * 0.03 + footHop / Math.max(0.001, scale), 0.26, footTuck),
-      MathUtils.lerp((isFrontFoot ? 0.84 : 0.76) * footSize, 0.32, footTuck),
-    );
-  });
+    if (glowMaterial instanceof MeshBasicMaterial) {
+      glowMaterial.opacity = MathUtils.clamp(glowBaseOpacity + joinPulse * 0.16, glowBaseOpacity, 0.46);
+    }
+    const baseRootX =
+      callListenT > 0
+        ? -0.18 - callListenT * 0.08
+        : blob.mode === "curious"
+          ? -0.12 + curiousSway * 0.03 - lookAtT * 0.035
+          : blob.mode === "shy"
+            ? -0.08
+            : blob.mode === "wander"
+              ? -0.03 +
+                wanderHop * 0.02 +
+                recruitedHop * 0.03 -
+                companionAttentionT * 0.035 -
+                idleSniff * 0.07 -
+                idleSettle * 0.05 -
+                idleGroom * 0.06 -
+                idleWaterWatch * 0.03
+              : -0.02 +
+                restPulse * 0.015 -
+                idleHop * 0.03 -
+                idleSniff * 0.12 -
+                idleSettle * 0.06 -
+                idleGroom * 0.08 -
+                idleListen * 0.035 -
+                idleWaterWatch * 0.04;
+    const baseRootZ =
+      blob.mode === "curious"
+        ? curiousSway * 0.08
+        : blob.mode === "wander"
+          ? Math.sin(elapsed * 3.6 + blob.poseSeed) * 0.04 +
+            Math.sin(recruitedStepPhase * 0.5) * recruitedMoveT * 0.045 +
+            idleLookYaw * 0.18 +
+            idleWaterWatch * 0.1
+          : restPulse * 0.02 + idleLookYaw * 0.22 + idleGroom * 0.08 + idleWaterWatch * 0.14;
+    blob.root.rotation.x = baseRootX + rollMimicT * blob.rollSpin - breezeMimicT * 0.1;
+    blob.root.rotation.z =
+      baseRootZ +
+      rollMimicT * Math.sin(blob.rollSpin * 0.7 + blob.poseSeed) * 0.16 +
+      breezeMimicT * Math.sin(elapsed * 2.2 + blob.poseSeed) * 0.045;
 
-  blob.fluffPuffs.forEach((puff, puffIndex) => {
-    const sway = Math.sin(elapsed * 2.8 + blob.poseSeed + puffIndex * 0.8);
-    const puffScale = 1 + sway * 0.035 + (blob.mode === "wander" ? wanderHop * 0.024 : 0) + rollMimicT * 0.035 + breezeMimicT * 0.045;
-    const baseScale = puff.userData.baseScale as { x?: number; y?: number; z?: number } | undefined;
-    const baseX = baseScale?.x ?? 0.26 * scale;
-    const baseY = baseScale?.y ?? 0.26 * scale;
-    const baseZ = baseScale?.z ?? 0.24 * scale;
-    puff.scale.set(
-      baseX * puffScale,
-      baseY * (1 - sway * 0.018 + rollMimicT * 0.018 + breezeMimicT * 0.04),
-      baseZ * (1 + rollMimicT * 0.025 + breezeMimicT * 0.02),
+    blob.body.scale.set(1.16 * squash, 1.04 * stretch, 1.14 * MathUtils.lerp(squash, 0.92, rollMimicT * 0.36));
+    blob.body.position.y =
+      0.62 * scale + (blob.mode === "rest" ? restPulse * 0.015 * scale : 0) - idleSettle * 0.015 * scale;
+    blob.face.rotation.y =
+      callListenT > 0
+        ? Math.sin(elapsed * 9.5 + blob.poseSeed) * 0.06
+        : companionAttentionT > 0.04
+          ? Math.sin(elapsed * 2 + blob.poseSeed) * 0.1
+          : blob.mode === "curious"
+            ? curiousSway * 0.22 + lookAtT * Math.sin(elapsed * 3.4 + blob.poseSeed) * 0.045
+            : (blob.mode === "rest" ? curiousSway * 0.08 : 0) + idleLookYaw + idleWaterWatch * 0.2;
+    blob.face.position.y =
+      0.73 * scale +
+      (blob.mode === "rest" ? restPulse * 0.012 * scale : 0) +
+      idleSniff * 0.05 * scale -
+      idleSettle * 0.015 * scale +
+      idleListen * 0.026 * scale +
+      recruitedHop * 0.018 * scale +
+      companionAttentionT * 0.025 * scale +
+      breezeMimicT * 0.035 * scale;
+    blob.face.position.z =
+      0.56 * scale +
+      (blob.mode === "shy" ? -0.03 * scale : 0) +
+      idleSniff * 0.045 * scale -
+      idleGroom * 0.028 * scale -
+      idleWaterWatch * 0.018 * scale -
+      breezeMimicT * 0.04 * scale;
+
+    const baseEyeSquish =
+      callListenT > 0
+        ? 0.08 + blink * 0.4
+        : blob.mode === "rest"
+          ? 0.35 + Math.max(0, -restPulse) * 0.22 + idleSettle * 0.16 + blink * 1.35
+          : blob.mode === "shy"
+            ? 0.24
+            : blink * 1.35 + idleSniff * 0.08 + idleGroom * 0.1 - idleListen * 0.08 - companionAttentionT * 0.08;
+    const eyeSquish = Math.max(0, baseEyeSquish + rollMimicT * 0.12 - breezeMimicT * 0.05);
+    blob.leftEye.scale.set(0.72 + eyeSquish * 0.12, 1.58 - eyeSquish * 0.7, 0.32);
+    blob.rightEye.scale.copy(blob.leftEye.scale);
+
+    const tailWag =
+      Math.sin(elapsed * 3.2 + blob.poseSeed) *
+        (blob.mode === "wander" ? 0.12 : blob.mode === "curious" ? 0.08 : 0.045) +
+      callListenT * 0.12 +
+      recruitedHop * 0.1 +
+      companionAttentionT * Math.sin(elapsed * 2.2 + blob.poseSeed) * 0.08 +
+      idleListen * 0.1 +
+      idleGroom * Math.sin(elapsed * 8.5 + blob.poseSeed) * 0.12;
+    blob.tail.position.set(
+      Math.sin(elapsed * 2.2 + blob.poseSeed) * 0.035 * scale,
+      0.46 * scale + wanderHop * 0.025 * scale - idleSettle * 0.012 * scale + breezeMimicT * 0.06 * scale,
+      -0.72 * scale + rollMimicT * 0.12 * scale,
     );
-  });
+    blob.tail.rotation.y = tailWag + breezeMimicT * Math.sin(elapsed * 2.9 + blob.poseSeed) * 0.08;
+    blob.tail.rotation.x = -0.12 + rollMimicT * 0.46 - breezeMimicT * 0.2;
+    blob.tail.scale.set(
+      0.52 * MathUtils.lerp(1 + tailWag * 0.2, 0.58, rollMimicT),
+      0.5 * MathUtils.lerp(1 + wanderHop * 0.08, 0.48, rollMimicT),
+      0.82 * MathUtils.lerp(1, 0.62, rollMimicT),
+    );
+
+    blob.feet.forEach((foot, footIndex) => {
+      const homeX = typeof foot.userData.homeX === "number" ? foot.userData.homeX : footIndex % 2 === 0 ? -0.3 : 0.3;
+      const homeZ = typeof foot.userData.homeZ === "number" ? foot.userData.homeZ : footIndex < 2 ? 0.38 : -0.38;
+      const isFrontFoot = homeZ > 0;
+      const gaitPhase = footIndex % 2 === 0 ? 0 : Math.PI;
+      const footHop =
+        blob.mode === "wander"
+          ? Math.max(0, Math.sin(elapsed * 6.8 + blob.poseSeed + gaitPhase + (isFrontFoot ? 0 : 0.55))) * 0.052 * scale
+          : blob.mode === "shy"
+            ? Math.max(0, Math.sin(elapsed * 9.6 + blob.poseSeed + gaitPhase + (isFrontFoot ? 0.2 : 0.7))) *
+              0.036 *
+              scale
+            : idleHop * (isFrontFoot ? 0.022 : 0.014) * scale;
+      const recruitedFootHop =
+        Math.max(0, Math.sin(recruitedStepPhase + gaitPhase + (isFrontFoot ? 0.24 : 0.74))) *
+        recruitedMoveT *
+        (isFrontFoot ? 0.058 : 0.044) *
+        scale;
+      const footTuck = Math.max(rollMimicT, breezeMimicT * 0.62);
+      foot.visible = ((blob.group.userData.fullDetail as boolean | undefined) ?? true) && footTuck < 0.86;
+      const footSide = MathUtils.lerp(homeX * scale, homeX * 0.28 * scale, footTuck);
+      const groomFootLift = idleGroom * (isFrontFoot && footIndex === 0 ? 0.15 : isFrontFoot ? 0.04 : 0) * scale;
+      const listenFootLift = idleListen * (isFrontFoot ? 0.022 : 0.012) * scale;
+      const footHeight =
+        MathUtils.lerp(
+          0.09 * scale + footHop - idleSettle * 0.015 * scale + groomFootLift + listenFootLift,
+          0.16 * scale,
+          footTuck,
+        ) + recruitedFootHop;
+      const sniffOffset = idleSniff * (isFrontFoot ? 0.028 : -0.01) * scale;
+      const groomFootForward =
+        idleGroom * (isFrontFoot && footIndex === 0 ? 0.12 : isFrontFoot ? 0.035 : -0.015) * scale;
+      const footForward = MathUtils.lerp(
+        homeZ * scale + sniffOffset + groomFootForward - idleWaterWatch * 0.018 * scale,
+        (homeZ * 0.24 + 0.04) * scale,
+        footTuck,
+      );
+      foot.position.set(footSide, footHeight, footForward);
+      const footSize = isFrontFoot ? 1 : 0.9;
+      foot.scale.set(
+        MathUtils.lerp(((isFrontFoot ? 1.1 : 0.94) - eyeSquish * 0.05) * footSize, 0.36, footTuck),
+        MathUtils.lerp(0.46 - eyeSquish * 0.03 + (footHop + recruitedFootHop) / Math.max(0.001, scale), 0.26, footTuck),
+        MathUtils.lerp((isFrontFoot ? 0.84 : 0.76) * footSize, 0.32, footTuck),
+      );
+    });
+
+    blob.fluffPuffs.forEach((puff, puffIndex) => {
+      const sway = Math.sin(elapsed * 2.8 + blob.poseSeed + puffIndex * 0.8);
+      const puffScale =
+        1 +
+        sway * 0.035 +
+        (blob.mode === "wander" ? wanderHop * 0.024 : 0) +
+        recruitedHop * 0.028 +
+        rollMimicT * 0.035 +
+        breezeMimicT * 0.045 +
+        companionAttentionT * 0.018 +
+        joinPulse * 0.055;
+      const baseScale = puff.userData.baseScale as { x?: number; y?: number; z?: number } | undefined;
+      const baseX = baseScale?.x ?? 0.26 * scale;
+      const baseY = baseScale?.y ?? 0.26 * scale;
+      const baseZ = baseScale?.z ?? 0.24 * scale;
+      puff.scale.set(
+        baseX * puffScale,
+        baseY * (1 - sway * 0.018 + rollMimicT * 0.018 + breezeMimicT * 0.04),
+        baseZ * (1 + rollMimicT * 0.025 + breezeMimicT * 0.02),
+      );
+    });
   });
 
   const nearestAfterRecruit = findNearestRecruitable(blobs, playerPosition);
@@ -1482,5 +1642,6 @@ export function updateAmbientBlobs(
     dominantMood: dominantMood(blobs),
     regroupActive: blobs.some((blob) => blob.recruited && elapsed < blob.regroupUntil),
     callHeardActive: blobs.some((blob) => blob.recruited && elapsed < blob.callRespondUntil),
+    idleRoutineCount: countIdleRoutines(blobs, elapsed),
   };
 }

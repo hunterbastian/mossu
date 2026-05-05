@@ -183,11 +183,11 @@ The small recruitable fauna are named Karu. They are currently render-side actor
 Current behavior:
 
 - unrecruited Karu keep ambient rest/wander/curious/shy behavior
-- pressing `E` near the closest recruitable Karu pulls in a **small cluster**: same `herdId`, within cluster radii from that individual, and within range of the player (not a global one-at-a-time recruit)
+- holding `E` near the closest recruitable Karu invites **one Karu at a time**; the invite radius is intentionally tighter than the ambient watch radius so Mossu has to walk up to each one
 - recruited Karu use boids-style separation, alignment, cohesion, and leader-follow slots; non-brave moods **bank-wait** beside deep water instead of following the slot into the channel, with a dry-bank search that prefers shallower water / firmer ground
-- recruitment is not currently saved
+- recruitment is persisted through local save state
 
-Design decision: keep **cluster recruitment** (one interaction can add several followers) rather than strict one-by-one, so meadow pockets still read as small groups. Tighten radii later if packs feel too large.
+Design decision: use **held individual recruitment** rather than cluster pickup, so Karu feel like small companions the player deliberately approaches and invites.
 
 Keep this render-side until persistence, collision, or quest logic needs them in the simulation layer.
 

@@ -63,23 +63,17 @@ export function createTitleScreen(onStart: () => void) {
       </section>
     </div>
   `;
-  titleScreen
-    .querySelectorAll<HTMLButtonElement>(".title-screen__button--play")
-    .forEach((button) => {
-      button.addEventListener("click", onStart);
-    });
-  titleScreen
-    .querySelector<HTMLButtonElement>(".title-screen__button--settings")
-    ?.addEventListener("click", () => {
-      titleScreen.classList.add("title-screen--settings-open");
-      titleScreen.querySelector<HTMLButtonElement>(".title-screen__settings-back")?.focus();
-    });
-  titleScreen
-    .querySelector<HTMLButtonElement>(".title-screen__settings-back")
-    ?.addEventListener("click", () => {
-      titleScreen.classList.remove("title-screen--settings-open");
-      titleScreen.querySelector<HTMLButtonElement>(".title-screen__button--settings")?.focus();
-    });
+  titleScreen.querySelectorAll<HTMLButtonElement>(".title-screen__button--play").forEach((button) => {
+    button.addEventListener("click", onStart);
+  });
+  titleScreen.querySelector<HTMLButtonElement>(".title-screen__button--settings")?.addEventListener("click", () => {
+    titleScreen.classList.add("title-screen--settings-open");
+    titleScreen.querySelector<HTMLButtonElement>(".title-screen__settings-back")?.focus();
+  });
+  titleScreen.querySelector<HTMLButtonElement>(".title-screen__settings-back")?.addEventListener("click", () => {
+    titleScreen.classList.remove("title-screen--settings-open");
+    titleScreen.querySelector<HTMLButtonElement>(".title-screen__button--settings")?.focus();
+  });
   return titleScreen;
 }
 

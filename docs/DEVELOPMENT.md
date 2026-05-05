@@ -25,17 +25,17 @@ CI (GitHub Actions) runs `npm run qa` on push/PR to `main` or `master`, and a se
 
 Add query parameters to the dev or built URL (e.g. `http://localhost:5173/?perfDebug=1`).
 
-| Flag | Purpose |
-|------|---------|
-| **`perfHud=1`** | Compact in-game perf HUD for real-browser visual passes: FPS/frame time/p95, pixel ratio, bloom, renderer calls/triangles, grass LOD, and water/shader counts. `Shift+P` hides it, and `Shift+C` writes a snapshot to `window.__MOSSU_PERF_CAPTURE__`, the console, and the clipboard when allowed. |
-| **`perfDebug=1`** | Detailed on-screen overlay: frame time, pixel ratio, bloom on/off, renderer draw counts, grass LOD / instancing stats, water surfaces, etc. Use on **real desktop hardware**; headless runs are not a substitute for how grass/water/overdraw feel. |
-| **`cameraDebug=1`** | Camera profile, distance, polar angle, player position, river edge samples. |
-| **`qaDebug=1`** | Exposes `window.mossuDebug` (opening skip, teleport helpers) for automated QA. |
-| **`spiritCloseup=1`** | Debug framing for the spirit / closeup rig (passed into `WorldRenderer`). |
-| **`modelViewer=1`** | Loads the isolated **ModelViewerApp** chunk instead of the game. |
-| **`renderer=webgpu`** or **`webgpu=1`** | Request WebGPU backend when supported (see experimental). |
-| **`renderer=auto`** | Use WebGPU when the browser reports `navigator.gpu`, else WebGL2. |
-| **`quality=low`** or **`lowQuality=1`** | Caps pixel ratio, **disables bloom and the EffectComposer path** on WebGL (direct scene render only). Use for low-end desktop checks. Future heavy post (e.g. SSAO) should be gated the same way. |
+| Flag                                    | Purpose                                                                                                                                                                                                                                                                                             |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`perfHud=1`**                         | Compact in-game perf HUD for real-browser visual passes: FPS/frame time/p95, pixel ratio, bloom, renderer calls/triangles, grass LOD, and water/shader counts. `Shift+P` hides it, and `Shift+C` writes a snapshot to `window.__MOSSU_PERF_CAPTURE__`, the console, and the clipboard when allowed. |
+| **`perfDebug=1`**                       | Detailed on-screen overlay: frame time, pixel ratio, bloom on/off, renderer draw counts, grass LOD / instancing stats, water surfaces, etc. Use on **real desktop hardware**; headless runs are not a substitute for how grass/water/overdraw feel.                                                 |
+| **`cameraDebug=1`**                     | Camera profile, distance, polar angle, player position, river edge samples.                                                                                                                                                                                                                         |
+| **`qaDebug=1`**                         | Exposes `window.mossuDebug` (opening skip, teleport helpers) for automated QA.                                                                                                                                                                                                                      |
+| **`spiritCloseup=1`**                   | Debug framing for the spirit / closeup rig (passed into `WorldRenderer`).                                                                                                                                                                                                                           |
+| **`modelViewer=1`**                     | Loads the isolated **ModelViewerApp** chunk instead of the game.                                                                                                                                                                                                                                    |
+| **`renderer=webgpu`** or **`webgpu=1`** | Request WebGPU backend when supported (see experimental).                                                                                                                                                                                                                                           |
+| **`renderer=auto`**                     | Use WebGPU when the browser reports `navigator.gpu`, else WebGL2.                                                                                                                                                                                                                                   |
+| **`quality=low`** or **`lowQuality=1`** | Caps pixel ratio, **disables bloom and the EffectComposer path** on WebGL (direct scene render only). Use for low-end desktop checks. Future heavy post (e.g. SSAO) should be gated the same way.                                                                                                   |
 
 ## Experimental / backend notes
 

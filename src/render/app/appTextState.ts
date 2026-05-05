@@ -25,6 +25,7 @@ type SharedTextStateInput = {
   openingSequence: OpeningSequenceTextState;
   pauseMenuOpen: boolean;
   characterScreenOpen: boolean;
+  faunaStats: AmbientBlobUpdateStats;
   coopStressSnapshot: CoopStressSnapshot | null;
   camera: CameraDebugState;
   qualitySettings: QualitySettings;
@@ -84,6 +85,7 @@ export function serializeE2eGameTextState({
   openingSequence,
   pauseMenuOpen,
   characterScreenOpen,
+  faunaStats,
   coopStressSnapshot,
   camera,
   qualitySettings,
@@ -109,6 +111,18 @@ export function serializeE2eGameTextState({
       gatheredForageableIds: [...frame.save.gatheredForageableIds],
       recruitedKaruIds: [...frame.save.recruitedKaruIds],
       unlockedAbilities: [...frame.save.unlockedAbilities],
+    },
+    fauna: {
+      recruited: faunaStats.recruitedCount,
+      nearestRecruitableDistance:
+        faunaStats.nearestRecruitableDistance === null ? null : fixed(faunaStats.nearestRecruitableDistance, 1),
+      recruitedThisFrame: faunaStats.recruitedThisFrame,
+      firstEncounterActive: faunaStats.firstEncounterActive,
+      rollingCount: faunaStats.rollingCount,
+      mossuCollisionCount: faunaStats.mossuCollisionCount,
+      regroupActive: faunaStats.regroupActive,
+      callHeardActive: faunaStats.callHeardActive,
+      idleRoutineCount: faunaStats.idleRoutineCount,
     },
     camera,
     qualitySettings,
@@ -232,6 +246,7 @@ export function serializeGameTextState({
       dominantMood: faunaStats.dominantMood,
       regroupActive: faunaStats.regroupActive,
       callHeardActive: faunaStats.callHeardActive,
+      idleRoutineCount: faunaStats.idleRoutineCount,
     },
     audio: {
       ...movementAudio,

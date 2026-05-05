@@ -6,10 +6,13 @@ import {
   COYOTE_TIME,
   LANDING_MOMENTUM_GRACE_TIME,
   PLAYER_RADIUS,
+  ROLL_EXIT_CARRY_TIME,
   SWIM_BUOYANCY,
   SWIM_CURRENT_SCALE,
   SWIM_DIVE_ACCELERATION,
   SWIM_DIVE_BUOYANCY,
+  SWIM_ENTRY_MOMENTUM_GRACE_TIME,
+  SWIM_ENTRY_SPEED_CARRY_BONUS,
   SWIM_ENTRY_SURFACE_LIFT,
   SWIM_FLOAT_HEIGHT,
   SWIM_GRAVITY,
@@ -56,7 +59,13 @@ export function applySwimForces(player: PlayerState, waterState: WaterState, div
   player.velocity.z += waterState.flowDirection.y * waterState.flowStrength * SWIM_CURRENT_SCALE * dt;
 }
 
-export function clampSwimVelocity(player: PlayerState, jumpHeld: boolean, diveHeld: boolean, dt: number) {
+export function clampSwimVelocity(
+  player: PlayerState,
+  jumpHeld: boolean,
+  diveHeld: boolean,
+  dt: number,
+  runtime?: PlayerSimulationRuntime,
+) {
   if (jumpHeld) {
     player.velocity.y += SWIM_STROKE_ACCELERATION * dt;
   }
@@ -66,7 +75,19 @@ export function clampSwimVelocity(player: PlayerState, jumpHeld: boolean, diveHe
   player.velocity.y = MathUtils.clamp(player.velocity.y, -9, 8.5);
   swimPlanarVelocity.set(player.velocity.x, 0, player.velocity.z);
   if (swimPlanarVelocity.lengthSq() > 0.0001) {
-    const speedLimit = player.waterMode === "underwater" ? SWIM_UNDERWATER_SPEED + 1.8 : SWIM_SPEED + 2.8;
+    const entryCarry =
+      runtime && runtime.swimEntryMomentumGraceRemaining > 0
+        ? SWIM_ENTRY_SPEED_CARRY_BONUS *
+          MathUtils.smoothstep(runtime.swimEntryMomentumGraceRemaining / SWIM_ENTRY_MOMENTUM_GRACE_TIME, 0, 1)
+        : 0;
+    const rollExitCarry =
+      runtime && runtime.rollExitCarryRemaining > 0
+        ? runtime.rollExitSpeedCarryBonus *
+          MathUtils.smoothstep(runtime.rollExitCarryRemaining / ROLL_EXIT_CARRY_TIME, 0, 1) *
+          0.45
+        : 0;
+    const speedLimit =
+      (player.waterMode === "underwater" ? SWIM_UNDERWATER_SPEED + 1.8 : SWIM_SPEED + 2.8) + entryCarry + rollExitCarry;
     swimPlanarVelocity.setLength(Math.min(swimPlanarVelocity.length(), speedLimit));
     player.velocity.x = swimPlanarVelocity.x;
     player.velocity.z = swimPlanarVelocity.z;
@@ -94,9 +115,14 @@ export function resolveWaterContact(
     }
     const surfaceClamp = player.waterSurfaceY + PLAYER_RADIUS * 0.62;
     if (!wasSwimming) {
+      runtime.swimEntryMomentumGraceRemaining = SWIM_ENTRY_MOMENTUM_GRACE_TIME;
       const surfaceFloatY = MathUtils.clamp(player.waterSurfaceY + SWIM_FLOAT_HEIGHT, minimumSwimY, surfaceClamp);
       if (player.position.y < surfaceFloatY) {
-        player.position.y = MathUtils.lerp(player.position.y, surfaceFloatY, wasGrounded ? SWIM_ENTRY_SURFACE_LIFT : 0.42);
+        player.position.y = MathUtils.lerp(
+          player.position.y,
+          surfaceFloatY,
+          wasGrounded ? SWIM_ENTRY_SURFACE_LIFT : 0.42,
+        );
         player.velocity.y = Math.max(player.velocity.y, wasGrounded ? 1.2 : 0.35);
       }
       player.velocity.y = Math.max(player.velocity.y, -5.8);

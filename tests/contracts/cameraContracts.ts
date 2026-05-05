@@ -31,12 +31,7 @@ export function runCameraContracts() {
     0.001,
     "camera behind the player looks forward along route-positive Z",
   );
-  assertApprox(
-    cameraForwardAlignment(0, 0, 8),
-    1,
-    0.001,
-    "forward velocity aligns with camera look direction",
-  );
+  assertApprox(cameraForwardAlignment(0, 0, 8), 1, 0.001, "forward velocity aligns with camera look direction");
   assertApprox(
     cameraForwardAlignment(0, 8, 0),
     0,

@@ -153,7 +153,7 @@ export function buildCompactPerfDebugText(perf: MossuPerformanceSnapshot, captur
     `coop ${perf.coopStress.enabled ? `${perf.coopStress.remoteCount} remotes / ${perf.coopStress.sharedEvents} events` : "off"}`,
     `draw ${formatPerfNumber(perf.renderer.calls)} calls  ${formatPerfNumber(perf.renderer.triangles)} tris`,
     `grass ${formatPerfNumber(perf.world.grassInstances)} inst  lod ${perf.world.grassLodVisitedCells}/${perf.world.grassLodCells} cells`,
-    `trace ${perf.world.mossuTraceActiveStamps}/${perf.world.mossuTraceStampBudget} stamps`,
+    `trace ${perf.world.mossuTraceActiveStamps}/${perf.world.mossuTraceStampBudget} stamps  life ${perf.world.grasslandLifeSignals}  birds ${perf.world.grasslandDistantBirds}`,
     `water ${perf.world.waterSurfaces} surfaces  shaders ${perf.world.animatedShaderMeshes}`,
     captureState,
   ].join("\n");
@@ -174,6 +174,8 @@ export function buildFullPerfDebugText(perf: MossuPerformanceSnapshot) {
     `grass impostors ${perf.world.grassImpostorMeshes} meshes / ${perf.world.grassImpostorInstances} patches / est ${perf.world.grassImpostorEstimatedTriangles}t`,
     `grass lod ${perf.world.grassLodVisitedCells}/${perf.world.grassLodCells} cells / ${perf.world.grassLodVisitedSources}/${perf.world.grassLodSourceInstances} src`,
     `mossu trace ${perf.world.mossuTraceMeshes} mesh / ${perf.world.mossuTraceActiveStamps}/${perf.world.mossuTraceStampBudget} stamps`,
+    `living habitat ${perf.world.grasslandLifeSignals} tiny bounded signals`,
+    `distant birds ${perf.world.grasslandDistantBirds} sky silhouettes`,
     `forest ${perf.world.forestMeshes} meshes / ${perf.world.forestInstances} inst / est ${perf.world.forestEstimatedTriangles}t`,
     `small props ${perf.world.smallPropMeshes} meshes / ${perf.world.smallPropInstances} inst / est ${perf.world.smallPropEstimatedTriangles}t`,
     `water ${perf.world.waterSurfaces} surfaces / ${perf.world.waterVertices}v / ${perf.world.waterTriangles}t`,

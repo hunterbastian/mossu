@@ -1,9 +1,4 @@
-import {
-  DataTexture,
-  LinearFilter,
-  RepeatWrapping,
-  SRGBColorSpace,
-} from "three";
+import { DataTexture, LinearFilter, RepeatWrapping, SRGBColorSpace } from "three";
 
 export interface PainterlyTextureSet {
   meadowGrass: DataTexture;
@@ -76,7 +71,12 @@ function makeTexture(
   size: number,
   salt: number,
   stops: readonly PaletteStop[],
-  paint: (x: number, y: number, base: readonly [number, number, number], grain: number) => readonly [number, number, number],
+  paint: (
+    x: number,
+    y: number,
+    base: readonly [number, number, number],
+    grain: number,
+  ) => readonly [number, number, number],
 ) {
   const data = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y += 1) {
@@ -106,11 +106,7 @@ function makeTexture(
 }
 
 function offsetColor(base: readonly [number, number, number], amount: number) {
-  return [
-    base[0] + amount,
-    base[1] + amount,
-    base[2] + amount,
-  ] as const;
+  return [base[0] + amount, base[1] + amount, base[2] + amount] as const;
 }
 
 export function getPainterlyTextureSet() {
@@ -119,70 +115,105 @@ export function getPainterlyTextureSet() {
   }
 
   cachedTextures = {
-    meadowGrass: makeTexture(128, 11, [
-      { color: [99, 151, 58], weight: 3 },
-      { color: [142, 178, 72], weight: 2 },
-      { color: [190, 186, 80], weight: 0.7 },
-      { color: [75, 125, 54], weight: 1.2 },
-    ], (x, y, base, grain) => {
-      const blade = Math.sin(x * 0.55 + y * 0.12) * 7 + Math.sin((x - y) * 0.16) * 5;
-      return offsetColor(base, blade + (grain - 0.5) * 18);
-    }),
-    forestFloor: makeTexture(128, 23, [
-      { color: [48, 92, 48], weight: 2 },
-      { color: [62, 105, 54], weight: 1.6 },
-      { color: [74, 83, 48], weight: 1.1 },
-      { color: [34, 67, 42], weight: 1.4 },
-    ], (x, y, base, grain) => {
-      const fern = Math.sin(x * 0.22) * Math.cos(y * 0.46) * 13;
-      return offsetColor(base, fern + (grain - 0.5) * 16);
-    }),
-    rockCliff: makeTexture(128, 37, [
-      { color: [115, 103, 78], weight: 2 },
-      { color: [144, 131, 94], weight: 1.6 },
-      { color: [82, 76, 63], weight: 1.2 },
-      { color: [102, 91, 69], weight: 1.4 },
-    ], (x, y, base, grain) => {
-      const strata = Math.sin(y * 0.25 + grain * 3.8) * 18 + Math.sin((x + y) * 0.09) * 8;
-      return offsetColor(base, strata);
-    }),
-    sandShore: makeTexture(128, 41, [
-      { color: [215, 185, 119], weight: 2.4 },
-      { color: [235, 211, 151], weight: 1.8 },
-      { color: [184, 157, 100], weight: 0.8 },
-      { color: [232, 224, 190], weight: 0.8 },
-    ], (x, y, base, grain) => {
-      const ripple = Math.sin(x * 0.18 + Math.sin(y * 0.08) * 1.8) * 9;
-      return offsetColor(base, ripple + (grain - 0.5) * 10);
-    }),
-    barkLeaves: makeTexture(128, 53, [
-      { color: [53, 109, 48], weight: 2 },
-      { color: [87, 130, 56], weight: 1.6 },
-      { color: [105, 80, 47], weight: 0.8 },
-      { color: [48, 58, 38], weight: 0.8 },
-    ], (x, y, base, grain) => {
-      const vertical = Math.sin(x * 0.34 + grain * 2.4) * 11;
-      return offsetColor(base, vertical + (hash(x, y, 8) > 0.92 ? 28 : 0));
-    }),
-    waterFoam: makeTexture(128, 67, [
-      { color: [110, 205, 213], weight: 2.2 },
-      { color: [42, 139, 181], weight: 1.5 },
-      { color: [234, 252, 244], weight: 0.8 },
-      { color: [188, 233, 224], weight: 1.1 },
-    ], (x, y, base, grain) => {
-      const thread = Math.sin(x * 0.16 + y * 0.38 + grain * 4.5) * 18;
-      const foam = hash(x, y, 12) > 0.88 ? 46 : 0;
-      return offsetColor(base, thread + foam);
-    }),
-    terrainDetail: makeTexture(128, 79, [
-      { color: [238, 242, 220], weight: 2.4 },
-      { color: [221, 228, 198], weight: 1.4 },
-      { color: [246, 237, 203], weight: 1.1 },
-      { color: [210, 219, 188], weight: 0.9 },
-    ], (x, y, base, grain) => {
-      const brush = Math.sin(x * 0.19 - y * 0.11) * 4 + Math.sin((x + y) * 0.05) * 5;
-      return offsetColor(base, brush + (grain - 0.5) * 8);
-    }),
+    meadowGrass: makeTexture(
+      128,
+      11,
+      [
+        { color: [99, 151, 58], weight: 3 },
+        { color: [142, 178, 72], weight: 2 },
+        { color: [190, 186, 80], weight: 0.7 },
+        { color: [75, 125, 54], weight: 1.2 },
+      ],
+      (x, y, base, grain) => {
+        const blade = Math.sin(x * 0.55 + y * 0.12) * 7 + Math.sin((x - y) * 0.16) * 5;
+        return offsetColor(base, blade + (grain - 0.5) * 18);
+      },
+    ),
+    forestFloor: makeTexture(
+      128,
+      23,
+      [
+        { color: [48, 92, 48], weight: 2 },
+        { color: [62, 105, 54], weight: 1.6 },
+        { color: [74, 83, 48], weight: 1.1 },
+        { color: [34, 67, 42], weight: 1.4 },
+      ],
+      (x, y, base, grain) => {
+        const fern = Math.sin(x * 0.22) * Math.cos(y * 0.46) * 13;
+        return offsetColor(base, fern + (grain - 0.5) * 16);
+      },
+    ),
+    rockCliff: makeTexture(
+      128,
+      37,
+      [
+        { color: [115, 103, 78], weight: 2 },
+        { color: [144, 131, 94], weight: 1.6 },
+        { color: [82, 76, 63], weight: 1.2 },
+        { color: [102, 91, 69], weight: 1.4 },
+      ],
+      (x, y, base, grain) => {
+        const strata = Math.sin(y * 0.25 + grain * 3.8) * 18 + Math.sin((x + y) * 0.09) * 8;
+        return offsetColor(base, strata);
+      },
+    ),
+    sandShore: makeTexture(
+      128,
+      41,
+      [
+        { color: [215, 185, 119], weight: 2.4 },
+        { color: [235, 211, 151], weight: 1.8 },
+        { color: [184, 157, 100], weight: 0.8 },
+        { color: [232, 224, 190], weight: 0.8 },
+      ],
+      (x, y, base, grain) => {
+        const ripple = Math.sin(x * 0.18 + Math.sin(y * 0.08) * 1.8) * 9;
+        return offsetColor(base, ripple + (grain - 0.5) * 10);
+      },
+    ),
+    barkLeaves: makeTexture(
+      128,
+      53,
+      [
+        { color: [53, 109, 48], weight: 2 },
+        { color: [87, 130, 56], weight: 1.6 },
+        { color: [105, 80, 47], weight: 0.8 },
+        { color: [48, 58, 38], weight: 0.8 },
+      ],
+      (x, y, base, grain) => {
+        const vertical = Math.sin(x * 0.34 + grain * 2.4) * 11;
+        return offsetColor(base, vertical + (hash(x, y, 8) > 0.92 ? 28 : 0));
+      },
+    ),
+    waterFoam: makeTexture(
+      128,
+      67,
+      [
+        { color: [110, 205, 213], weight: 2.2 },
+        { color: [42, 139, 181], weight: 1.5 },
+        { color: [234, 252, 244], weight: 0.8 },
+        { color: [188, 233, 224], weight: 1.1 },
+      ],
+      (x, y, base, grain) => {
+        const thread = Math.sin(x * 0.16 + y * 0.38 + grain * 4.5) * 18;
+        const foam = hash(x, y, 12) > 0.88 ? 46 : 0;
+        return offsetColor(base, thread + foam);
+      },
+    ),
+    terrainDetail: makeTexture(
+      128,
+      79,
+      [
+        { color: [238, 242, 220], weight: 2.4 },
+        { color: [221, 228, 198], weight: 1.4 },
+        { color: [246, 237, 203], weight: 1.1 },
+        { color: [210, 219, 188], weight: 0.9 },
+      ],
+      (x, y, base, grain) => {
+        const brush = Math.sin(x * 0.19 - y * 0.11) * 4 + Math.sin((x + y) * 0.05) * 5;
+        return offsetColor(base, brush + (grain - 0.5) * 8);
+      },
+    ),
   };
 
   cachedTextures.terrainDetail.repeat.set(18, 18);

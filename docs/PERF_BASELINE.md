@@ -6,13 +6,13 @@ This baseline covers the current larger Mossu world, the optional WebGPU rendere
 
 ## Artifacts
 
-| Check | Artifact | Result |
-| --- | --- | --- |
-| Normal WebGL route | `output/perf-guard/baseline.json` and `output/perf-guard/baseline/` | Pass: 12/12 checkpoints, 114.9fps average, 12.2ms p95, zero console errors |
-| Coop stress route | `output/perf-guard/coop-stress.json` and `output/perf-guard/coop-stress/` | Pass: 12/12 checkpoints, 136.9fps average, 10.0ms p95, `remoteCount: 1`, `sharedEvents: 1`, zero console errors |
-| Active WebGPU route | `output/perf-guard/webgpu.json` and `output/perf-guard/webgpu/` | Diagnostic fail: 12/12 checkpoints and 122.2fps average, but six `NodeMaterial: Material "ShaderMaterial" is not compatible.` console errors |
-| Forced WebGPU fallback | `output/perf-guard/renderer-fallback-forced.json` | Pass: `requestedBackend: "webgpu"` falls back to `activeBackend: "webgl"` with zero console errors |
-| Baseline summary | `output/perf-guard/big-world-baseline-summary.json` | Machine-readable rollup of the above |
+| Check                  | Artifact                                                                  | Result                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Normal WebGL route     | `output/perf-guard/baseline.json` and `output/perf-guard/baseline/`       | Pass: 12/12 checkpoints, 114.9fps average, 12.2ms p95, zero console errors                                                                   |
+| Coop stress route      | `output/perf-guard/coop-stress.json` and `output/perf-guard/coop-stress/` | Pass: 12/12 checkpoints, 136.9fps average, 10.0ms p95, `remoteCount: 1`, `sharedEvents: 1`, zero console errors                              |
+| Active WebGPU route    | `output/perf-guard/webgpu.json` and `output/perf-guard/webgpu/`           | Diagnostic fail: 12/12 checkpoints and 122.2fps average, but six `NodeMaterial: Material "ShaderMaterial" is not compatible.` console errors |
+| Forced WebGPU fallback | `output/perf-guard/renderer-fallback-forced.json`                         | Pass: `requestedBackend: "webgpu"` falls back to `activeBackend: "webgl"` with zero console errors                                           |
+| Baseline summary       | `output/perf-guard/big-world-baseline-summary.json`                       | Machine-readable rollup of the above                                                                                                         |
 
 ## What Changed
 

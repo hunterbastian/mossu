@@ -96,7 +96,12 @@ function phaseTints(phase: WorldLightingPhase) {
     case "ridge-silhouette":
       return { sun: PHASE_RIDGE_SUN, fog: PHASE_RIDGE_FOG, sky: PHASE_RIDGE_SKY, ground: PHASE_RIDGE_GROUND };
     case "highland-haze":
-      return { sun: PHASE_HIGHLAND_SUN, fog: PHASE_HIGHLAND_FOG, sky: PHASE_HIGHLAND_SKY, ground: PHASE_HIGHLAND_GROUND };
+      return {
+        sun: PHASE_HIGHLAND_SUN,
+        fog: PHASE_HIGHLAND_FOG,
+        sky: PHASE_HIGHLAND_SKY,
+        ground: PHASE_HIGHLAND_GROUND,
+      };
     case "meadow-day":
     default:
       return { sun: PHASE_MEADOW_SUN, fog: PHASE_MEADOW_FOG, sky: PHASE_MEADOW_SKY, ground: PHASE_MEADOW_GROUND };
@@ -111,8 +116,7 @@ export function writeWorldLightingMood(target: WorldLightingMoodState, input: Wo
   const orbitHeight = MathUtils.clamp(input.orbitHeight, 0, 1);
   const basinInfluence = MathUtils.clamp(gaussian2d(input.playerX, input.playerZ, 42, 134, 70, 48), 0, 1);
   const ridgeInfluence = MathUtils.clamp(
-    MathUtils.smoothstep(input.playerZ, 152, 206) * 0.72 +
-      MathUtils.smoothstep(input.playerHeight, 118, 176) * 0.38,
+    MathUtils.smoothstep(input.playerZ, 152, 206) * 0.72 + MathUtils.smoothstep(input.playerHeight, 118, 176) * 0.38,
     0,
     1,
   );
@@ -142,7 +146,12 @@ export function writeWorldLightingMood(target: WorldLightingMoodState, input: Wo
   target.sunHaze = MathUtils.clamp(lowAngleWarmth * 0.58 + shrineInfluence * 0.28 + basinInfluence * 0.12, 0, 1);
   target.warmHaze = MathUtils.clamp(lowAngleWarmth * 0.55 + (1 - elevationMood) * 0.18 + shrineInfluence * 0.18, 0, 1);
   target.watercolorFog = MathUtils.clamp(
-    0.18 + elevationMood * 0.18 + basinInfluence * 0.2 + lowAngleWarmth * 0.16 + shrineInfluence * 0.1 - decisionClarity * 0.16,
+    0.18 +
+      elevationMood * 0.18 +
+      basinInfluence * 0.2 +
+      lowAngleWarmth * 0.16 +
+      shrineInfluence * 0.1 -
+      decisionClarity * 0.16,
     0,
     1,
   );
@@ -156,7 +165,11 @@ export function writeWorldLightingMood(target: WorldLightingMoodState, input: Wo
     0,
     0.72,
   );
-  target.silhouetteContrast = MathUtils.clamp(ridgeInfluence * 0.24 + shrineInfluence * 0.12 - decisionClarity * 0.08, 0, 0.34);
+  target.silhouetteContrast = MathUtils.clamp(
+    ridgeInfluence * 0.24 + shrineInfluence * 0.12 - decisionClarity * 0.08,
+    0,
+    0.34,
+  );
 }
 
 /**
@@ -236,8 +249,10 @@ export function applySceneLightingMood(
     silhouetteContrast * 0.025 +
     cinematicLift * 0.034 +
     landmarkGlow * 0.025;
-  lights.hemi.intensity = MathUtils.lerp(1.16, 1.04, m) - lowAngleWarmth * 0.02 + cinematicLift * 0.05 + warmHaze * 0.035;
-  lights.bounce.intensity = MathUtils.lerp(0.68, 0.58, m) + lowAngleWarmth * 0.07 + cinematicLift * 0.052 + landmarkGlow * 0.04;
+  lights.hemi.intensity =
+    MathUtils.lerp(1.16, 1.04, m) - lowAngleWarmth * 0.02 + cinematicLift * 0.05 + warmHaze * 0.035;
+  lights.bounce.intensity =
+    MathUtils.lerp(0.68, 0.58, m) + lowAngleWarmth * 0.07 + cinematicLift * 0.052 + landmarkGlow * 0.04;
   lights.meadowGlow.intensity = MathUtils.lerp(0.54, 0.25, m) + lowAngleWarmth * 0.075 + cinematicLift * 0.11;
   lights.alpineGlow.intensity = MathUtils.lerp(0.46, 0.72, m) + cinematicLift * 0.1 + landmarkGlow * 0.34;
   lights.fog.density =
@@ -283,7 +298,9 @@ export function applySceneLightingColors(
       : 0;
   const tints = phaseTints(worldMood?.phase ?? "meadow-day");
   const phaseStrength = MathUtils.clamp(
-    (worldMood?.watercolorFog ?? 0) * 0.18 + (worldMood?.landmarkGlow ?? 0) * 0.34 + (worldMood?.silhouetteContrast ?? 0) * 0.16,
+    (worldMood?.watercolorFog ?? 0) * 0.18 +
+      (worldMood?.landmarkGlow ?? 0) * 0.34 +
+      (worldMood?.silhouetteContrast ?? 0) * 0.16,
     0,
     0.44,
   );
@@ -318,7 +335,11 @@ export function getAtmosphereHorizonTints(
 ) {
   const m = MathUtils.clamp(mood, 0, 1);
   const tints = phaseTints(worldMood?.phase ?? "meadow-day");
-  const phaseStrength = MathUtils.clamp((worldMood?.watercolorFog ?? 0) * 0.24 + (worldMood?.landmarkGlow ?? 0) * 0.22, 0, 0.38);
+  const phaseStrength = MathUtils.clamp(
+    (worldMood?.watercolorFog ?? 0) * 0.24 + (worldMood?.landmarkGlow ?? 0) * 0.22,
+    0,
+    0.38,
+  );
   outHorizonTint.copy(HORIZON_TINT_LOW).lerp(HORIZON_TINT_HIGH, m * 0.62);
   outHorizonTint.lerp(tints.sky, phaseStrength);
   outHorizonHaze.copy(HORIZON_HAZE_LOW).lerp(HORIZON_HAZE_HIGH, m * 0.5);

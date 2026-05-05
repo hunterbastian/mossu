@@ -934,7 +934,14 @@ function sampleRoutePathInfo(x: number, z: number) {
 }
 
 export function sampleOpeningNestExitPathMask(x: number, z: number) {
-  const segment = distanceToSegment2D(x, z, STARTING_NEST_X, STARTING_NEST_Z, OPENING_ROUTE_BEAT_X, OPENING_ROUTE_BEAT_Z);
+  const segment = distanceToSegment2D(
+    x,
+    z,
+    STARTING_NEST_X,
+    STARTING_NEST_Z,
+    OPENING_ROUTE_BEAT_X,
+    OPENING_ROUTE_BEAT_Z,
+  );
   const grain = fbmNoise(x * 0.094 + 2.8, z * 0.094 - 9.1, 2) * 0.5 + 0.5;
   const core = 1 - smootherStep(3.4, 9.2, segment.distance);
   const brushedEdge = 1 - smootherStep(8.2, 14.5, segment.distance);
@@ -979,7 +986,9 @@ export function sampleRouteReadabilityClearing(x: number, z: number) {
   }, 0);
   const shoreWindow = Math.max(sampleRiverDampBankMask(x, z), sampleStartingWaterDampBankMask(x, z)) * 0.28;
   const thresholdLandmark = sampleBiomeThresholdClearing(x, z);
-  return saturate(Math.max(ribbon, transitionGlade, thresholdLandmark, nestExit * 0.92) + noisySpotWindow + shoreWindow);
+  return saturate(
+    Math.max(ribbon, transitionGlade, thresholdLandmark, nestExit * 0.92) + noisySpotWindow + shoreWindow,
+  );
 }
 
 /**

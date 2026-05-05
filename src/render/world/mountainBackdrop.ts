@@ -1,15 +1,15 @@
-import {
-  BufferGeometry,
-  Color,
-  ConeGeometry,
-  Float32BufferAttribute,
-  Group,
-  Mesh,
-  MeshBasicMaterial,
-} from "three";
+import { BufferGeometry, Color, ConeGeometry, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
-type MountainPlacement = [x: number, z: number, scaleX: number, scaleY: number, scaleZ: number, yaw: number, lift: number];
+type MountainPlacement = [
+  x: number,
+  z: number,
+  scaleX: number,
+  scaleY: number,
+  scaleZ: number,
+  yaw: number,
+  lift: number,
+];
 
 function buildMountainGeometry(): BufferGeometry {
   const SEGMENTS = 20;

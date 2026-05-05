@@ -32,6 +32,9 @@ import { createQualitySettingsMarkup } from "./appQualitySettings";
 const POUCH_KIND_ORDER: ForageableKind[] = ["seed", "shell", "moss_tuft", "berry", "smooth_stone", "feather"];
 const POUCH_REVEAL_MS = 4200;
 const PICKUP_CARD_MS = 2200;
+const KARU_RECRUIT_PROMPT_RADIUS = 11.5;
+const KARU_JOIN_FOCUS_MS = 2200;
+const KARU_JOIN_FOCUS_MIN_FRAMES = 18;
 type BinderSectionId = "profile" | "cards" | "pouch";
 type PauseCommandId = "resume" | "handbook" | "map" | "reset-progress";
 
@@ -196,6 +199,8 @@ export class HudShell {
   };
   private readonly flavorPingToast = document.createElement("p");
   private flavorPingHideTimer: ReturnType<typeof setTimeout> | null = null;
+  private karuJoinFocusUntil = 0;
+  private karuJoinFocusFramesRemaining = 0;
 
   constructor(previewElement: HTMLElement) {
     this.element = this.buildHud(previewElement);
@@ -240,16 +245,25 @@ export class HudShell {
     const nearbyForageable = frame.forageableTarget;
     const faunaName = fauna.speciesName;
     const nearbyRecruitableFauna =
-      fauna.nearestRecruitableDistance !== null && fauna.nearestRecruitableDistance <= 18.5;
-    const shouldShowControlsPanel = pauseMenuOpen || characterScreenOpen;
+      fauna.nearestRecruitableDistance !== null && fauna.nearestRecruitableDistance <= KARU_RECRUIT_PROMPT_RADIUS;
     const overlayOpen = isMapMode || pauseMenuOpen || characterScreenOpen;
+    if (!overlayOpen && fauna.recruitedThisFrame > 0) {
+      this.karuJoinFocusUntil = now + KARU_JOIN_FOCUS_MS;
+      this.karuJoinFocusFramesRemaining = KARU_JOIN_FOCUS_MIN_FRAMES;
+    }
+    const karuJoinFocusActive =
+      !overlayOpen && (now < this.karuJoinFocusUntil || this.karuJoinFocusFramesRemaining > 0);
+    if (karuJoinFocusActive && this.karuJoinFocusFramesRemaining > 0) {
+      this.karuJoinFocusFramesRemaining -= 1;
+    }
+    const shouldShowControlsPanel = pauseMenuOpen || characterScreenOpen;
     const cinematicFocus =
       !overlayOpen &&
       (frame.player.rolling ||
         frame.player.floating ||
         latestCollection !== undefined ||
         latestGatheredGood !== undefined ||
-        fauna.recruitedThisFrame > 0 ||
+        karuJoinFocusActive ||
         fauna.firstEncounterActive);
     const staminaRatio =
       frame.player.staminaMax <= 0 ? 0 : MathUtils.clamp(frame.player.stamina / frame.player.staminaMax, 0, 1);
@@ -279,6 +293,7 @@ export class HudShell {
       nearbyForageable?.forageableId ?? "",
       nearbyForageable?.kind ?? "",
       fauna.dominantMood,
+      karuJoinFocusActive ? 1 : 0,
       fauna.recruitedThisFrame,
       fauna.rollingCount,
       fauna.recruitedCount,
@@ -312,6 +327,7 @@ export class HudShell {
     this.element.classList.toggle("hud--pause", pauseMenuOpen);
     this.element.classList.toggle("hud--character-screen", characterScreenOpen);
     this.element.classList.toggle("hud--cinematic-focus", cinematicFocus);
+    this.element.classList.toggle("hud--karu-join-focus", karuJoinFocusActive);
     this.element.classList.toggle("hud--summit-complete", frame.save.catalogedLandmarkIds.has("peak-shrine"));
     this.element.classList.toggle("hud--predator-alert", false);
     this.statusValues.prompt.classList.toggle("prompt-chip--danger", false);
@@ -386,7 +402,7 @@ export class HudShell {
       latestGatheredGood !== undefined ||
       latestCollection !== undefined ||
       nearbyForageable !== null ||
-      fauna.recruitedThisFrame > 0 ||
+      karuJoinFocusActive ||
       fauna.firstEncounterActive ||
       fauna.rollingCount > 0 ||
       (fauna.callHeardActive && fauna.recruitedCount > 0) ||
@@ -419,10 +435,10 @@ export class HudShell {
       this.statusValues.prompt.innerHTML = `<strong>Field note stamped</strong> ${latestCollection.keepsakeTitle} joined the guide.`;
     } else if (nearbyForageable) {
       this.statusValues.prompt.innerHTML = `<strong>E Forage</strong> Pick up ${nearbyForageable.title}.`;
-    } else if (fauna.recruitedThisFrame > 0) {
-      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.recruitedThisFrame} ${faunaName} joined Mossu's trail.</span>`;
+    } else if (karuJoinFocusActive) {
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName} joined Mossu's trail</strong></span>`;
     } else if (fauna.firstEncounterActive) {
-      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>Karu nearby</strong> Ease closer until the prompt brightens, then press E.</span>`;
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>Karu nearby</strong> Ease closer, then hold E to invite one.</span>`;
     } else if (fauna.rollingCount > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.rollingCount} rolling with Mossu.</span>`;
     } else if (fauna.callHeardActive && fauna.recruitedCount > 0) {
@@ -438,7 +454,7 @@ export class HudShell {
       this.statusValues.prompt.innerHTML =
         "<strong>Shallow shelf</strong> Mossu can wade here; deeper blue pockets switch to swimming.";
     } else if (nearbyRecruitableFauna) {
-      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>E Invite Karu</strong> They are close enough to join Mossu.</span>`;
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>Hold E Invite Karu</strong> Stay close; one joins at a time.</span>`;
     } else if (fauna.recruitedCount > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.recruitedCount} following. ${faunaMoodLabel} mood. Hold E to call them in.</span>`;
     } else if (nearbyCollection) {
@@ -1061,7 +1077,7 @@ export class HudShell {
       ["Q / Space", "Breeze Float"],
       ["Shift", "roll"],
       ["E", "interact"],
-      ["Hold E", "call Karu"],
+      ["Hold E", "invite / call Karu"],
       ["Tab", "guide"],
       ["M", "map"],
       ["Esc", "pause"],

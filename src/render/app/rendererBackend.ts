@@ -55,8 +55,7 @@ export async function createRendererBundle(params: URLSearchParams): Promise<Ren
   const requestedBackend = getRequestedRendererBackend(params);
   const webGpuAvailable = hasNavigatorWebGpu();
   const preserveDrawingBuffer = params.has("visualProbe");
-  const shouldTryWebGpu =
-    requestedBackend === "webgpu" || (requestedBackend === "auto" && webGpuAvailable);
+  const shouldTryWebGpu = requestedBackend === "webgpu" || (requestedBackend === "auto" && webGpuAvailable);
 
   if (!shouldTryWebGpu) {
     return createWebGlRendererBundle(requestedBackend, webGpuAvailable, null, preserveDrawingBuffer);
@@ -84,8 +83,7 @@ export async function createRendererBundle(params: URLSearchParams): Promise<Ren
       fallbackReason: null,
     };
   } catch (error) {
-    const fallbackReason =
-      error instanceof Error ? error.message : "WebGPU renderer could not be initialized.";
+    const fallbackReason = error instanceof Error ? error.message : "WebGPU renderer could not be initialized.";
     return createWebGlRendererBundle(requestedBackend, webGpuAvailable, fallbackReason, preserveDrawingBuffer);
   }
 }

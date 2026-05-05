@@ -18,11 +18,11 @@ export const NORMAL_HUD_UPDATE_INTERVAL = 1 / 12;
 export const BLOOM_STRENGTH = 0.14;
 export const BLOOM_RADIUS = 0.36;
 export const BLOOM_THRESHOLD = 0.84;
+export const POST_PROCESSING_MIN_PIXEL_RATIO = MIN_PIXEL_RATIO;
 export const BLOOM_MIN_PIXEL_RATIO = 0.74;
 export const OPENING_SEQUENCE_SECONDS = 5.4;
 export const OPENING_SEQUENCE_SKIP_AFTER_SECONDS = 1.05;
 export const IDLE_CAMERA_ORBIT_DELAY_SECONDS = 6;
-export const POST_PROCESSING_RESUME_DELAY_SECONDS = 0.34;
 
 export type DebugSaveStatePayload = {
   player?: {

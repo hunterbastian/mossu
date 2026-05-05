@@ -113,7 +113,7 @@ Creature name: Karu.
 Tasks:
 
 - [x] Add recruitable state for ambient fauna.
-- [x] Press `E` near fauna to recruit.
+- [x] Hold `E` near fauna to recruit one Karu at a time.
 - [x] Keep `E` landmark interaction working in normal gameplay.
 - [x] Add boids behavior:
   - separation
@@ -122,12 +122,13 @@ Tasks:
   - follow leader
 - [x] Add soft catch-up behavior with leader slots.
 - [x] Prevent followers from crowding Mossu.
-- [ ] Playtest followers across slopes, banks, and water edges.
-- [ ] Decide whether Karu should be recruitable one-by-one or by small cluster long-term.
+- [x] Playtest held recruitment across the opening pocket, including tap-vs-hold and one-at-a-time behavior.
+- [ ] Playtest followers across slopes, banks, narrow clearings, and water edges.
+- [x] Decide whether Karu should be recruitable one-by-one or by small cluster long-term.
 
 Acceptance:
 
-- Player can recruit at least one fauna cluster.
+- Player can recruit nearby Karu individually by holding `E`.
 - Followers stay visible and cute.
 - Followers do not jitter, stack, or block the player.
 - Herd behavior works across grass, slopes, and shallow water edges.

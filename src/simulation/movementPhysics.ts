@@ -14,6 +14,8 @@ import {
   BREEZE_FLOAT_MAX_UPWARD_VELOCITY,
   COYOTE_TIME,
   FLOAT_FORWARD_BONUS,
+  FLOAT_EXIT_GRAVITY_GRACE_TIME,
+  FLOAT_EXIT_GRAVITY_SCALE,
   FLOAT_GRAVITY_SCALE,
   GRAVITY,
   GROUND_ACCELERATION,
@@ -39,6 +41,8 @@ import {
   ROLL_DRIFT_MAX_SPEED_LOSS,
   ROLL_DRIFT_SPEED_RETENTION,
   ROLL_DRIFT_STEERING,
+  ROLL_EXIT_CARRY_TIME,
+  ROLL_EXIT_SPEED_CARRY_BONUS,
   ROLL_GRAVITY_FULL_SLOPE,
   ROLL_GRAVITY_MIN_SLOPE,
   ROLL_LANDING_SPEED_CARRY_BONUS,
@@ -58,6 +62,8 @@ import {
   SURFACE_TRACTION,
   SWIM_ACCELERATION,
   SWIM_DECELERATION,
+  SWIM_ENTRY_MOMENTUM_GRACE_TIME,
+  SWIM_ENTRY_SPEED_CARRY_BONUS,
   SWIM_MIN_DEPTH,
   SWIM_SPEED,
   SWIM_UNDERWATER_SPEED,
@@ -107,6 +113,8 @@ const INPUT_RELEASE_DAMPING = 13.2;
 const INPUT_DEADZONE = 0.015;
 const WADE_SPEED_MIN_MULTIPLIER = 0.72;
 const WADE_ACCELERATION_MULTIPLIER = 0.82;
+const WADE_ENTRY_DAMPING = 7.5;
+const WADE_EXIT_DAMPING = 10.5;
 
 export function tickMovementTimers(
   player: PlayerState,
@@ -126,6 +134,12 @@ export function tickMovementTimers(
     runtime.airMomentumSpeedLimitBonus = 0;
   }
   runtime.landingMomentumGraceRemaining = Math.max(0, runtime.landingMomentumGraceRemaining - dt);
+  runtime.rollExitCarryRemaining = Math.max(0, runtime.rollExitCarryRemaining - dt);
+  if (runtime.rollExitCarryRemaining <= 0) {
+    runtime.rollExitSpeedCarryBonus = 0;
+  }
+  runtime.floatExitGravityGraceRemaining = Math.max(0, runtime.floatExitGravityGraceRemaining - dt);
+  runtime.swimEntryMomentumGraceRemaining = Math.max(0, runtime.swimEntryMomentumGraceRemaining - dt);
 }
 
 export function applyMovementPhysics(
@@ -170,9 +184,23 @@ export function applyMovementPhysics(
     runtime.rollingChargeSeconds = 0;
   }
   player.rollingBoostActive = runtime.rollingChargeSeconds >= ROLL_BOOST_DELAY;
+  if (player.rolling && !player.swimming && rollingPlanarSpeed > WALK_SPEED * 0.82) {
+    runtime.rollExitCarryRemaining = ROLL_EXIT_CARRY_TIME;
+    runtime.rollExitSpeedCarryBonus = Math.max(
+      runtime.rollExitSpeedCarryBonus,
+      MathUtils.clamp(rollingPlanarSpeed - WALK_SPEED, 0, ROLL_EXIT_SPEED_CARRY_BONUS),
+    );
+  }
 
-  const wadeAmount =
+  const targetWadeAmount =
     player.waterMode === "wading" ? MathUtils.clamp(player.waterDepth / Math.max(0.001, SWIM_MIN_DEPTH), 0, 1) : 0;
+  runtime.wadeBlend = MathUtils.damp(
+    runtime.wadeBlend,
+    targetWadeAmount,
+    targetWadeAmount > runtime.wadeBlend ? WADE_ENTRY_DAMPING : WADE_EXIT_DAMPING,
+    dt,
+  );
+  const wadeAmount = runtime.wadeBlend;
   const wadeSpeedMultiplier = MathUtils.lerp(1, WADE_SPEED_MIN_MULTIPLIER, wadeAmount);
   const rollSlopeInputSpeed = computeRollSlopeInputSpeedAdjustment(
     scratch.groundNormal,
@@ -186,25 +214,63 @@ export function applyMovementPhysics(
       ? ROLL_LANDING_SPEED_CARRY_BONUS
       : LANDING_SPEED_CARRY_BONUS
     : 0;
-  const groundSpeed =
-    (player.rolling
-      ? Math.max(
-          ROLL_SPEED * 0.72,
-          ROLL_SPEED * (player.rollingBoostActive ? ROLL_BOOST_MULTIPLIER : 1) + rollSlopeInputSpeed,
-        )
-      : WALK_SPEED) * wadeSpeedMultiplier;
+  const rollExitCarryT =
+    !player.rolling && runtime.rollExitCarryRemaining > 0
+      ? MathUtils.smoothstep(runtime.rollExitCarryRemaining / ROLL_EXIT_CARRY_TIME, 0, 1)
+      : 0;
+  const rollExitCarryBonus = runtime.rollExitSpeedCarryBonus * rollExitCarryT;
+  const rollExitAirCarryBonus = !player.grounded && rollExitCarryT > 0 ? rollExitCarryBonus * 0.72 : 0;
+  const rollExitWadeRelief = MathUtils.lerp(wadeSpeedMultiplier, 1, rollExitCarryT * 0.65);
+  const groundSpeed = player.rolling
+    ? Math.max(
+        ROLL_SPEED * 0.72,
+        ROLL_SPEED * (player.rollingBoostActive ? ROLL_BOOST_MULTIPLIER : 1) + rollSlopeInputSpeed,
+      ) * wadeSpeedMultiplier
+    : WALK_SPEED * wadeSpeedMultiplier + rollExitCarryBonus * rollExitWadeRelief;
   const passiveSlopeLimitBonus = terrainSlope * ROLL_SLOPE_SPEED_BONUS * (rollSlopeInputAlignment < -0.1 ? 0.55 : 1);
   const rollSpeedLimit = player.rolling
     ? groundSpeed + passiveSlopeLimitBonus + landingSpeedCarryBonus
     : groundSpeed + landingSpeedCarryBonus;
-  const airSpeedLimit = player.rolling ? AIR_SPEED + ROLL_AIR_SPEED_BONUS : AIR_SPEED;
+  const rollExitMinimumSpeed =
+    rollExitCarryT > 0 && !player.swimming && !player.rolling && rollingPlanarSpeed > WALK_SPEED * 0.75
+      ? Math.max(
+          player.grounded ? groundSpeed * 0.88 : AIR_SPEED + rollExitAirCarryBonus * 0.82,
+          rollingPlanarSpeed - MathUtils.lerp(52, 24, rollExitCarryT) * dt,
+        )
+      : 0;
+  const airSpeedLimit = player.rolling ? AIR_SPEED + ROLL_AIR_SPEED_BONUS : AIR_SPEED + rollExitAirCarryBonus;
   const airborneMomentumSpeedBonus = airMomentumCarryActive ? runtime.airMomentumSpeedLimitBonus : 0;
-  const swimSpeed = player.waterMode === "underwater" ? SWIM_UNDERWATER_SPEED : SWIM_SPEED;
+  const swimEntryCarryT =
+    player.swimming && runtime.swimEntryMomentumGraceRemaining > 0
+      ? MathUtils.smoothstep(runtime.swimEntryMomentumGraceRemaining / SWIM_ENTRY_MOMENTUM_GRACE_TIME, 0, 1)
+      : 0;
+  const swimSpeed =
+    (player.waterMode === "underwater" ? SWIM_UNDERWATER_SPEED : SWIM_SPEED) +
+    SWIM_ENTRY_SPEED_CARRY_BONUS * swimEntryCarryT +
+    (player.swimming ? rollExitCarryBonus * 0.45 : 0);
 
   scratch.planarVelocity.set(player.velocity.x, 0, player.velocity.z);
   scratch.desiredPlanarVelocity
     .copy(scratch.worldMove)
-    .multiplyScalar(player.swimming ? swimSpeed : player.grounded ? groundSpeed : AIR_SPEED);
+    .multiplyScalar(
+      player.swimming ? swimSpeed : player.grounded ? groundSpeed : AIR_SPEED + rollExitAirCarryBonus * 0.72,
+    );
+  if (
+    rollExitCarryT > 0 &&
+    player.grounded &&
+    !player.swimming &&
+    !player.rolling &&
+    scratch.planarVelocity.lengthSq() > scratch.desiredPlanarVelocity.lengthSq() &&
+    scratch.desiredPlanarVelocity.lengthSq() > 0.0001
+  ) {
+    const currentPlanarSpeed = scratch.planarVelocity.length();
+    const easedTargetSpeed = MathUtils.lerp(
+      scratch.desiredPlanarVelocity.length(),
+      currentPlanarSpeed,
+      rollExitCarryT * 0.38,
+    );
+    scratch.desiredPlanarVelocity.setLength(Math.min(easedTargetSpeed, rollSpeedLimit));
+  }
   if (
     airMomentumCarryActive &&
     !hasRawInput &&
@@ -259,17 +325,30 @@ export function applyMovementPhysics(
         ? ROLL_COAST_DECELERATION * surface.rollCoastMultiplier
         : GROUND_DECELERATION * surface.decelMultiplier
       : applyAirMomentumDeceleration(AIR_DECELERATION, airMomentumCarryActive);
+  const effectiveDeceleration =
+    rollExitCarryT > 0 && !hasMoveInput
+      ? MathUtils.lerp(deceleration, ROLL_COAST_DECELERATION * surface.rollCoastMultiplier, rollExitCarryT)
+      : deceleration;
 
   scratch.planarVelocity.x = moveTowards(
     scratch.planarVelocity.x,
     hasMoveInput ? scratch.desiredPlanarVelocity.x : 0,
-    (hasMoveInput ? acceleration : applyLandingMomentumDeceleration(deceleration, landingCarryActive)) * dt,
+    (hasMoveInput ? acceleration : applyLandingMomentumDeceleration(effectiveDeceleration, landingCarryActive)) * dt,
   );
   scratch.planarVelocity.z = moveTowards(
     scratch.planarVelocity.z,
     hasMoveInput ? scratch.desiredPlanarVelocity.z : 0,
-    (hasMoveInput ? acceleration : applyLandingMomentumDeceleration(deceleration, landingCarryActive)) * dt,
+    (hasMoveInput ? acceleration : applyLandingMomentumDeceleration(effectiveDeceleration, landingCarryActive)) * dt,
   );
+
+  if (
+    rollExitMinimumSpeed > 0 &&
+    scratch.planarVelocity.lengthSq() > 0.0001 &&
+    scratch.planarVelocity.length() < rollExitMinimumSpeed
+  ) {
+    const rollExitMinimumLimit = player.grounded ? rollSpeedLimit : airSpeedLimit + airborneMomentumSpeedBonus + 2.5;
+    scratch.planarVelocity.setLength(Math.min(rollExitMinimumSpeed, rollExitMinimumLimit));
+  }
 
   if (justStartedRolling && hasMoveInput) {
     scratch.planarDirection.copy(scratch.worldMove).normalize();
@@ -293,7 +372,8 @@ export function applyMovementPhysics(
     const speedBeforeGroundProjection = scratch.planarVelocity.length();
     scratch.planarVelocity.projectOnPlane(scratch.groundNormal).setY(0);
     if (scratch.planarVelocity.lengthSq() > 0.0001) {
-      const projectionRetention = landingCarryActive ? 1 : player.rolling ? 0.86 : 0;
+      const rollExitProjectionRetention = rollExitCarryT > 0 ? MathUtils.lerp(0.42, 0.76, rollExitCarryT) : 0;
+      const projectionRetention = landingCarryActive ? 1 : player.rolling ? 0.86 : rollExitProjectionRetention;
       const retainedProjectionSpeed = speedBeforeGroundProjection * projectionRetention;
       const projectedSpeed = Math.max(scratch.planarVelocity.length(), retainedProjectionSpeed);
       scratch.planarVelocity.setLength(Math.min(projectedSpeed, rollSpeedLimit));
@@ -313,12 +393,20 @@ export function applyMovementPhysics(
 
   const isFloating = computeIsFloating(player, save, runtime, input);
   player.floating = isFloating;
+  if (isFloating) {
+    runtime.floatExitGravityGraceRemaining = FLOAT_EXIT_GRAVITY_GRACE_TIME;
+  }
   const horizontalSpeed = Math.hypot(player.velocity.x, player.velocity.z);
 
   applyVariableJumpHeight(player, runtime, input, isFloating, dt);
 
   if (!player.swimming) {
-    player.velocity.y -= GRAVITY * (isFloating ? FLOAT_GRAVITY_SCALE : 1) * dt;
+    const floatExitT =
+      !isFloating && !player.grounded && runtime.floatExitGravityGraceRemaining > 0
+        ? MathUtils.smoothstep(runtime.floatExitGravityGraceRemaining / FLOAT_EXIT_GRAVITY_GRACE_TIME, 0, 1)
+        : 0;
+    const gravityScale = isFloating ? FLOAT_GRAVITY_SCALE : MathUtils.lerp(1, FLOAT_EXIT_GRAVITY_SCALE, floatExitT);
+    player.velocity.y -= GRAVITY * gravityScale * dt;
 
     if (isFloating && horizontalSpeed > 0.15) {
       const boost = FLOAT_FORWARD_BONUS * dt;

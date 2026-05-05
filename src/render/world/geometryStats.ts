@@ -19,8 +19,5 @@ export function countGeometryTriangles(geometry: BufferGeometry) {
 }
 
 export function countInstancedTriangles(meshes: readonly InstancedMesh[]) {
-  return meshes.reduce(
-    (total, mesh) => total + countGeometryTriangles(mesh.geometry) * mesh.count,
-    0,
-  );
+  return meshes.reduce((total, mesh) => total + countGeometryTriangles(mesh.geometry) * mesh.count, 0);
 }

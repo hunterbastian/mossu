@@ -36,7 +36,9 @@ import {
   sampleBaseTerrainHeight,
   sampleBiomeZone,
   sampleIslandBoundaryPoint,
+  samplePaintedGroundMask,
   sampleRouteDirtPathMask,
+  sampleRouteReadabilityClearing,
   sampleTerrainHeight,
   sampleTerrainNormal,
   sampleWaterState,
@@ -103,7 +105,12 @@ import {
 } from "./sceneLighting";
 import { buildTerrainFormStrokes, makeTerrainMesh } from "./terrainMesh";
 import { buildHighlandWaterways, WaterSystem } from "./waterSystem";
-import { buildGrasslandImmersionSystem, updateGrasslandImmersionSystem } from "./grasslandImmersion";
+import {
+  DISTANT_BIRD_COUNT,
+  GRASSLAND_LIFE_SIGNAL_COUNT,
+  buildGrasslandImmersionSystem,
+  updateGrasslandImmersionSystem,
+} from "./grasslandImmersion";
 import { buildMountainBackdrop } from "./mountainBackdrop";
 
 const grasslandsArt = OOT_PS2_GRASSLANDS_PALETTE;
@@ -157,6 +164,26 @@ interface MossuTraceStamp {
 interface MossuTraceSystem {
   mesh: InstancedMesh;
   alpha: Float32Array;
+}
+
+interface MossuTraceWearContext {
+  dirt: number;
+  shoulder: number;
+  painted: number;
+  readable: number;
+}
+
+function sampleMossuTraceWearContext(x: number, z: number): MossuTraceWearContext {
+  const dirt = sampleRouteDirtPathMask(x, z);
+  const clearing = sampleRouteReadabilityClearing(x, z);
+  const painted = samplePaintedGroundMask(x, z);
+  const shoulder = MathUtils.clamp(clearing - dirt * 0.54, 0, 1);
+  return {
+    dirt,
+    shoulder,
+    painted,
+    readable: MathUtils.clamp(Math.max(dirt, shoulder * 0.82, painted * 0.58), 0, 1),
+  };
 }
 
 interface MapMarker {
@@ -285,6 +312,8 @@ export interface WorldPerfStats {
   mossuTraceMeshes: number;
   mossuTraceStampBudget: number;
   mossuTraceActiveStamps: number;
+  grasslandLifeSignals: number;
+  grasslandDistantBirds: number;
   forestMeshes: number;
   forestInstances: number;
   forestEstimatedTriangles: number;
@@ -1319,6 +1348,7 @@ export class WorldRenderer {
     dominantMood: "curious",
     regroupActive: false,
     callHeardActive: false,
+    idleRoutineCount: 0,
   };
   private readonly landingUp = new Vector3(0, 1, 0);
   private readonly landingQuat = new Quaternion();
@@ -1883,7 +1913,19 @@ export class WorldRenderer {
       this.updateAmbientMotes(frame, elapsed, dt, viewCamera);
       this.ocean.update(elapsed, this.sun, viewCamera);
     }
-    updateGrasslandImmersionSystem(this.grasslandImmersion, elapsed, mapLookdown);
+    updateGrasslandImmersionSystem(
+      this.grasslandImmersion,
+      elapsed,
+      mapLookdown,
+      frame.player.position,
+      MathUtils.clamp(
+        (this.faunaStats.firstEncounterActive ? 0.65 : 0) +
+          (this.faunaStats.recruitedThisFrame > 0 ? 1 : 0) +
+          (this.faunaStats.rollingCount > 0 ? 0.28 : 0),
+        0,
+        1,
+      ),
+    );
     this.updateWaterInteractions(frame, elapsed, mapLookdown);
     this.updateWater(elapsed, mapLookdown);
     this.updateLandingSplash(frame, dt);
@@ -2087,6 +2129,8 @@ export class WorldRenderer {
       mossuTraceMeshes: 1,
       mossuTraceStampBudget: MOSSU_TRACE_STAMP_COUNT,
       mossuTraceActiveStamps: this.mossuTraceActiveStamps,
+      grasslandLifeSignals: GRASSLAND_LIFE_SIGNAL_COUNT,
+      grasslandDistantBirds: DISTANT_BIRD_COUNT,
       forestMeshes: this.treeWindMeshes.length + this.treeLeafWindMeshes.length,
       forestInstances,
       forestEstimatedTriangles: countInstancedTriangles(this.treeWindMeshes) + staticTreeWindTriangles,
@@ -2835,13 +2879,25 @@ export class WorldRenderer {
   private updateMossuTrace(frame: FrameState, dt: number, mapLookdown: boolean) {
     const player = frame.player;
     const planarSpeed = Math.hypot(player.velocity.x, player.velocity.z);
-    const canEmit = !mapLookdown && player.grounded && !player.swimming && !player.fallingToVoid && planarSpeed > 2.2;
+    const traceContext = sampleMossuTraceWearContext(player.position.x, player.position.z);
+    const canEmit =
+      !mapLookdown &&
+      player.grounded &&
+      !player.swimming &&
+      !player.fallingToVoid &&
+      planarSpeed > 2.2 &&
+      (traceContext.readable > 0.06 || (player.rolling && planarSpeed > 8.5));
 
     if (canEmit) {
       const rate = player.rolling
-        ? MathUtils.clamp(planarSpeed * 0.28, 2.4, 5.8)
-        : MathUtils.clamp(planarSpeed * 0.18, 0.8, 2.4);
-      this.mossuTraceEmissionCarry += dt * rate;
+        ? MathUtils.clamp(planarSpeed * 0.34, 2.8, 6.4)
+        : MathUtils.clamp(planarSpeed * 0.23, 1, 2.8);
+      const routeRate = MathUtils.lerp(
+        0.7,
+        1.45,
+        MathUtils.clamp(traceContext.readable + traceContext.shoulder * 0.24, 0, 1),
+      );
+      this.mossuTraceEmissionCarry += dt * rate * routeRate;
       while (this.mossuTraceEmissionCarry >= 1) {
         this.emitMossuTraceStamp(player.position, player.velocity, player.rolling);
         this.mossuTraceEmissionCarry -= 1;
@@ -2913,17 +2969,39 @@ export class WorldRenderer {
       return;
     }
 
-    const routeDirt = sampleRouteDirtPathMask(x, z);
+    const traceContext = sampleMossuTraceWearContext(x, z);
+    if (traceContext.readable < 0.05 && (!rolling || Math.random() > 0.62)) {
+      return;
+    }
     const index = this.mossuTraceCursor;
     this.mossuTraceCursor = (this.mossuTraceCursor + 1) % this.mossuTraceStamps.length;
     const stamp = this.mossuTraceStamps[index];
     stamp.age = 0;
-    stamp.life = MathUtils.lerp(7.5, 13.5, Math.random()) * (rolling ? 1.08 : 1);
-    stamp.maxAlpha = MathUtils.clamp((rolling ? 0.13 : 0.095) + routeDirt * 0.045, 0.075, 0.17);
+    const routeLife = MathUtils.lerp(
+      0.82,
+      1.32,
+      MathUtils.clamp(traceContext.readable + traceContext.shoulder * 0.18, 0, 1),
+    );
+    stamp.life = MathUtils.lerp(6.8, 13.4, Math.random()) * (rolling ? 1.18 : 1) * routeLife;
+    stamp.maxAlpha = MathUtils.clamp(
+      (rolling ? 0.118 : 0.078) +
+        traceContext.dirt * 0.052 +
+        traceContext.shoulder * 0.046 +
+        traceContext.painted * 0.016,
+      0.048,
+      0.18,
+    );
 
-    const yaw = Math.atan2(this.mossuTraceDirection.x, this.mossuTraceDirection.z) + (Math.random() - 0.5) * 0.2;
-    const length = rolling ? MathUtils.lerp(2.8, 4.0, Math.random()) : MathUtils.lerp(1.9, 3.0, Math.random());
-    const width = rolling ? MathUtils.lerp(0.95, 1.36, Math.random()) : MathUtils.lerp(0.72, 1.04, Math.random());
+    const routeEdgeLift = MathUtils.clamp(traceContext.shoulder + traceContext.painted * 0.16, 0, 1);
+    const yaw =
+      Math.atan2(this.mossuTraceDirection.x, this.mossuTraceDirection.z) +
+      (Math.random() - 0.5) * MathUtils.lerp(0.24, 0.14, routeEdgeLift);
+    const length =
+      (rolling ? MathUtils.lerp(2.8, 4.0, Math.random()) : MathUtils.lerp(1.75, 2.84, Math.random())) *
+      MathUtils.lerp(0.82, 1.18, routeEdgeLift);
+    const width =
+      (rolling ? MathUtils.lerp(0.92, 1.3, Math.random()) : MathUtils.lerp(0.62, 0.94, Math.random())) *
+      MathUtils.lerp(0.86, 1.12, traceContext.dirt);
     this.mossuTraceDummy.position.set(x, y + 0.055, z);
     this.mossuTraceDummy.rotation.set(0, yaw, 0);
     this.mossuTraceDummy.scale.set(width, 1, length);

@@ -169,18 +169,17 @@ Current state:
 - Karu live in `ambientBlobs.ts`.
 - They have herd IDs, homes, targets, velocity, rest/wander/curious/shy modes, separation, and group-center pull.
 - Recruited Karu use boids-style separation, alignment, cohesion, and leader-follow slots.
-- `E` recruits nearby Karu in gameplay mode.
-- The state is still render-side and intentionally not saved yet.
+- Holding `E` near a Karu recruits the nearest unrecruited individual in gameplay mode; tap `E` remains for normal interact targets.
+- Recruitment IDs persist through local save state.
 
 Remaining target:
 
-- Playtest recruited Karu across slopes, river banks, and shallow water edges.
-- Decide whether long-term recruitment should stay cluster-based or become one-by-one.
-- Decide if recruited Karu should persist in save state later.
+- Playtest recruited Karu across slopes, river banks, narrow clearings, and shallow water edges.
+- Add stronger profile-card/reward feedback for saved recruited Karu.
 
 Implementation notes:
 
-- Keep landmark/forageable interaction working; Karu recruitment should only take priority when a Karu is clearly in range.
+- Keep landmark/forageable interaction working; Karu recruitment should only take priority when a Karu is clearly in range and the player holds `E`.
 - Keep leader slots around/behind Mossu so the herd has a soft formation target.
 - Let unrecruited fauna keep the existing shy/curious ambient behavior.
 

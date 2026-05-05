@@ -14,16 +14,7 @@
  * out of the sea.
  */
 
-import {
-  Camera,
-  Color,
-  DirectionalLight,
-  FrontSide,
-  Mesh,
-  PlaneGeometry,
-  ShaderMaterial,
-  Vector3,
-} from "three";
+import { Camera, Color, DirectionalLight, FrontSide, Mesh, PlaneGeometry, ShaderMaterial, Vector3 } from "three";
 
 export interface OceanSystem {
   readonly mesh: Mesh;

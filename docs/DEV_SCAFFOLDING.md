@@ -8,11 +8,11 @@
 
 ## Automation & E2E
 
-| Mechanism | Purpose |
-|-----------|---------|
-| **`?e2e=1`** | `GameApp.renderGameToText()` returns a **minimal JSON** snapshot (no perf block, no full character screen). Use in Playwright / perf scripts to avoid long sync work on the main thread. |
-| **`window.__MOSSU_E2E__`** | `{ version: 1, ready, mode }` — wait for `ready` before driving `advanceTime` or snapshot. |
-| **`window.mossuDebug`** | Only with **`?qaDebug`** — teleport, opening skip, save payload (see `main.ts`). |
+| Mechanism                  | Purpose                                                                                                                                                                                  |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`?e2e=1`**               | `GameApp.renderGameToText()` returns a **minimal JSON** snapshot (no perf block, no full character screen). Use in Playwright / perf scripts to avoid long sync work on the main thread. |
+| **`window.__MOSSU_E2E__`** | `{ version: 1, ready, mode }` — wait for `ready` before driving `advanceTime` or snapshot.                                                                                               |
+| **`window.mossuDebug`**    | Only with **`?qaDebug`** — teleport, opening skip, save payload (see `main.ts`).                                                                                                         |
 
 ## Commands
 

@@ -144,6 +144,39 @@ export class GameplayFeedbackAudio {
     o.stop(t + 0.08);
   }
 
+  playKaruChirp(kind: "notice" | "join") {
+    if (!this.unlocked) {
+      return;
+    }
+    const ctx = this.ensureContext();
+    if (!ctx) {
+      return;
+    }
+
+    const t = ctx.currentTime;
+    const notes = kind === "join" ? [660, 880, 990] : [740, 620];
+    notes.forEach((freq, index) => {
+      const at = t + index * 0.045;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const filt = ctx.createBiquadFilter();
+      o.type = "triangle";
+      o.frequency.setValueAtTime(freq, at);
+      o.frequency.exponentialRampToValueAtTime(freq * (kind === "join" ? 1.12 : 0.9), at + 0.038);
+      filt.type = "bandpass";
+      filt.frequency.setValueAtTime(freq * 1.2, at);
+      filt.Q.setValueAtTime(1.8, at);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(kind === "join" ? 0.028 : 0.018, at + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.075);
+      o.connect(filt);
+      filt.connect(g);
+      g.connect(ctx.destination);
+      o.start(at);
+      o.stop(at + 0.09);
+    });
+  }
+
   /**
    * Charge-jump release. chargeRatio in 0..1: 0 = quick tap (sharp short pop), 1 = full
    * hold (longer satisfying "thwip" with a higher pitch sweep). The two extremes feel

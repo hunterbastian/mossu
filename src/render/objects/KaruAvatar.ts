@@ -15,6 +15,7 @@ export interface AmbientBlobRig {
   group: Group;
   root: Group;
   body: Mesh;
+  glow: Mesh;
   face: Group;
   leftEye: Mesh;
   rightEye: Mesh;
@@ -197,6 +198,8 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
   const glow = new Mesh(new SphereGeometry(0.59 * scale, 16, 12), glowMaterial);
   glow.scale.set(1.22, 1.1, 1.2);
   glow.position.y = 0.62 * scale;
+  glow.userData.baseOpacity = karuArt.glow.opacity;
+  glow.userData.baseScale = { x: 1.22, y: 1.1, z: 1.2 };
   root.add(glow);
 
   const fluffPuffs: Mesh[] = [];
@@ -277,6 +280,7 @@ export function createKaruModelRig(scale = 1.22): AmbientBlobRig {
     group,
     root,
     body,
+    glow,
     face,
     leftEye,
     rightEye,

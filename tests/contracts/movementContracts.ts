@@ -15,21 +15,28 @@ import {
 import { createPlayerSimulationRuntime } from "../../src/simulation/playerSimulationRuntime";
 import {
   COYOTE_TIME,
+  AIR_SPEED,
   AIR_MOMENTUM_GRACE_TIME,
   JUMP_BUFFER_TIME,
   JUMP_RELEASE_CUT_MULTIPLIER,
   JUMP_VELOCITY,
   LANDING_MOMENTUM_GRACE_TIME,
+  FLOAT_EXIT_GRAVITY_GRACE_TIME,
+  FLOAT_EXIT_GRAVITY_SCALE,
   ROLL_AIR_SPEED_BONUS,
   ROLL_AIR_MOMENTUM_GRACE_TIME,
   ROLL_BOOST_DELAY,
   ROLL_BOOST_MULTIPLIER,
   ROLL_DRIFT_SPEED_RETENTION,
+  ROLL_EXIT_CARRY_TIME,
   ROLL_GRAVITY_FULL_SLOPE,
   ROLL_GRAVITY_MIN_SLOPE,
   ROLL_MODE_INDICATOR_DELAY,
   ROLL_SPEED,
   SURFACE_TRACTION,
+  SWIM_ENTRY_MOMENTUM_GRACE_TIME,
+  SWIM_ENTRY_SPEED_CARRY_BONUS,
+  SWIM_MIN_DEPTH,
   SWIM_UNDERWATER_SPEED,
   WALK_SPEED,
 } from "../../src/simulation/playerSimulationConstants";
@@ -190,6 +197,70 @@ export function runMovementContracts() {
   assert(
     planarSpeed(reversePlayer) > reverseSpeedBefore * 0.55,
     "reversing roll direction curves and sheds speed instead of stopping dead",
+  );
+
+  const rollReleasePlayer = makePlayer();
+  const rollReleaseRuntime = createPlayerSimulationRuntime();
+  const rollReleaseScratch = createMovementScratch();
+  for (let i = 0; i < 48; i += 1) {
+    const dt = 1 / 60;
+    const rollInput = { ...baseInput, moveY: 1, rollHeld: true };
+    tickMovementTimers(rollReleasePlayer, rollInput, dt, rollReleaseRuntime);
+    applyMovementPhysics(rollReleasePlayer, save, rollInput, 0, dt, rollReleaseRuntime, rollReleaseScratch);
+  }
+  const rollReleaseSpeedBefore = planarSpeed(rollReleasePlayer);
+  for (let i = 0; i < 10; i += 1) {
+    const dt = 1 / 60;
+    const walkInput = { ...baseInput, moveY: 1 };
+    tickMovementTimers(rollReleasePlayer, walkInput, dt, rollReleaseRuntime);
+    applyMovementPhysics(rollReleasePlayer, save, walkInput, 0, dt, rollReleaseRuntime, rollReleaseScratch);
+  }
+  assert(
+    rollReleaseRuntime.rollExitCarryRemaining > ROLL_EXIT_CARRY_TIME * 0.35,
+    "releasing roll keeps a short carry timer for the walk handoff",
+  );
+  assert(
+    planarSpeed(rollReleasePlayer) > WALK_SPEED + 3,
+    `roll release eases down into walk instead of snapping to walk cap: before=${rollReleaseSpeedBefore.toFixed(2)} after=${planarSpeed(rollReleasePlayer).toFixed(2)}`,
+  );
+
+  const airborneRollReleasePlayer = makePlayer();
+  const airborneRollReleaseRuntime = createPlayerSimulationRuntime();
+  const airborneRollReleaseScratch = createMovementScratch();
+  airborneRollReleasePlayer.grounded = false;
+  airborneRollReleasePlayer.velocity.set(42, 0, 0);
+  tickMovementTimers(
+    airborneRollReleasePlayer,
+    { ...baseInput, moveY: 1, rollHeld: true },
+    1 / 60,
+    airborneRollReleaseRuntime,
+  );
+  applyMovementPhysics(
+    airborneRollReleasePlayer,
+    save,
+    { ...baseInput, moveY: 1, rollHeld: true },
+    0,
+    1 / 60,
+    airborneRollReleaseRuntime,
+    airborneRollReleaseScratch,
+  );
+  for (let i = 0; i < 10; i += 1) {
+    const dt = 1 / 60;
+    const airborneReleaseInput = { ...baseInput, moveY: 1 };
+    tickMovementTimers(airborneRollReleasePlayer, airborneReleaseInput, dt, airborneRollReleaseRuntime);
+    applyMovementPhysics(
+      airborneRollReleasePlayer,
+      save,
+      airborneReleaseInput,
+      0,
+      dt,
+      airborneRollReleaseRuntime,
+      airborneRollReleaseScratch,
+    );
+  }
+  assert(
+    planarSpeed(airborneRollReleasePlayer) > AIR_SPEED + 4,
+    "airborne roll release keeps a brief carry instead of clamping straight to normal air speed",
   );
 
   const walkPlayer = makePlayer();
@@ -377,6 +448,55 @@ export function runMovementContracts() {
     `landing carry preserves forward momentum for the first grounded beat: before=${landingSpeedBeforeCarry.toFixed(2)} after=${planarSpeed(landingPlayer).toFixed(2)}`,
   );
 
+  const wadePlayer = makePlayer();
+  const wadeRuntime = createPlayerSimulationRuntime();
+  const wadeScratch = createMovementScratch();
+  wadePlayer.waterMode = "wading";
+  wadePlayer.waterDepth = SWIM_MIN_DEPTH;
+  tickMovementTimers(wadePlayer, { ...baseInput, moveY: 1 }, 1 / 60, wadeRuntime);
+  applyMovementPhysics(wadePlayer, save, { ...baseInput, moveY: 1 }, 0, 1 / 60, wadeRuntime, wadeScratch);
+  assert(wadeRuntime.wadeBlend > 0, "wade contact starts blending toward the shallow-water slowdown");
+  assert(
+    wadeRuntime.wadeBlend < 0.2,
+    "first wade frame only partially applies the water slowdown so walk-to-wade feels gradual",
+  );
+
+  const wadeRollReleasePlayer = makePlayer();
+  const wadeRollReleaseRuntime = createPlayerSimulationRuntime();
+  const wadeRollReleaseScratch = createMovementScratch();
+  for (let i = 0; i < 48; i += 1) {
+    const dt = 1 / 60;
+    const rollInput = { ...baseInput, moveY: 1, rollHeld: true };
+    tickMovementTimers(wadeRollReleasePlayer, rollInput, dt, wadeRollReleaseRuntime);
+    applyMovementPhysics(wadeRollReleasePlayer, save, rollInput, 0, dt, wadeRollReleaseRuntime, wadeRollReleaseScratch);
+  }
+  wadeRollReleasePlayer.waterMode = "wading";
+  wadeRollReleasePlayer.waterDepth = SWIM_MIN_DEPTH * 0.58;
+  const wadeRollSpeedBeforeRelease = planarSpeed(wadeRollReleasePlayer);
+  for (let i = 0; i < 10; i += 1) {
+    const dt = 1 / 60;
+    const walkInput = { ...baseInput, moveY: 1 };
+    tickMovementTimers(wadeRollReleasePlayer, walkInput, dt, wadeRollReleaseRuntime);
+    applyMovementPhysics(wadeRollReleasePlayer, save, walkInput, 0, dt, wadeRollReleaseRuntime, wadeRollReleaseScratch);
+  }
+  assert(
+    planarSpeed(wadeRollReleasePlayer) > WALK_SPEED + 4,
+    `roll release keeps a readable carry even when it blends into shallow wading: before=${wadeRollSpeedBeforeRelease.toFixed(2)} after=${planarSpeed(wadeRollReleasePlayer).toFixed(2)}`,
+  );
+
+  const floatExitPlayer = makePlayer();
+  const floatExitRuntime = createPlayerSimulationRuntime();
+  const floatExitScratch = createMovementScratch();
+  floatExitPlayer.grounded = false;
+  floatExitPlayer.velocity.y = 0;
+  floatExitRuntime.floatExitGravityGraceRemaining = FLOAT_EXIT_GRAVITY_GRACE_TIME;
+  tickMovementTimers(floatExitPlayer, baseInput, 1 / 60, floatExitRuntime);
+  applyMovementPhysics(floatExitPlayer, save, baseInput, 0, 1 / 60, floatExitRuntime, floatExitScratch);
+  assert(
+    floatExitPlayer.velocity.y > -38 * (1 / 60) * 0.82,
+    `float release applies softened gravity before full fall resumes; scale target ${FLOAT_EXIT_GRAVITY_SCALE}`,
+  );
+
   const releasedRollJumpPlayer = makePlayer();
   const releasedRollJumpRuntime = createPlayerSimulationRuntime();
   const releasedRollJumpScratch = createMovementScratch();
@@ -484,9 +604,18 @@ export function runMovementContracts() {
   const enteringSwimPlayer = makePlayer();
   const entryRuntime = createPlayerSimulationRuntime();
   enteringSwimPlayer.position.set(0, deepWater.surfaceY - deepWater.depth + 2.2, 0);
-  enteringSwimPlayer.velocity.set(0, -7.5, 0);
+  enteringSwimPlayer.velocity.set(SWIM_ENTRY_SPEED_CARRY_BONUS + SWIM_UNDERWATER_SPEED, -7.5, 0);
   resolveWaterContact(enteringSwimPlayer, deepWater.surfaceY - deepWater.depth, deepWater, true, 7.5, entryRuntime);
   assert(enteringSwimPlayer.swimming, "deep water contact starts swimming");
+  assert(
+    entryRuntime.swimEntryMomentumGraceRemaining === SWIM_ENTRY_MOMENTUM_GRACE_TIME,
+    "deep water entry starts a short swim momentum grace",
+  );
+  clampSwimVelocity(enteringSwimPlayer, false, false, 1 / 60, entryRuntime);
+  assert(
+    planarSpeed(enteringSwimPlayer) > SWIM_UNDERWATER_SPEED + 1.8,
+    "swim entry carries a little planar speed instead of instantly clamping to swim pace",
+  );
   assert(
     enteringSwimPlayer.position.y > deepWater.surfaceY - 1,
     "entering deep water lifts Mossu toward the swim surface",

@@ -15,7 +15,9 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm run qa
+      - run: git diff --check
 
   e2e:
     runs-on: ubuntu-latest

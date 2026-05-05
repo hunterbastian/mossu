@@ -33,15 +33,12 @@ export function updateStaminaAndAbilityState(
     player.stamina = Math.max(0, player.stamina - staminaDrainRate * dt);
     runtime.staminaRegenDelayRemaining = STAMINA_REGEN_DELAY;
   } else if (runtime.staminaRegenDelayRemaining <= 0 && player.stamina < player.staminaMax) {
-    const regenRate = player.swimming
-      ? STAMINA_REGEN_SWIM
-      : player.grounded
-        ? STAMINA_REGEN_GROUND
-        : STAMINA_REGEN_AIR;
+    const regenRate = player.swimming ? STAMINA_REGEN_SWIM : player.grounded ? STAMINA_REGEN_GROUND : STAMINA_REGEN_AIR;
     player.stamina = Math.min(player.staminaMax, player.stamina + regenRate * dt);
   }
 
-  player.staminaVisible = staminaDrainRate > 0
-    || runtime.staminaRegenDelayRemaining > 0
-    || player.stamina < player.staminaMax - STAMINA_VISIBLE_EPSILON;
+  player.staminaVisible =
+    staminaDrainRate > 0 ||
+    runtime.staminaRegenDelayRemaining > 0 ||
+    player.stamina < player.staminaMax - STAMINA_VISIBLE_EPSILON;
 }

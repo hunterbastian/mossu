@@ -1,0 +1,12 @@
+{
+  "ignorePaths": [
+    ".env*",
+    ".deepsec/**",
+    ".codex-tmp/**",
+    ".contract-test-build/**",
+    ".playwright-mcp/**",
+    "dist/**",
+    "node_modules/**",
+    "output/**"
+  ]
+}

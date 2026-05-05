@@ -69,9 +69,12 @@ export class MossuAvatar {
   private floatLandPulse = 0;
   private jumpPulse = 0;
   private landPulse = 0;
+  private brakePulse = 0;
+  private rollExitPulse = 0;
   private swimPulse = 0;
   private turnLean = 0;
   private accelerationLean = 0;
+  private faceYawLag = 0;
   private blinkClock = 1.4;
   private previousPlanarSpeed = 0;
   private previousGrounded = true;
@@ -255,6 +258,8 @@ export class MossuAvatar {
     this.floatLandPulse = Math.max(0, this.floatLandPulse - dt);
     this.jumpPulse = Math.max(0, this.jumpPulse - dt);
     this.landPulse = Math.max(0, this.landPulse - dt);
+    this.brakePulse = Math.max(0, this.brakePulse - dt);
+    this.rollExitPulse = Math.max(0, this.rollExitPulse - dt);
     this.swimPulse = Math.max(0, this.swimPulse - dt);
     this.group.position.copy(player.position);
 
@@ -267,6 +272,12 @@ export class MossuAvatar {
     const endedFloating = !floating && this.previousFloating;
     const jumped = !player.grounded && this.previousGrounded && player.velocity.y > 2;
     const landed = player.justLanded || (player.grounded && !this.previousGrounded);
+    const stoppedHard =
+      player.grounded &&
+      !player.swimming &&
+      this.previousPlanarSpeed > 8 &&
+      planarSpeed < Math.max(2.6, this.previousPlanarSpeed * 0.42);
+    const exitedRoll = !player.rolling && this.previousRolling && !floating && !player.swimming;
     const enteredWater = player.swimming && !this.previousSwimming;
 
     if (startedMoving) {
@@ -287,6 +298,12 @@ export class MossuAvatar {
     if (landed) {
       this.landPulse = Math.max(this.landPulse, 0.26 + MathUtils.clamp(player.landingImpact * 0.02, 0, 0.08));
     }
+    if (stoppedHard) {
+      this.brakePulse = Math.max(this.brakePulse, 0.26);
+    }
+    if (exitedRoll) {
+      this.rollExitPulse = Math.max(this.rollExitPulse, 0.32);
+    }
     if (enteredWater) {
       this.swimPulse = 0.24;
     }
@@ -297,6 +314,8 @@ export class MossuAvatar {
     const floatLandT = pulseCurve(this.floatLandPulse, 0.26, easeOutBack);
     const jumpT = pulseCurve(this.jumpPulse, 0.22, easeOutCubic);
     const landT = pulseCurve(this.landPulse, 0.34, easeOutElastic);
+    const brakeT = pulseCurve(this.brakePulse, 0.26, easeOutBack);
+    const rollExitT = pulseCurve(this.rollExitPulse, 0.32, easeOutElastic);
     const swimT = pulseCurve(this.swimPulse, 0.24, easeOutCubic);
     this.blinkClock += dt;
     const bobStrength = player.swimming ? 1.35 : floating ? 0.86 : player.grounded ? 1 : 0.35;
@@ -305,7 +324,13 @@ export class MossuAvatar {
     const floatT = this.floatBlend;
     const breezeHover = floatT * (0.28 + Math.sin(this.bob * 1.35) * 0.08) + floatStartT * 0.1 - floatLandT * 0.08;
     this.group.position.y +=
-      Math.sin(this.bob * 2.7) * 0.06 * bobStrength + jumpT * 0.12 - landT * 0.16 + swimT * 0.08 + breezeHover;
+      Math.sin(this.bob * 2.7) * 0.06 * bobStrength +
+      jumpT * 0.12 -
+      landT * 0.16 -
+      brakeT * 0.05 +
+      rollExitT * 0.08 +
+      swimT * 0.08 +
+      breezeHover;
     const rollVisualTarget = player.rolling && !floating ? 1 : 0;
     this.rollBlend = MathUtils.damp(this.rollBlend, rollVisualTarget, 9, dt);
     const rollVisualT = easeInOutSine(this.rollBlend);
@@ -321,6 +346,12 @@ export class MossuAvatar {
     const accelerationLeanTarget = MathUtils.clamp(speedDelta * 0.075, -0.18, 0.26);
     this.turnLean = MathUtils.damp(this.turnLean, turnLeanTarget, player.rolling ? 10.5 : 8.2, dt);
     this.accelerationLean = MathUtils.damp(this.accelerationLean, accelerationLeanTarget, 9.4, dt);
+    this.faceYawLag = MathUtils.damp(
+      this.faceYawLag,
+      MathUtils.clamp(-headingDelta * (player.rolling ? 0.32 : 0.22) - this.turnLean * 0.18, -0.28, 0.28),
+      player.rolling ? 5.8 : 7.8,
+      dt,
+    );
     this.locomotionRoot.rotation.y = MathUtils.lerp(
       this.locomotionRoot.rotation.y,
       desiredHeading,
@@ -335,13 +366,17 @@ export class MossuAvatar {
       -MathUtils.clamp(this.secondaryVelocity.x * 0.018, -0.18, 0.18) + rollT * 0.04 - this.turnLean * 0.14,
       jumpT * 0.1 -
         landT * 0.16 +
+        brakeT * 0.06 +
         callT * 0.06 +
         swimT * 0.08 +
         floatT * 0.1 +
+        rollExitT * 0.04 +
         floatStartT * 0.04 +
         Math.max(0, this.accelerationLean) * 0.08,
       -MathUtils.clamp(this.secondaryVelocity.z * 0.018, -0.2, 0.2) -
         rollT * 0.08 -
+        brakeT * 0.08 +
+        rollExitT * 0.05 -
         floatT * 0.1 -
         this.accelerationLean * 0.18,
     );
@@ -353,9 +388,25 @@ export class MossuAvatar {
           ? 1 - Math.min(0.12, planarSpeed * 0.0022)
           : 1 + MathUtils.clamp(player.velocity.y * 0.012, -0.08, 0.16);
     const responsiveWide =
-      moveT * 0.035 + rollT * 0.08 + landT * 0.15 + swimT * 0.08 - jumpT * 0.045 + floatT * 0.07 + floatLandT * 0.09;
+      moveT * 0.035 +
+      rollT * 0.08 +
+      landT * 0.15 +
+      brakeT * 0.09 +
+      rollExitT * 0.06 +
+      swimT * 0.08 -
+      jumpT * 0.045 +
+      floatT * 0.07 +
+      floatLandT * 0.09;
     const responsiveTall =
-      jumpT * 0.11 - landT * 0.18 - rollT * 0.07 - swimT * 0.1 + floatT * 0.03 + floatStartT * 0.08 - floatLandT * 0.12;
+      jumpT * 0.11 -
+      landT * 0.18 -
+      brakeT * 0.12 -
+      rollT * 0.07 +
+      rollExitT * 0.05 -
+      swimT * 0.1 +
+      floatT * 0.03 +
+      floatStartT * 0.08 -
+      floatLandT * 0.12;
     this.locomotionRoot.scale.set(
       MathUtils.lerp(
         this.locomotionRoot.scale.x,
@@ -389,7 +440,11 @@ export class MossuAvatar {
 
     this.locomotionRoot.rotation.z = MathUtils.lerp(
       this.locomotionRoot.rotation.z,
-      -MathUtils.clamp(player.velocity.x * 0.018, -0.24, 0.24) - rollT * 0.06 - this.turnLean * 0.34,
+      -MathUtils.clamp(player.velocity.x * 0.018, -0.24, 0.24) -
+        rollT * 0.06 -
+        this.turnLean * 0.34 +
+        brakeT * Math.sign(this.turnLean || headingDelta || 1) * 0.045 -
+        rollExitT * this.turnLean * 0.16,
       1 - Math.exp(-dt * 7),
     );
     this.locomotionRoot.rotation.x = MathUtils.lerp(
@@ -397,6 +452,8 @@ export class MossuAvatar {
       MathUtils.clamp(planarSpeed * 0.014, -0.12, 0.22) +
         moveT * 0.04 +
         rollT * 0.08 -
+        brakeT * 0.11 +
+        rollExitT * 0.06 -
         floatT * 0.14 +
         this.accelerationLean * 0.18 +
         (player.grounded ? -landT * 0.05 : MathUtils.clamp(player.velocity.y * -0.012, -0.22, 0.22)),
@@ -404,20 +461,27 @@ export class MossuAvatar {
     );
 
     this.faceAnchor.position.y =
-      0.04 + Math.sin(this.bob * 2.1) * 0.028 + callT * 0.06 + jumpT * 0.04 - landT * 0.05 + floatT * 0.04;
+      0.04 +
+      Math.sin(this.bob * 2.1) * 0.028 +
+      callT * 0.06 +
+      jumpT * 0.04 -
+      landT * 0.05 -
+      brakeT * 0.035 +
+      rollExitT * 0.035 +
+      floatT * 0.04;
     this.faceAnchor.scale.set(
-      1 + callT * 0.035 + landT * 0.04 + floatT * 0.035,
-      1 - callT * 0.05 - landT * 0.08 + jumpT * 0.04 + floatT * 0.025,
+      1 + callT * 0.035 + landT * 0.04 + brakeT * 0.06 + rollExitT * 0.035 + floatT * 0.035,
+      1 - callT * 0.05 - landT * 0.08 - brakeT * 0.08 + rollExitT * 0.025 + jumpT * 0.04 + floatT * 0.025,
       1 + callT * 0.04,
     );
     this.faceAnchor.rotation.z = MathUtils.lerp(
       this.faceAnchor.rotation.z,
-      -this.turnLean * 0.2 + callT * 0.035,
+      -this.turnLean * 0.2 + this.faceYawLag * 0.22 + callT * 0.035,
       1 - Math.exp(-dt * 10),
     );
     this.faceAnchor.rotation.x = MathUtils.lerp(
       this.faceAnchor.rotation.x,
-      -this.accelerationLean * 0.12 + floatT * 0.05 - landT * 0.045,
+      -this.accelerationLean * 0.12 + floatT * 0.05 - landT * 0.045 - brakeT * 0.035 + rollExitT * 0.025,
       1 - Math.exp(-dt * 9),
     );
     this.rollingRoot.position.y = MathUtils.lerp(0.18, 0, rollVisualT);
@@ -437,6 +501,8 @@ export class MossuAvatar {
         Math.sin(this.bob * 2.1 + index * 0.9) * 0.025 +
         (index === 4 ? jumpT * 0.06 : 0) +
         breezeSpread * 0.16 +
+        rollExitT * 0.04 -
+        brakeT * 0.035 +
         floatStartT * 0.035 -
         floatLandT * 0.045;
       this.secondaryOffset.z +=
@@ -454,7 +520,14 @@ export class MossuAvatar {
       puff.position.y += velocity.y;
       puff.position.z += velocity.z;
       const pulseOffset =
-        moveT * 0.02 + rollT * 0.04 + landT * 0.06 + swimT * 0.035 + floatT * 0.035 + floatStartT * 0.035;
+        moveT * 0.02 +
+        rollT * 0.04 +
+        landT * 0.06 +
+        brakeT * 0.045 +
+        rollExitT * 0.035 +
+        swimT * 0.035 +
+        floatT * 0.035 +
+        floatStartT * 0.035;
       const flutter = Math.sin(this.bob * 2 + index * 0.7) * 0.035 + pulseOffset;
       puff.scale.set(
         baseScale + flutter + Math.abs(this.secondaryOffset.x) * 0.08 + breezeSpread * 0.035,
@@ -472,6 +545,8 @@ export class MossuAvatar {
       this.secondaryOffset.y +=
         jumpT * 0.08 -
         landT * 0.09 +
+        rollExitT * 0.055 -
+        brakeT * 0.045 +
         Math.sin(this.bob * 1.9 + index) * 0.024 +
         floatT * (0.18 + index * 0.025) +
         floatStartT * 0.05 -
@@ -492,6 +567,8 @@ export class MossuAvatar {
         callT * (0.2 + index * 0.03) -
         jumpT * 0.12 +
         landT * 0.15 -
+        brakeT * 0.12 +
+        rollExitT * 0.08 -
         this.secondaryOffset.z * 0.28 -
         floatT * 0.18;
       tuft.rotation.z =
@@ -514,24 +591,29 @@ export class MossuAvatar {
 
     const blinkCycle = this.blinkClock % 3.7;
     const blinkT = blinkCycle < 0.16 ? Math.sin((blinkCycle / 0.16) * Math.PI) : 0;
-    const eyeSquint = Math.max(blinkT, landT * 0.64 + rollT * 0.16 - floatT * 0.08);
-    const eyeAlert = jumpT * 0.09 + callT * 0.08 + floatT * 0.12 + floatStartT * 0.06;
+    const eyeSquint = Math.max(blinkT, landT * 0.64 + brakeT * 0.42 + rollT * 0.16 - rollExitT * 0.08 - floatT * 0.08);
+    const eyeAlert = jumpT * 0.09 + rollExitT * 0.07 + callT * 0.08 + floatT * 0.12 + floatStartT * 0.06;
     this.eyeMeshes.forEach((eye, index) => {
+      const baseX = index === 0 ? -0.58 : 0.58;
       eye.scale.y = Math.max(0.16, 1.34 - eyeSquint * 1.05 + eyeAlert);
-      eye.scale.x = 0.82 + landT * 0.12 + callT * 0.04;
+      eye.scale.x = 0.82 + landT * 0.12 + brakeT * 0.07 + callT * 0.04;
+      eye.position.x = baseX + this.faceYawLag * 0.16 - this.turnLean * 0.035;
       eye.position.y = 0.32 + eyeAlert * 0.08 - landT * 0.025;
-      eye.rotation.z = (index === 0 ? -1 : 1) * (callT * 0.035 + moveT * 0.018) - this.turnLean * 0.11;
+      eye.rotation.z =
+        (index === 0 ? -1 : 1) * (callT * 0.035 + moveT * 0.018 + rollExitT * 0.025) -
+        this.turnLean * 0.11 +
+        this.faceYawLag * 0.09;
     });
     this.catchlightMeshes.forEach((catchlight, index) => {
       const visibleT = 1 - MathUtils.clamp(eyeSquint * 1.25, 0, 1);
       catchlight.visible = visibleT > 0.08;
       catchlight.scale.set(0.82 * visibleT, 1.22 * visibleT, 0.42);
-      catchlight.position.x = (index === 0 ? -0.65 : 0.5) + this.turnLean * 0.018;
+      catchlight.position.x = (index === 0 ? -0.65 : 0.5) + this.turnLean * 0.018 + this.faceYawLag * 0.11;
       catchlight.position.y = 0.48 + eyeAlert * 0.06 - landT * 0.018;
     });
     this.cheekMeshes.forEach((cheek) => {
-      cheek.scale.x = 1.8 + callT * 0.12 + landT * 0.18 + moveT * 0.06;
-      cheek.scale.y = 1 - landT * 0.08;
+      cheek.scale.x = 1.8 + callT * 0.12 + landT * 0.18 + brakeT * 0.12 + moveT * 0.06;
+      cheek.scale.y = 1 - landT * 0.08 - brakeT * 0.06 + rollExitT * 0.035;
     });
 
     this.legs.forEach((leg, index) => {
@@ -542,10 +624,14 @@ export class MossuAvatar {
       const stepSwing = Math.sin(phase) * (0.15 + stepPersonality * 0.055) * (1 - legTuck);
       const baseY = -1.88;
       const baseZ = 0.64;
-      leg.position.y = baseY + stepLift - landT * 0.1 + moveT * 0.05 + floatT * 0.68;
-      leg.position.z = baseZ + stepSwing + moveT * 0.08 - floatT * 0.28;
-      leg.rotation.x = stepSwing * 1.25 + moveT * 0.2 - floatT * 0.9;
-      leg.scale.set(1.16 * (1 - floatT * 0.16), 1.1 * (1 - floatT * 0.34), 1.02 * (1 + floatT * 0.08));
+      leg.position.y = baseY + stepLift - landT * 0.1 - brakeT * 0.08 + rollExitT * 0.05 + moveT * 0.05 + floatT * 0.68;
+      leg.position.z = baseZ + stepSwing + moveT * 0.08 + brakeT * 0.1 - rollExitT * 0.04 - floatT * 0.28;
+      leg.rotation.x = stepSwing * 1.25 + moveT * 0.2 + brakeT * 0.2 - rollExitT * 0.16 - floatT * 0.9;
+      leg.scale.set(
+        1.16 * (1 - floatT * 0.16 + brakeT * 0.03),
+        1.1 * (1 - floatT * 0.34 - brakeT * 0.08 + rollExitT * 0.03),
+        1.02 * (1 + floatT * 0.08 + brakeT * 0.05),
+      );
       leg.visible = legTuck < 0.98 && !player.swimming;
     });
 

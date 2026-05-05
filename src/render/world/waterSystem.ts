@@ -323,12 +323,12 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     sedimentColor: "#94ba78",
     bedColor: "#4f8d70",
     causticColor: "#fff0b8",
-    shorelineFoamStrength: 0.42,
-    shorelineMilkStrength: 0.28,
+    shorelineFoamStrength: 0.48,
+    shorelineMilkStrength: 0.34,
     slopeFoamStrength: 0.12,
     highlightStrength: 0.2,
-    clarity: 0.76,
-    rippleContrast: 0.56,
+    clarity: 0.8,
+    rippleContrast: 0.6,
     depthShadowStrength: 0.045,
     causticStrength: 0.12,
     sparkleStrength: 0.095,
@@ -356,12 +356,12 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     sedimentColor: "#9fba83",
     bedColor: "#577f69",
     causticColor: "#fff0b9",
-    shorelineFoamStrength: 0.36,
-    shorelineMilkStrength: 0.25,
+    shorelineFoamStrength: 0.42,
+    shorelineMilkStrength: 0.3,
     slopeFoamStrength: 0.11,
     highlightStrength: 0.16,
-    clarity: 0.82,
-    rippleContrast: 0.46,
+    clarity: 0.84,
+    rippleContrast: 0.5,
     depthShadowStrength: 0.04,
     causticStrength: 0.13,
     sparkleStrength: 0.082,
@@ -389,8 +389,8 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     sedimentColor: "#cbd9a3",
     bedColor: "#86a27f",
     causticColor: "#fff1c7",
-    shorelineFoamStrength: 0.42,
-    shorelineMilkStrength: 0.21,
+    shorelineFoamStrength: 0.46,
+    shorelineMilkStrength: 0.25,
     slopeFoamStrength: 0.4,
     highlightStrength: 0.18,
     clarity: 0.78,
@@ -422,8 +422,8 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     sedimentColor: "#c8ddd0",
     bedColor: "#749389",
     causticColor: "#fff3d0",
-    shorelineFoamStrength: 0.42,
-    shorelineMilkStrength: 0.18,
+    shorelineFoamStrength: 0.46,
+    shorelineMilkStrength: 0.21,
     slopeFoamStrength: 0.58,
     highlightStrength: 0.2,
     clarity: 0.76,
@@ -455,8 +455,8 @@ const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     sedimentColor: "#d7ded3",
     bedColor: "#879089",
     causticColor: "#f7f5e5",
-    shorelineFoamStrength: 0.55,
-    shorelineMilkStrength: 0.24,
+    shorelineFoamStrength: 0.6,
+    shorelineMilkStrength: 0.28,
     slopeFoamStrength: 0.72,
     highlightStrength: 0.16,
     clarity: 0.74,
@@ -1428,6 +1428,29 @@ function createWebGLWaterController(
         float softMilkEdge = smoothstep(0.42, 0.84, bankMask) * (1.0 - smoothstep(0.88, 1.0, bankMask)) * shallowMask;
         float shallowShelfLine = smoothstep(0.2, 0.34, channelDepth) * (1.0 - smoothstep(0.42, 0.58, channelDepth));
         float deepCoreLine = smoothstep(0.64, 0.78, channelDepth) * (1.0 - smoothstep(0.86, 0.96, channelDepth));
+        vec2 shoreTextureUv = vec2(
+          vWaterFlowT * 0.12 + flowCurl * 0.08,
+          bankMask * 0.72 + flowUv.y * 0.055 - uTime * 0.012 * uFlowDirection
+        );
+        float shorePaintGrain = texture2D(uWaterFoamTexture, shoreTextureUv + vec2(0.0, generatedFoamGrain * 0.05)).r;
+        float shoreStrokeWave = sin(
+          vWaterFlowT * 18.0
+          + bankMask * 20.0
+          + flowWarp * 4.0
+          - uTime * uFlowSpeed * 1.12 * uFlowDirection
+        ) * 0.5 + 0.5;
+        float handShoreStroke = smoothstep(0.48, 0.88, shorePaintGrain * 0.54 + shoreStrokeWave * 0.36 + eddyNoise * 0.1)
+          * (graphicShoreLine * 0.84 + shorelineLine * 0.32)
+          * (0.62 + shallowMask * 0.38);
+        float shoreMilkBloom = softMilkEdge * smoothstep(0.28, 0.86, shorePaintGrain + shallowMask * 0.32)
+          * (0.72 + currentBands * 0.28);
+        float shallowPaintBand = shallowShelfLine * smoothstep(0.2, 0.82, shorePaintGrain * 0.48 + slowGlassBand * 0.34 + broadFlow * 0.18);
+        float midDepthBand = smoothstep(0.38, 0.5, channelDepth) * (1.0 - smoothstep(0.56, 0.7, channelDepth));
+        float paintedDepthContour = (
+          shallowPaintBand * 0.82
+          + midDepthBand * smoothstep(0.56, 0.96, currentBands + shorePaintGrain * 0.18) * 0.32
+          + deepCoreLine * smoothstep(0.48, 0.92, flowWarp + eddyNoise * 0.2) * 0.58
+        ) * (1.0 - bankMask * 0.28);
         float directionalRipple = smoothstep(
           0.5,
           1.0,
@@ -1440,13 +1463,17 @@ function createWebGLWaterController(
         waterTint = mix(waterTint, uWaterShallow * vec3(1.02, 1.04, 1.0), shallowMask * (0.06 + uClarity * 0.1));
         waterTint = mix(waterTint, mix(uWaterShallow, uWaterFoam, 0.16), slopeBoost * 0.1);
         waterTint = mix(waterTint, uWaterShallow * vec3(1.04, 1.02, 0.96), shallowShelfLine * 0.14);
+        waterTint = mix(waterTint, uWaterShallow * vec3(1.08, 1.05, 0.92), shallowPaintBand * 0.1);
+        waterTint = mix(waterTint, mix(uWaterShallow, uWaterDeep, 0.5), midDepthBand * 0.06);
         waterTint = mix(waterTint, uWaterDeep * vec3(0.82, 0.94, 1.02), deepCoreLine * 0.22);
         float shorelineMilkMask = (
           bankFeather * shallowMask * (1.0 - slopeBoost * 0.48) * (0.26 + eddyNoise * 0.1) +
           shorelineLine * (0.18 + directionalRipple * 0.11) +
-          softMilkEdge * (0.22 + generatedFoamGrain * 0.09)
+          softMilkEdge * (0.22 + generatedFoamGrain * 0.09) +
+          shoreMilkBloom * (0.18 + uShorelineMilkStrength * 0.32) +
+          handShoreStroke * (0.1 + shorePaintGrain * 0.08)
         ) * uShorelineMilkStrength;
-        shorelineMilkMask = min(shorelineMilkMask, 0.16);
+        shorelineMilkMask = min(shorelineMilkMask, 0.27);
         waterTint = mix(waterTint, uShorelineMilkColor, shorelineMilkMask);
         vec3 bedTint = mix(uWaterShallow, uWaterDeep, painterDepth * 0.42 + bedNoise * 0.07 + pebbleNoise * 0.03);
         bedTint = mix(bedTint, uBedColor, (1.0 - channelDepth) * 0.55);
@@ -1461,9 +1488,12 @@ function createWebGLWaterController(
         float slopeFoam = slopeBoost * smoothstep(0.5, 1.0, detailFlow * 0.54 + broadFlow * 0.24 + sparkleNoise * 0.22);
         float currentFoam = slopeBoost * smoothstep(0.68, 0.98, currentBands * (0.48 + uRippleContrast * 0.14) + directionalRipple * 0.28 + sparkleNoise * 0.28 + bendEddy * 0.2) * 0.46;
         float outletFoam = smoothstep(0.72, 1.0, slopeBoost + bankMask * 0.35) * smoothstep(0.42, 0.92, sideShimmer);
+        float milkFoamStroke = handShoreStroke * smoothstep(0.38, 0.88, shorePaintGrain + shoreStrokeWave * 0.22)
+          * (0.26 + uShorelineFoamStrength * 0.24);
         float foamMask = clamp(
           shorelineFoam * uShorelineFoamStrength
           + graphicShoreLine * (0.18 + uShorelineMilkStrength * 0.24)
+          + milkFoamStroke
           + slopeFoam * uSlopeFoamStrength
           + currentFoam
           + generatedFoamGrain * graphicShoreLine * 0.08
@@ -1475,7 +1505,7 @@ function createWebGLWaterController(
           + actorRipple * 0.32
           + outletFoam * 0.24,
           0.0,
-          0.54
+          0.66
         );
         vec3 viewDir = normalize(vWaterViewDirection);
         float ndotV = clamp(abs(viewDir.y), 0.035, 1.0);
@@ -1508,11 +1538,17 @@ function createWebGLWaterController(
         float glassCurrentLine = smoothstep(0.7, 0.96, slowGlassBand * 0.52 + detailFlow * 0.24 + sparkleNoise * 0.18) * (0.18 + shallowMask * 0.34) * (1.0 - bankMask * 0.42);
         finalWater = mix(finalWater, uHighlightColor, paintedCurrentLine * 0.08 + glassCurrentLine * uHighlightStrength * 0.05);
         finalWater = mix(finalWater, uWaterFoam, longFlowThread * (0.05 + slopeBoost * 0.1) + handFoamStroke * 0.18);
+        finalWater = mix(finalWater, uWaterFoam, milkFoamStroke * 0.26 + handShoreStroke * 0.13);
         finalWater = mix(finalWater, uWaterFoam, foamMask * (0.18 + shorelineLine * 0.28 + slopeBoost * 0.2));
-        finalWater = mix(finalWater, uShorelineMilkColor, shorelineMilkMask * 0.18 + graphicShoreLine * 0.1 + softMilkEdge * 0.04);
-        finalWater = mix(finalWater, uHighlightColor, shallowShelfLine * 0.08);
+        finalWater = mix(finalWater, uShorelineMilkColor, shorelineMilkMask * 0.2 + graphicShoreLine * 0.1 + softMilkEdge * 0.04 + shoreMilkBloom * 0.07);
+        finalWater = mix(finalWater, uHighlightColor, shallowShelfLine * 0.08 + shallowPaintBand * 0.045);
         vec3 contourInk = mix(uSedimentColor * vec3(0.64, 0.78, 0.66), uWaterDeep * vec3(0.72, 0.9, 1.0), channelDepth);
-        finalWater = mix(finalWater, contourInk, (graphicShoreLine * 0.045 + shallowShelfLine * 0.025 + deepCoreLine * 0.04) * (1.0 - uMapLookdown * 0.5));
+        finalWater = mix(
+          finalWater,
+          contourInk,
+          (graphicShoreLine * 0.045 + shallowShelfLine * 0.025 + deepCoreLine * 0.04 + paintedDepthContour * 0.036)
+            * (1.0 - uMapLookdown * 0.5)
+        );
         finalWater = mix(finalWater, reflectionTint, highlightMask * (0.08 + shallowMask * 0.04 + channelDepth * 0.04));
         finalWater = mix(finalWater, uHighlightColor, glassRibbon * uHighlightStrength * 0.06);
         finalWater = mix(finalWater, uWaterFoam, actorRipple * 0.22);

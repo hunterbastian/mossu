@@ -476,7 +476,9 @@ export function syncAtmosphereLighting(
     );
     cloudMat.color.copy(_cloudBrightScratch).lerp(sun.color, 0.08 + (1 - mood) * 0.04);
     cloudMat.opacity =
-      MathUtils.lerp(0.22, 0.18, mood) + (worldMood?.watercolorFog ?? 0) * 0.018 - (worldMood?.landmarkGlow ?? 0) * 0.008;
+      MathUtils.lerp(0.22, 0.18, mood) +
+      (worldMood?.watercolorFog ?? 0) * 0.018 -
+      (worldMood?.landmarkGlow ?? 0) * 0.008;
   } else if (cloudMat?.uniforms?.uSunDirView) {
     _sunDirViewScratch.copy(_sunDirScratch).transformDirection(camera.matrixWorldInverse);
     cloudMat.uniforms.uSunDirView.value.copy(_sunDirViewScratch);

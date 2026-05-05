@@ -7,6 +7,7 @@ import {
   DoubleSide,
   Float32BufferAttribute,
   Group,
+  InstancedMesh,
   MathUtils,
   Mesh,
   MeshBasicMaterial,
@@ -15,17 +16,22 @@ import {
   Points,
   PointsMaterial,
   SphereGeometry,
+  Vector3,
 } from "three";
 import { isInsideIslandPlayableBounds, sampleTerrainHeight, sampleTerrainNormal } from "../../simulation/world";
 import { OOT_PS2_GRASSLANDS_PALETTE } from "../visualPalette";
 
 const immersionArt = OOT_PS2_GRASSLANDS_PALETTE.scene;
+export const GRASSLAND_LIFE_SIGNAL_COUNT = 96;
+export const DISTANT_BIRD_COUNT = 12;
 
 export interface GrasslandImmersionSystem {
   group: Group;
   staticLayer: Group;
   dynamicLayer: Group;
   pollen: Points;
+  lifeSignals: Points;
+  distantBirds: InstancedMesh;
   cloudShadows: Mesh[];
 }
 
@@ -33,6 +39,22 @@ interface PollenData {
   base: Float32Array;
   phase: Float32Array;
 }
+
+interface LifeSignalData {
+  base: Float32Array;
+  phase: Float32Array;
+  kind: Float32Array;
+}
+
+interface DistantBirdData {
+  base: Float32Array;
+  phase: Float32Array;
+  radius: Float32Array;
+  speed: Float32Array;
+  scale: Float32Array;
+}
+
+const distantBirdUpdateRig = new Object3D();
 
 function seededUnit(seed: number) {
   return MathUtils.euclideanModulo(Math.sin(seed * 127.1 + 37.7) * 43758.5453123, 1);
@@ -226,6 +248,142 @@ function buildPollenMotes() {
   return pollen;
 }
 
+function buildLifeSignals() {
+  const count = GRASSLAND_LIFE_SIGNAL_COUNT;
+  const positions = new Float32Array(count * 3);
+  const base = new Float32Array(count * 3);
+  const phase = new Float32Array(count);
+  const kind = new Float32Array(count);
+  const colors = new Float32Array(count * 3);
+  const color = new Color();
+  const warmWing = new Color("#fff0ac");
+  const coolWing = new Color("#cceeff");
+  const waterGlint = new Color("#bdfaff");
+  const shrineGlow = new Color("#e8ddff");
+  const anchors = [
+    [-92, -136, 0],
+    [-62, -128, 0],
+    [-34, -112, 1],
+    [8, 22, 1],
+    [28, 88, 0],
+    [42, 134, 1],
+    [16, 186, 2],
+    [2, 214, 2],
+  ] as const;
+
+  for (let i = 0; i < count; i += 1) {
+    const anchor = anchors[i % anchors.length];
+    const spreadX = anchor[2] === 1 ? 22 : anchor[2] === 2 ? 18 : 26;
+    const spreadZ = anchor[2] === 1 ? 14 : anchor[2] === 2 ? 12 : 18;
+    const x = anchor[0] + (seededUnit(i * 4.3 + 8) - 0.5) * spreadX + Math.sin(i * 1.71) * 2.6;
+    const z = anchor[1] + (seededUnit(i * 3.7 + 3) - 0.5) * spreadZ + Math.cos(i * 1.33) * 2.2;
+    const signalKind = anchor[2];
+    const y =
+      sampleTerrainHeight(x, z) +
+      (signalKind === 1 ? 0.48 + seededUnit(i * 2.2 + 5) * 0.22 : 1.05 + seededUnit(i * 2.2 + 5) * 1.6);
+    const p = i * 3;
+    base[p] = x;
+    base[p + 1] = y;
+    base[p + 2] = z;
+    positions[p] = x;
+    positions[p + 1] = y;
+    positions[p + 2] = z;
+    phase[i] = seededUnit(i * 6.9 + 4) * Math.PI * 2;
+    kind[i] = signalKind;
+
+    if (signalKind === 1) {
+      color.copy(waterGlint).lerp(warmWing, seededUnit(i * 1.8 + 11) * 0.18);
+    } else if (signalKind === 2) {
+      color.copy(shrineGlow).lerp(warmWing, seededUnit(i * 2.4 + 9) * 0.28);
+    } else {
+      color.copy(warmWing).lerp(coolWing, seededUnit(i * 2.9 + 7) * 0.34);
+    }
+    colors[p] = color.r;
+    colors[p + 1] = color.g;
+    colors[p + 2] = color.b;
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+
+  const material = new PointsMaterial({
+    size: 0.42,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.38,
+    depthWrite: false,
+    sizeAttenuation: true,
+  });
+
+  const signals = new Points(geometry, material);
+  signals.name = "grassland-living-habitat-signals";
+  signals.userData.lifeSignalData = { base, phase, kind } satisfies LifeSignalData;
+  return signals;
+}
+
+function buildDistantBirdGeometry() {
+  const geometry = new BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new Float32BufferAttribute(
+      [0, 0.05, 0, -1.22, 0.22, 0, -0.24, -0.1, 0, 0, 0.05, 0, 1.22, 0.22, 0, 0.24, -0.1, 0],
+      3,
+    ),
+  );
+  return geometry;
+}
+
+function buildDistantBirds() {
+  const count = DISTANT_BIRD_COUNT;
+  const geometry = buildDistantBirdGeometry();
+  const material = new MeshBasicMaterial({
+    color: "#52674f",
+    transparent: true,
+    opacity: 0.34,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const birds = new InstancedMesh(geometry, material, count);
+  birds.name = "grassland-distant-birds";
+  birds.frustumCulled = false;
+  birds.renderOrder = 3;
+
+  const base = new Float32Array(count * 3);
+  const phase = new Float32Array(count);
+  const radius = new Float32Array(count);
+  const speed = new Float32Array(count);
+  const scale = new Float32Array(count);
+  const flockAnchors = [
+    [-136, -184, 54],
+    [118, -118, 66],
+    [-98, 28, 72],
+    [112, 134, 86],
+  ] as const;
+  const rig = new Object3D();
+
+  for (let i = 0; i < count; i += 1) {
+    const anchor = flockAnchors[i % flockAnchors.length];
+    const p = i * 3;
+    base[p] = anchor[0] + (seededUnit(i * 4.7 + 2) - 0.5) * 24;
+    base[p + 1] = anchor[2] + seededUnit(i * 5.1 + 9) * 14;
+    base[p + 2] = anchor[1] + (seededUnit(i * 3.8 + 5) - 0.5) * 22;
+    phase[i] = seededUnit(i * 2.9 + 7) * Math.PI * 2;
+    radius[i] = 18 + seededUnit(i * 6.4 + 3) * 28;
+    speed[i] = 0.026 + seededUnit(i * 3.1 + 11) * 0.028;
+    scale[i] = 0.72 + seededUnit(i * 8.2 + 4) * 0.48;
+
+    rig.position.set(base[p], base[p + 1], base[p + 2]);
+    rig.rotation.set(-0.18, phase[i], Math.sin(phase[i]) * 0.08);
+    rig.scale.setScalar(scale[i]);
+    rig.updateMatrix();
+    birds.setMatrixAt(i, rig.matrix);
+  }
+  birds.instanceMatrix.needsUpdate = true;
+  birds.userData.distantBirdData = { base, phase, radius, speed, scale } satisfies DistantBirdData;
+  return birds;
+}
+
 export function buildGrasslandImmersionSystem(): GrasslandImmersionSystem {
   const group = new Group();
   group.name = "grassland-immersion";
@@ -235,18 +393,22 @@ export function buildGrasslandImmersionSystem(): GrasslandImmersionSystem {
   dynamicLayer.name = "grassland-immersion-dynamic";
   const cloudShadows = buildCloudShadowPatches();
   const pollen = buildPollenMotes();
+  const lifeSignals = buildLifeSignals();
+  const distantBirds = buildDistantBirds();
 
   staticLayer.add(buildDistantTreeBelts());
-  dynamicLayer.add(...cloudShadows, pollen);
+  dynamicLayer.add(...cloudShadows, pollen, lifeSignals, distantBirds);
   group.add(staticLayer, dynamicLayer);
 
-  return { group, staticLayer, dynamicLayer, pollen, cloudShadows };
+  return { group, staticLayer, dynamicLayer, pollen, lifeSignals, distantBirds, cloudShadows };
 }
 
 export function updateGrasslandImmersionSystem(
   system: GrasslandImmersionSystem,
   elapsed: number,
   mapLookdown: boolean,
+  playerPosition?: Vector3,
+  lifeWake = 0,
 ) {
   system.group.visible = !mapLookdown;
   if (mapLookdown) {
@@ -271,6 +433,70 @@ export function updateGrasslandImmersionSystem(
 
   const pollenMaterial = system.pollen.material as PointsMaterial;
   pollenMaterial.opacity = 0.34 + Math.sin(elapsed * 0.13) * 0.04;
+
+  const lifeData = system.lifeSignals.userData.lifeSignalData as LifeSignalData | undefined;
+  const lifePositionAttr = system.lifeSignals.geometry.getAttribute("position") as Float32BufferAttribute;
+  if (lifeData) {
+    for (let i = 0; i < lifeData.phase.length; i += 1) {
+      const p = i * 3;
+      const phase = lifeData.phase[i];
+      const signalKind = lifeData.kind[i];
+      const hoverSpeed = signalKind === 1 ? 0.48 : signalKind === 2 ? 0.28 : 0.58;
+      const flutter = signalKind === 1 ? 0.18 : signalKind === 2 ? 0.45 : 0.72;
+      let x =
+        lifeData.base[p] +
+        Math.sin(elapsed * hoverSpeed + phase) * (signalKind === 1 ? 0.36 : 1.15) +
+        Math.sin(elapsed * 1.8 + phase * 1.3) * flutter * 0.18;
+      let y =
+        lifeData.base[p + 1] +
+        Math.sin(elapsed * (signalKind === 1 ? 1.4 : 1.05) + phase * 0.8) * (signalKind === 1 ? 0.06 : 0.32);
+      let z = lifeData.base[p + 2] + Math.cos(elapsed * (hoverSpeed * 0.76) + phase) * (signalKind === 1 ? 0.26 : 0.82);
+
+      if (playerPosition) {
+        const dx = lifeData.base[p] - playerPosition.x;
+        const dz = lifeData.base[p + 2] - playerPosition.z;
+        const distance = Math.hypot(dx, dz);
+        const proximity = 1 - MathUtils.smoothstep(distance, 8, 28);
+        if (proximity > 0.001 && distance > 0.001) {
+          const wake = proximity * (0.55 + lifeWake * 0.55);
+          x += (dx / distance) * wake * (signalKind === 1 ? 0.18 : 1.6);
+          z += (dz / distance) * wake * (signalKind === 1 ? 0.12 : 1.1);
+          y += wake * (signalKind === 1 ? 0.08 : 0.72);
+        }
+      }
+
+      lifePositionAttr.setXYZ(i, x, y, z);
+    }
+    lifePositionAttr.needsUpdate = true;
+  }
+
+  const lifeMaterial = system.lifeSignals.material as PointsMaterial;
+  lifeMaterial.opacity = MathUtils.clamp(0.3 + Math.sin(elapsed * 0.2) * 0.04 + lifeWake * 0.08, 0.22, 0.48);
+
+  const birdData = system.distantBirds.userData.distantBirdData as DistantBirdData | undefined;
+  if (birdData) {
+    const rig = distantBirdUpdateRig;
+    for (let i = 0; i < birdData.phase.length; i += 1) {
+      const p = i * 3;
+      const phase = birdData.phase[i];
+      const travel = elapsed * birdData.speed[i] + phase;
+      const wingBeat = Math.sin(elapsed * (1.9 + birdData.speed[i] * 24) + phase);
+      const radius = birdData.radius[i];
+      const x = birdData.base[p] + Math.sin(travel) * radius + Math.sin(elapsed * 0.07 + phase * 1.7) * 5.2;
+      const y = birdData.base[p + 1] + Math.sin(elapsed * 0.16 + phase) * 3.4 + Math.max(0, wingBeat) * 0.45;
+      const z = birdData.base[p + 2] + Math.cos(travel * 0.82) * radius * 0.48;
+      const yaw = travel + Math.PI * 0.54;
+      const birdScale = birdData.scale[i] * (1 + wingBeat * 0.08);
+      rig.position.set(x, y, z);
+      rig.rotation.set(-0.14 + Math.sin(travel * 1.3) * 0.04, yaw, wingBeat * 0.11);
+      rig.scale.set(birdScale * (1 + wingBeat * 0.1), birdScale * (1 - wingBeat * 0.18), birdScale);
+      rig.updateMatrix();
+      system.distantBirds.setMatrixAt(i, rig.matrix);
+    }
+    system.distantBirds.instanceMatrix.needsUpdate = true;
+    const birdMaterial = system.distantBirds.material as MeshBasicMaterial;
+    birdMaterial.opacity = 0.28 + Math.sin(elapsed * 0.045) * 0.04;
+  }
 
   system.cloudShadows.forEach((shadow, index) => {
     const baseX = (shadow.userData.baseX as number | undefined) ?? shadow.position.x;

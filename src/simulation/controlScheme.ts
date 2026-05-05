@@ -20,9 +20,9 @@ export const MOVEMENT_BINDINGS: readonly MovementBinding[] = [
   { code: "ArrowRight", key: "arrowright", axis: "moveX", value: 1, label: "right" },
 ] as const;
 
-export const MOVEMENT_CONTROL_LABELS = MOVEMENT_BINDINGS
-  .filter((binding) => binding.showInHud)
-  .map((binding) => [binding.key.toUpperCase(), binding.label] as const);
+export const MOVEMENT_CONTROL_LABELS = MOVEMENT_BINDINGS.filter((binding) => binding.showInHud).map(
+  (binding) => [binding.key.toUpperCase(), binding.label] as const,
+);
 
 export const MOVEMENT_CONTROL_SUMMARY = "W forward · A left · S backward · D right";
 

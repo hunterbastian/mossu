@@ -87,27 +87,30 @@ const MAP_LABEL_LAYOUT: Record<string, { dx: number; dy: number; anchor: MapText
   "peak-shrine": { dx: 0, dy: -24, anchor: "middle" },
 };
 
-const boundarySamples = Array.from({ length: 96 }, (_, index) => (
-  sampleIslandBoundaryPoint((index / 96) * Math.PI * 2)
-));
+const boundarySamples = Array.from({ length: 96 }, (_, index) => sampleIslandBoundaryPoint((index / 96) * Math.PI * 2));
 
-const mapBounds = boundarySamples.reduce((bounds, point) => ({
-  minX: Math.min(bounds.minX, point.x),
-  maxX: Math.max(bounds.maxX, point.x),
-  minZ: Math.min(bounds.minZ, point.z),
-  maxZ: Math.max(bounds.maxZ, point.z),
-}), {
-  minX: Number.POSITIVE_INFINITY,
-  maxX: Number.NEGATIVE_INFINITY,
-  minZ: Number.POSITIVE_INFINITY,
-  maxZ: Number.NEGATIVE_INFINITY,
-});
+const mapBounds = boundarySamples.reduce(
+  (bounds, point) => ({
+    minX: Math.min(bounds.minX, point.x),
+    maxX: Math.max(bounds.maxX, point.x),
+    minZ: Math.min(bounds.minZ, point.z),
+    maxZ: Math.max(bounds.maxZ, point.z),
+  }),
+  {
+    minX: Number.POSITIVE_INFINITY,
+    maxX: Number.NEGATIVE_INFINITY,
+    minZ: Number.POSITIVE_INFINITY,
+    maxZ: Number.NEGATIVE_INFINITY,
+  },
+);
 
 function buildPath(points: MapPoint[], closed = false) {
   if (points.length === 0) {
     return "";
   }
-  const commands = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`);
+  const commands = points.map(
+    (point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`,
+  );
   return `${commands.join(" ")}${closed ? " Z" : ""}`;
 }
 
@@ -130,11 +133,14 @@ function patchFrameFromWorldEllipse(
   };
 }
 
-export const routeLandmarks = MAP_ROUTE_IDS
-  .map((id) => worldLandmarks.find((landmark) => landmark.id === id))
-  .filter((landmark): landmark is WorldLandmark => Boolean(landmark));
+export const routeLandmarks = MAP_ROUTE_IDS.map((id) => worldLandmarks.find((landmark) => landmark.id === id)).filter(
+  (landmark): landmark is WorldLandmark => Boolean(landmark),
+);
 
-export const mapBoundaryPath = buildPath(boundarySamples.map((point) => projectWorldToMap(point.x, point.z)), true);
+export const mapBoundaryPath = buildPath(
+  boundarySamples.map((point) => projectWorldToMap(point.x, point.z)),
+  true,
+);
 export const mapRiverPath = buildPath(
   Array.from({ length: 64 }, (_, index) => {
     const t = index / 63;
@@ -142,24 +148,49 @@ export const mapRiverPath = buildPath(
     return projectWorldToMap(sampleRiverCenter(z), z);
   }),
 );
-export const mapRiverBranchPaths = RIVER_BRANCH_SEGMENTS.map((segment) => buildPath(
-  Array.from({ length: 36 }, (_, index) => {
-    const t = index / 35;
-    const z = segment.startZ + (segment.endZ - segment.startZ) * t;
-    return projectWorldToMap(sampleRiverChannelCenter(segment.id, z), z);
-  }),
-));
-export const mapRoutePath = buildPath(routeLandmarks.map((landmark) => projectWorldToMap(landmark.position.x, landmark.position.z)));
+export const mapRiverBranchPaths = RIVER_BRANCH_SEGMENTS.map((segment) =>
+  buildPath(
+    Array.from({ length: 36 }, (_, index) => {
+      const t = index / 35;
+      const z = segment.startZ + (segment.endZ - segment.startZ) * t;
+      return projectWorldToMap(sampleRiverChannelCenter(segment.id, z), z);
+    }),
+  ),
+);
+export const mapRoutePath = buildPath(
+  routeLandmarks.map((landmark) => projectWorldToMap(landmark.position.x, landmark.position.z)),
+);
 
 const mountainRidgeWorldLines: readonly (readonly (readonly [number, number])[])[] = [
-  [[-142, 168], [-106, 198], [-62, 216], [-18, 232], [30, 226], [82, 206], [128, 178]],
-  [[-72, 138], [-34, 166], [12, 184], [58, 178], [100, 150]],
-  [[-118, 110], [-82, 132], [-44, 148], [-8, 144], [28, 128], [64, 112]],
+  [
+    [-142, 168],
+    [-106, 198],
+    [-62, 216],
+    [-18, 232],
+    [30, 226],
+    [82, 206],
+    [128, 178],
+  ],
+  [
+    [-72, 138],
+    [-34, 166],
+    [12, 184],
+    [58, 178],
+    [100, 150],
+  ],
+  [
+    [-118, 110],
+    [-82, 132],
+    [-44, 148],
+    [-8, 144],
+    [28, 128],
+    [64, 112],
+  ],
 ];
 
-export const mapMountainRidgePaths: readonly string[] = mountainRidgeWorldLines.map((line) => (
-  buildPath(line.map(([x, z]) => projectWorldToMap(x, z)))
-));
+export const mapMountainRidgePaths: readonly string[] = mountainRidgeWorldLines.map((line) =>
+  buildPath(line.map(([x, z]) => projectWorldToMap(x, z))),
+);
 
 export const mapAtlasMarkers: readonly MapAtlasMarker[] = worldMapMarkers.map((marker) => ({
   id: marker.id,
@@ -251,9 +282,7 @@ const NORTH_RIDGE_Z_FRAC = 0.5;
 export function buildMapNorthRidgePath(): string {
   const zSpan = mapBounds.maxZ - mapBounds.minZ;
   const zMin = mapBounds.minZ + zSpan * NORTH_RIDGE_Z_FRAC;
-  const arc = boundarySamples
-    .filter((p) => p.z >= zMin)
-    .sort((a, b) => a.x - b.x);
+  const arc = boundarySamples.filter((p) => p.z >= zMin).sort((a, b) => a.x - b.x);
   if (arc.length < 3) {
     return "";
   }

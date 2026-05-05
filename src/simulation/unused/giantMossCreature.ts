@@ -52,19 +52,11 @@ export function createGiantMossCreatureState(): GiantMossCreatureState {
   };
 }
 
-export function updateGiantMossCreature(
-  state: GiantMossCreatureState,
-  player: PlayerState,
-  dt: number,
-) {
+export function updateGiantMossCreature(state: GiantMossCreatureState, player: PlayerState, dt: number) {
   state.attackedThisFrame = false;
   state.attackCooldown = Math.max(0, state.attackCooldown - dt);
 
-  const planarToPlayer = new Vector3(
-    player.position.x - state.position.x,
-    0,
-    player.position.z - state.position.z,
-  );
+  const planarToPlayer = new Vector3(player.position.x - state.position.x, 0, player.position.z - state.position.z);
   state.distanceToPlayer = planarToPlayer.length();
 
   const playerHidden = player.fallingToVoid || player.swimming || player.waterMode === "underwater";
@@ -99,10 +91,13 @@ export function updateGiantMossCreature(
   }
 
   const speed =
-    state.mode === "charge" ? CHARGE_SPEED :
-      state.mode === "stalk" ? STALK_SPEED :
-        state.mode === "cooldown" ? PATROL_SPEED * 0.55 :
-          PATROL_SPEED;
+    state.mode === "charge"
+      ? CHARGE_SPEED
+      : state.mode === "stalk"
+        ? STALK_SPEED
+        : state.mode === "cooldown"
+          ? PATROL_SPEED * 0.55
+          : PATROL_SPEED;
   state.velocity.set(toTarget.x * speed, 0, toTarget.z * speed);
 
   state.position.addScaledVector(state.velocity, dt);

@@ -12,17 +12,12 @@ export function teleportDebugPlayerTo(player: PlayerState, x: number, z: number)
   return true;
 }
 
-export function applyDebugPlayerSnapshot(
-  player: PlayerState,
-  payload: DebugSaveStatePayload["player"],
-) {
+export function applyDebugPlayerSnapshot(player: PlayerState, payload: DebugSaveStatePayload["player"]) {
   const x = payload?.x;
   const z = payload?.z;
   if (typeof x === "number" && Number.isFinite(x) && typeof z === "number" && Number.isFinite(z)) {
     const y =
-      typeof payload?.y === "number" && Number.isFinite(payload.y)
-        ? payload.y
-        : sampleTerrainHeight(x, z) + 2.2;
+      typeof payload?.y === "number" && Number.isFinite(payload.y) ? payload.y : sampleTerrainHeight(x, z) + 2.2;
     player.position.set(x, y, z);
   }
 
@@ -49,10 +44,7 @@ export function resetDebugPlayerMovement(player: PlayerState) {
   player.justRespawned = false;
 }
 
-export function applyDebugSaveSnapshot(
-  save: SaveState,
-  payload: DebugSaveStatePayload["save"],
-) {
+export function applyDebugSaveSnapshot(save: SaveState, payload: DebugSaveStatePayload["save"]) {
   if (payload?.unlockedAbilities) {
     save.unlockedAbilities = new Set(payload.unlockedAbilities as AbilityId[]);
   }
