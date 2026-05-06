@@ -11,11 +11,13 @@ import {
   Group,
   MathUtils,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
   PlaneGeometry,
   Scene,
+  SphereGeometry,
   SRGBColorSpace,
   Vector3,
   WebGLRenderer,
@@ -84,6 +86,9 @@ export class ModelViewerApp {
   private lastWidth = 0;
   private lastHeight = 0;
   private lastScrubFrame = -1;
+  private dragPointerId: number | null = null;
+  private dragStartX = 0;
+  private dragStartOrbit = 0;
 
   constructor(private readonly container: HTMLElement) {
     this.root.className = "model-viewer";
@@ -103,9 +108,19 @@ export class ModelViewerApp {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.1));
     this.renderer.shadowMap.enabled = false;
     this.renderer.domElement.className = "model-viewer__canvas";
+    this.canvasWrap.insertAdjacentHTML("beforeend", this.renderKaruViewport());
     this.canvasWrap.appendChild(this.renderer.domElement);
+    this.canvasWrap.insertAdjacentHTML(
+      "beforeend",
+      `
+        <div class="model-viewer__orbit-hint" aria-hidden="true">
+          <span class="model-viewer__orbit-icon"></span>
+          <span>Drag to orbit</span>
+        </div>
+      `,
+    );
 
-    this.scene.background = new Color("#dff7ff");
+    this.scene.background = null;
     this.scene.fog = new Fog("#dff7ff", 22, 62);
     this.scene.add(this.fillLight, this.meadowLight, this.rimLight, this.stageRoot, this.propRoot);
 
@@ -171,6 +186,10 @@ export class ModelViewerApp {
     this.stop();
     this.root.removeEventListener("pointerdown", this.handleUiPointerDown, true);
     this.root.removeEventListener("keydown", this.handleUiKeyboardActivate, true);
+    this.renderer.domElement.removeEventListener("pointerdown", this.handleStagePointerDown);
+    window.removeEventListener("pointermove", this.handleStagePointerMove);
+    window.removeEventListener("pointerup", this.handleStagePointerEnd);
+    window.removeEventListener("pointercancel", this.handleStagePointerEnd);
     this.clearActiveRig();
     this.interfaceAudio.dispose();
     this.renderer.dispose();
@@ -187,82 +206,231 @@ export class ModelViewerApp {
     const initialNote = karuFirst
       ? "Use this to tune fluffy puffs, big eyes, paws, and companion poses without searching the route for a herd."
       : "Soft squash, small leg motion, and enough turntable movement to read the fluffy silhouette.";
-    const modelButtons = MODEL_OPTIONS.map(
-      (option) => `
-        <button class="model-viewer__model-button" type="button" data-model="${option.id}">
-          <span>${option.label}</span>
-          <small>${option.meta}</small>
-        </button>
-      `,
+    const modelButtons = MODEL_OPTIONS.map((option) =>
+      this.renderControlButton("model", option.id, option.label, option.meta),
     ).join("");
 
-    const poseButtons = POSE_OPTIONS.map(
-      (option) => `<button class="model-viewer__chip" type="button" data-pose="${option.id}">${option.label}</button>`,
+    const poseButtons = POSE_OPTIONS.map((option) => this.renderControlButton("pose", option.id, option.label)).join(
+      "",
+    );
+
+    const lightingButtons = LIGHTING_OPTIONS.map((option) =>
+      this.renderControlButton("lighting", option.id, option.label),
     ).join("");
 
-    const lightingButtons = LIGHTING_OPTIONS.map(
-      (option) =>
-        `<button class="model-viewer__chip" type="button" data-lighting="${option.id}">${option.label}</button>`,
-    ).join("");
+    return this.renderAppShell({
+      heroHeader: this.renderHeroHeader({ kicker, title, intro }),
+      sidebar: this.renderSidebar({ modelButtons, poseButtons, lightingButtons }),
+      liveRigPanel: this.renderLiveRigPanel(stageHeading),
+      infoPanel: this.renderInfoPanel({
+        initialTitle: karuFirst ? "Karu companion rig" : "Mossu idle loop",
+        initialNote,
+      }),
+    });
+  }
 
+  private renderAppShell(parts: { heroHeader: string; sidebar: string; liveRigPanel: string; infoPanel: string }) {
+    return `
+      <div class="model-viewer__window">
+        ${this.renderTrafficLights()}
+        ${parts.heroHeader}
+        <section class="model-viewer__layout">
+          ${parts.sidebar}
+          ${parts.liveRigPanel}
+          ${parts.infoPanel}
+        </section>
+      </div>
+    `;
+  }
+
+  private renderTrafficLights() {
+    return `
+      <div class="model-viewer__traffic-lights" aria-hidden="true">
+        <span class="model-viewer__traffic-light model-viewer__traffic-light--close"></span>
+        <span class="model-viewer__traffic-light model-viewer__traffic-light--minimize"></span>
+        <span class="model-viewer__traffic-light model-viewer__traffic-light--zoom"></span>
+      </div>
+    `;
+  }
+
+  private renderHeroHeader(copy: { kicker: string; title: string; intro: string }) {
     return `
       <section class="model-viewer__hero">
+        <div class="model-viewer__crest" aria-hidden="true">
+          ${this.renderKaruCharacter("icon")}
+        </div>
         <div class="model-viewer__title-block">
-          <p class="model-viewer__kicker">${kicker}</p>
-          <h1>${title}</h1>
-          <p>${intro}</p>
+          <p class="model-viewer__kicker">${copy.kicker}</p>
+          <h1>${copy.title}</h1>
+          <p>${copy.intro}</p>
         </div>
-        <a class="model-viewer__back-link" href="./">Back to game</a>
+        <a class="model-viewer__back-link" href="./">
+          <span class="model-viewer__back-arrow" aria-hidden="true"></span>
+          <span>Back to game</span>
+        </a>
       </section>
+    `;
+  }
 
-      <section class="model-viewer__layout">
-        <aside class="model-viewer__panel model-viewer__panel--left">
-          <div>
-            <p class="model-viewer__label">Model</p>
-            <div class="model-viewer__model-list">${modelButtons}</div>
-          </div>
-          <div>
-            <p class="model-viewer__label">Pose</p>
-            <div class="model-viewer__chips">${poseButtons}</div>
-          </div>
-          <div>
-            <p class="model-viewer__label">Lighting</p>
-            <div class="model-viewer__chips">${lightingButtons}</div>
-          </div>
-        </aside>
+  private renderSidebar(groups: { modelButtons: string; poseButtons: string; lightingButtons: string }) {
+    return `
+      <aside class="model-viewer__panel model-viewer__panel--left">
+        ${this.renderControlSection("Model", "model", groups.modelButtons, "model-viewer__model-list")}
+        ${this.renderControlSection("Pose", "pose", groups.poseButtons, "model-viewer__chips")}
+        ${this.renderControlSection("Lighting", "lighting", groups.lightingButtons, "model-viewer__chips")}
+      </aside>
+    `;
+  }
 
-        <div class="model-viewer__stage-card">
-          <div class="model-viewer__stage-header">
-            <div>
-              <p class="model-viewer__label">Live Rig</p>
+  private renderControlSection(title: string, icon: string, controls: string, listClass: string) {
+    return `
+      <section class="model-viewer__control-section" aria-labelledby="model-viewer-${icon}">
+        <p class="model-viewer__label" id="model-viewer-${icon}">
+          <span class="model-viewer__section-icon model-viewer__section-icon--${icon}" aria-hidden="true"></span>
+          <span>${title}</span>
+        </p>
+        <div class="${listClass}">${controls}</div>
+      </section>
+    `;
+  }
+
+  private renderControlButton(kind: "model" | "pose" | "lighting", id: string, label: string, meta?: string) {
+    if (kind === "model") {
+      return `
+        <button class="model-viewer__model-button" type="button" data-model="${id}" aria-pressed="false">
+          <span class="model-viewer__model-thumb model-viewer__model-thumb--${id}" aria-hidden="true"></span>
+          <span class="model-viewer__model-copy">
+            <span>${label}</span>
+            <small>${meta ?? ""}</small>
+          </span>
+        </button>
+      `;
+    }
+
+    return `
+      <button class="model-viewer__chip" type="button" data-${kind}="${id}" aria-pressed="false">
+        <span class="model-viewer__chip-art model-viewer__chip-art--${id}" aria-hidden="true"></span>
+        <span>${label}</span>
+      </button>
+    `;
+  }
+
+  private renderLiveRigPanel(stageHeading: string) {
+    return `
+      <div class="model-viewer__stage-card">
+        <div class="model-viewer__stage-header">
+          <div>
+            <p class="model-viewer__label">
+              <span class="model-viewer__section-icon model-viewer__section-icon--live" aria-hidden="true"></span>
+              <span>Live Rig</span>
+            </p>
+            <div class="model-viewer__stage-title-row">
               <h2 data-viewer-heading>${stageHeading}</h2>
-            </div>
-            <div class="model-viewer__stage-actions">
-              <button class="model-viewer__icon-button" type="button" data-toggle-play>Pause</button>
-              <button class="model-viewer__icon-button" type="button" data-toggle-turntable>Turntable</button>
+              <button class="model-viewer__edit-button" type="button" aria-label="Edit selected rig notes">
+                <span class="model-viewer__edit-dot" aria-hidden="true"></span>
+              </button>
             </div>
           </div>
-          <div data-stage-slot></div>
-          <div class="model-viewer__timeline">
-            <span>0s</span>
-            <input type="range" min="0" max="600" value="0" step="1" data-time-scrub />
-            <span>10s</span>
+          <div class="model-viewer__stage-actions">
+            <button class="model-viewer__icon-button" type="button" data-toggle-play aria-label="Pause animation" aria-pressed="true">
+              <span class="model-viewer__button-icon model-viewer__button-icon--playback" aria-hidden="true"></span>
+              <span data-toggle-play-label>Pause</span>
+            </button>
+            <button class="model-viewer__icon-button" type="button" data-toggle-turntable aria-label="Toggle turntable rotation" aria-pressed="true">
+              <span class="model-viewer__button-icon model-viewer__button-icon--turntable" aria-hidden="true"></span>
+              <span>Turntable</span>
+            </button>
           </div>
         </div>
+        <div data-stage-slot></div>
+        ${this.renderTimelineScrubber()}
+      </div>
+    `;
+  }
 
-        <aside class="model-viewer__panel model-viewer__panel--right">
-          <div class="model-viewer__spec-card">
-            <p class="model-viewer__label">Notes</p>
-            <h3 data-viewer-note-title>${karuFirst ? "Karu companion rig" : "Mossu idle loop"}</h3>
-            <p data-viewer-note-copy>${initialNote}</p>
-          </div>
-          <div class="model-viewer__spec-list">
-            <div><span>Keyboard</span><strong>A / D rotate</strong></div>
-            <div><span>Playback</span><strong>Space pause</strong></div>
-            <div><span>Switch</span><strong>1 Mossu · 2 Karu</strong></div>
-          </div>
-        </aside>
+  private renderKaruViewport() {
+    return `
+      <div class="model-viewer__viewport-illustration" aria-hidden="true">
+        <span class="model-viewer__viewport-cloud model-viewer__viewport-cloud--one"></span>
+        <span class="model-viewer__viewport-cloud model-viewer__viewport-cloud--two"></span>
+        <span class="model-viewer__viewport-hill model-viewer__viewport-hill--far"></span>
+        <span class="model-viewer__viewport-hill model-viewer__viewport-hill--left"></span>
+        <span class="model-viewer__viewport-hill model-viewer__viewport-hill--right"></span>
+        <span class="model-viewer__viewport-path"></span>
+        <span class="model-viewer__viewport-tree model-viewer__viewport-tree--left"></span>
+        <span class="model-viewer__viewport-tree model-viewer__viewport-tree--right"></span>
+        <span class="model-viewer__viewport-flowers model-viewer__viewport-flowers--left"></span>
+        <span class="model-viewer__viewport-flowers model-viewer__viewport-flowers--right"></span>
+      </div>
+    `;
+  }
+
+  private renderTimelineScrubber() {
+    return `
+      <div class="model-viewer__timeline">
+        <button class="model-viewer__timeline-play" type="button" data-timeline-play aria-label="Toggle animation playback"></button>
+        <span class="model-viewer__timeline-time">0s</span>
+        <input type="range" min="0" max="600" value="0" step="1" data-time-scrub aria-label="Animation timeline" />
+        <span class="model-viewer__timeline-time">10s</span>
+      </div>
+    `;
+  }
+
+  private renderInfoPanel(copy: { initialTitle: string; initialNote: string }) {
+    return `
+      <aside class="model-viewer__panel model-viewer__panel--right">
+        <div class="model-viewer__spec-card">
+          <p class="model-viewer__label">
+            <span class="model-viewer__section-icon model-viewer__section-icon--notes" aria-hidden="true"></span>
+            <span>Notes</span>
+          </p>
+          <h3 data-viewer-note-title>${copy.initialTitle}</h3>
+          <p data-viewer-note-copy>${copy.initialNote}</p>
+        </div>
+        <div class="model-viewer__spec-list">
+          ${this.renderShortcutCard("Keyboard", "keyboard", "<kbd>A</kbd> / <kbd>D</kbd> <span>Rotate</span>")}
+          ${this.renderShortcutCard("Playback", "playback", "<kbd>Space</kbd> <span>Pause</span>")}
+          ${this.renderShortcutCard("Switch", "switch", "<kbd>1</kbd> <span>Mossu</span> <span>·</span> <kbd>2</kbd> <span>Karu</span>")}
+        </div>
+        <div class="model-viewer__mascot-card" aria-hidden="true">
+          <span class="model-viewer__sparkle model-viewer__sparkle--left"></span>
+          <span class="model-viewer__sparkle model-viewer__sparkle--right"></span>
+          ${this.renderKaruCharacter("mascot")}
+        </div>
+      </aside>
+    `;
+  }
+
+  private renderShortcutCard(title: string, icon: string, shortcut: string) {
+    return `
+      <section class="model-viewer__shortcut-card">
+        <p class="model-viewer__label">
+          <span class="model-viewer__section-icon model-viewer__section-icon--${icon}" aria-hidden="true"></span>
+          <span>${title}</span>
+        </p>
+        <strong>${shortcut}</strong>
       </section>
+    `;
+  }
+
+  private renderKaruCharacter(size: "icon" | "mascot") {
+    return `
+      <span class="model-viewer__karu-character model-viewer__karu-character--${size}">
+        <span class="model-viewer__karu-tail"></span>
+        <span class="model-viewer__karu-body">
+          <span class="model-viewer__karu-crest"></span>
+          <span class="model-viewer__karu-spots"></span>
+          <span class="model-viewer__karu-eye model-viewer__karu-eye--left"></span>
+          <span class="model-viewer__karu-eye model-viewer__karu-eye--right"></span>
+          <span class="model-viewer__karu-cheek model-viewer__karu-cheek--left"></span>
+          <span class="model-viewer__karu-cheek model-viewer__karu-cheek--right"></span>
+          <span class="model-viewer__karu-smile"></span>
+          <span class="model-viewer__karu-arm model-viewer__karu-arm--left"></span>
+          <span class="model-viewer__karu-arm model-viewer__karu-arm--right"></span>
+          <span class="model-viewer__karu-foot model-viewer__karu-foot--left"></span>
+          <span class="model-viewer__karu-foot model-viewer__karu-foot--right"></span>
+        </span>
+      </span>
     `;
   }
 
@@ -277,6 +445,10 @@ export class ModelViewerApp {
     this.container.appendChild(this.root);
     this.root.addEventListener("pointerdown", this.handleUiPointerDown, true);
     this.root.addEventListener("keydown", this.handleUiKeyboardActivate, true);
+    this.renderer.domElement.addEventListener("pointerdown", this.handleStagePointerDown);
+    window.addEventListener("pointermove", this.handleStagePointerMove);
+    window.addEventListener("pointerup", this.handleStagePointerEnd);
+    window.addEventListener("pointercancel", this.handleStagePointerEnd);
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-model]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -310,10 +482,12 @@ export class ModelViewerApp {
       });
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-toggle-play]")?.addEventListener("click", () => {
+    const togglePlayback = () => {
       this.isPlaying = !this.isPlaying;
       this.updateUiState();
-    });
+    };
+    this.root.querySelector<HTMLButtonElement>("[data-toggle-play]")?.addEventListener("click", togglePlayback);
+    this.root.querySelector<HTMLButtonElement>("[data-timeline-play]")?.addEventListener("click", togglePlayback);
 
     this.root.querySelector<HTMLButtonElement>("[data-toggle-turntable]")?.addEventListener("click", () => {
       this.turntable = !this.turntable;
@@ -363,6 +537,38 @@ export class ModelViewerApp {
       return;
     }
     this.interfaceAudio.playClick();
+  };
+
+  private handleStagePointerDown = (event: PointerEvent) => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    this.dragPointerId = event.pointerId;
+    this.dragStartX = event.clientX;
+    this.dragStartOrbit = this.manualOrbit;
+    this.canvasWrap.classList.add("is-dragging");
+    this.renderer.domElement.setPointerCapture(event.pointerId);
+  };
+
+  private handleStagePointerMove = (event: PointerEvent) => {
+    if (event.pointerId !== this.dragPointerId) {
+      return;
+    }
+    const width = Math.max(1, this.canvasWrap.clientWidth);
+    const dragDelta = (event.clientX - this.dragStartX) / width;
+    this.manualOrbit = this.dragStartOrbit - dragDelta * Math.PI * 1.15;
+  };
+
+  private handleStagePointerEnd = (event: PointerEvent) => {
+    if (event.pointerId !== this.dragPointerId) {
+      return;
+    }
+    this.dragPointerId = null;
+    this.canvasWrap.classList.remove("is-dragging");
+    if (this.renderer.domElement.hasPointerCapture(event.pointerId)) {
+      this.renderer.domElement.releasePointerCapture(event.pointerId);
+    }
   };
 
   private switchModel(model: ModelViewerModel) {
@@ -425,7 +631,7 @@ export class ModelViewerApp {
 
   private createKaruRig(): ViewerRig {
     const karu = createKaruModelRig(1.58);
-    karu.group.scale.setScalar(1.34);
+    karu.group.scale.setScalar(1.06);
     karu.group.position.set(0, 0.06, 0);
 
     return {
@@ -560,6 +766,7 @@ export class ModelViewerApp {
     const ground = new Mesh(new CircleGeometry(4.8, 72), groundMaterial);
     ground.rotation.x = -Math.PI * 0.5;
     ground.receiveShadow = true;
+    ground.userData.viewerGround = true;
     this.propRoot.add(ground);
 
     const path = new Mesh(
@@ -577,6 +784,51 @@ export class ModelViewerApp {
     path.position.y = 0.012;
     this.propRoot.add(path);
 
+    const hillMaterial = new MeshBasicMaterial({
+      color: "#96d5ad",
+      transparent: true,
+      opacity: 0.72,
+      side: DoubleSide,
+    });
+    [
+      { x: -4.2, y: 1.12, z: -4.65, sx: 2.8, sy: 1.05, color: "#8ccba5", opacity: 0.7 },
+      { x: 0.5, y: 1.36, z: -4.9, sx: 3.6, sy: 1.22, color: "#b8dfbf", opacity: 0.62 },
+      { x: 4.3, y: 1.06, z: -4.55, sx: 2.5, sy: 0.95, color: "#76bf96", opacity: 0.56 },
+    ].forEach((hill) => {
+      const material = hillMaterial.clone();
+      material.color.set(hill.color);
+      material.opacity = hill.opacity;
+      const mesh = new Mesh(new CircleGeometry(1, 32, 0, Math.PI), material);
+      mesh.position.set(hill.x, hill.y, hill.z);
+      mesh.scale.set(hill.sx, hill.sy, 1);
+      this.propRoot.add(mesh);
+    });
+
+    const cloudMaterial = new MeshBasicMaterial({
+      color: "#ffffff",
+      transparent: true,
+      opacity: 0.76,
+      side: DoubleSide,
+    });
+    [
+      { x: -2.9, y: 3.45, z: -4.2, s: 0.48 },
+      { x: 2.75, y: 3.72, z: -4.8, s: 0.58 },
+      { x: 4.1, y: 2.88, z: -3.95, s: 0.38 },
+    ].forEach((cloud) => {
+      const group = new Group();
+      group.position.set(cloud.x, cloud.y, cloud.z);
+      [
+        { x: -0.42, y: -0.02, s: 0.72 },
+        { x: 0, y: 0.16, s: 0.95 },
+        { x: 0.45, y: 0, s: 0.72 },
+      ].forEach((puff) => {
+        const mesh = new Mesh(new CircleGeometry(cloud.s * puff.s, 18), cloudMaterial.clone());
+        mesh.position.set(puff.x * cloud.s, puff.y * cloud.s, 0);
+        group.add(mesh);
+      });
+      this.propRoot.add(group);
+    });
+
     const leafMaterial = new MeshStandardMaterial({ color: "#78be52", roughness: 0.94 });
     const trunkMaterial = new MeshStandardMaterial({ color: "#9b6b3f", roughness: 0.98 });
     [
@@ -592,6 +844,36 @@ export class ModelViewerApp {
       leaves.castShadow = true;
       this.propRoot.add(trunk, leaves);
     });
+
+    const flowerCenter = new SphereGeometry(0.035, 8, 6);
+    const flowerPetal = new SphereGeometry(0.045, 8, 6);
+    const flowerMaterials = {
+      white: new MeshStandardMaterial({ color: "#fff8d9", roughness: 0.9 }),
+      yellow: new MeshStandardMaterial({ color: "#ffd86a", roughness: 0.88 }),
+      coral: new MeshStandardMaterial({ color: "#ffb27a", roughness: 0.88 }),
+      center: new MeshStandardMaterial({ color: "#e3a632", roughness: 0.86 }),
+    };
+    [
+      { x: -2.7, z: 2.1, s: 1, material: flowerMaterials.white },
+      { x: -1.8, z: 2.85, s: 0.78, material: flowerMaterials.yellow },
+      { x: 2.55, z: 1.85, s: 0.9, material: flowerMaterials.coral },
+      { x: 3.15, z: 0.75, s: 0.72, material: flowerMaterials.yellow },
+      { x: 0.7, z: 2.9, s: 0.68, material: flowerMaterials.white },
+    ].forEach((flower) => {
+      const group = new Group();
+      group.position.set(flower.x, 0.09, flower.z);
+      for (let index = 0; index < 5; index += 1) {
+        const angle = (index / 5) * Math.PI * 2;
+        const petal = new Mesh(flowerPetal, flower.material);
+        petal.position.set(Math.cos(angle) * 0.07 * flower.s, 0.025, Math.sin(angle) * 0.07 * flower.s);
+        petal.scale.setScalar(flower.s);
+        group.add(petal);
+      }
+      const center = new Mesh(flowerCenter, flowerMaterials.center);
+      center.scale.setScalar(flower.s);
+      group.add(center);
+      this.propRoot.add(group);
+    });
   }
 
   private applyLighting(lighting: ModelViewerLighting) {
@@ -602,13 +884,13 @@ export class ModelViewerApp {
       shrine: { background: "#e9edff", fog: "#e9edff", ambient: 1.04, key: 1.88, rim: 1.45, ground: "#a8cf94" },
     }[lighting];
 
-    this.scene.background = new Color(settings.background);
+    this.scene.background = null;
     this.scene.fog = new Fog(settings.fog, 22, 62);
     this.fillLight.intensity = settings.ambient;
     this.meadowLight.intensity = settings.key;
     this.rimLight.intensity = settings.rim;
     this.propRoot.children.forEach((child) => {
-      if (child instanceof Mesh && child.geometry instanceof CircleGeometry) {
+      if (child instanceof Mesh && child.userData.viewerGround) {
         const material = child.material;
         if (!Array.isArray(material) && "color" in material) {
           material.color.set(settings.ground);
@@ -619,8 +901,8 @@ export class ModelViewerApp {
 
   private updateCamera(dt: number) {
     const orbit = this.manualOrbit + (this.turntable ? this.time * 0.24 : 0);
-    const radius = this.selectedModel === "mossu" ? 11.3 : 6.8;
-    const height = this.selectedModel === "mossu" ? 5.7 : 3.25;
+    const radius = this.selectedModel === "mossu" ? 10.9 : 9.15;
+    const height = this.selectedModel === "mossu" ? 5.5 : 3.18;
     this.cameraPosition.set(Math.sin(orbit) * radius, height, Math.cos(orbit) * radius);
     this.camera.position.lerp(this.cameraPosition, 1 - Math.exp(-dt * 7));
     this.camera.lookAt(this.getCameraTarget());
@@ -630,7 +912,7 @@ export class ModelViewerApp {
     if (this.selectedModel === "mossu") {
       CAMERA_TARGET.set(0, 1.6, 0);
     } else {
-      CAMERA_TARGET.set(0, 0.92, 0);
+      CAMERA_TARGET.set(0, 0.82, 0);
     }
     return CAMERA_TARGET;
   }
@@ -640,13 +922,19 @@ export class ModelViewerApp {
     this.root.dataset.pose = this.selectedPose;
     this.root.dataset.lighting = this.selectedLighting;
     this.root.querySelectorAll<HTMLButtonElement>("[data-model]").forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.model === this.selectedModel);
+      const isActive = button.dataset.model === this.selectedModel;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-pose]").forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.pose === this.selectedPose);
+      const isActive = button.dataset.pose === this.selectedPose;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-lighting]").forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.lighting === this.selectedLighting);
+      const isActive = button.dataset.lighting === this.selectedLighting;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
     });
 
     const heading = this.root.querySelector<HTMLElement>("[data-viewer-heading]");
@@ -656,13 +944,25 @@ export class ModelViewerApp {
 
     const playButton = this.root.querySelector<HTMLButtonElement>("[data-toggle-play]");
     if (playButton) {
-      playButton.textContent = this.isPlaying ? "Pause" : "Play";
+      playButton.dataset.state = this.isPlaying ? "pause" : "play";
       playButton.classList.toggle("is-active", this.isPlaying);
+      playButton.setAttribute("aria-pressed", String(this.isPlaying));
+      playButton.setAttribute("aria-label", this.isPlaying ? "Pause animation" : "Play animation");
+      const playLabel = playButton.querySelector<HTMLElement>("[data-toggle-play-label]");
+      if (playLabel) {
+        playLabel.textContent = this.isPlaying ? "Pause" : "Play";
+      }
+    }
+
+    const timelinePlayButton = this.root.querySelector<HTMLButtonElement>("[data-timeline-play]");
+    if (timelinePlayButton) {
+      timelinePlayButton.setAttribute("aria-label", this.isPlaying ? "Pause animation" : "Play animation");
     }
 
     const turntableButton = this.root.querySelector<HTMLButtonElement>("[data-toggle-turntable]");
     if (turntableButton) {
       turntableButton.classList.toggle("is-active", this.turntable);
+      turntableButton.setAttribute("aria-pressed", String(this.turntable));
     }
 
     const scrub = this.root.querySelector<HTMLInputElement>("[data-time-scrub]");

@@ -16,6 +16,7 @@
 | **`window.mossuDebug`**    | Only with **`?qaDebug`** — teleport, opening skip, route jumps, save payloads, and named save presets (see `runtimeBridge.ts` and `debugSavePresets.ts`).                                |
 | **`npm run art:review`**   | Uses `?e2e=1&qaDebug=1&visualProbe=1` so headed route screenshots avoid the full debug snapshot path while still rendering deterministic frames.                                         |
 | **`npm run art:compare`**  | Validates the latest route screenshots/JSON summary and can compare state against a saved art-review baseline.                                                                           |
+| **`npm run agent:review`** | Builds a dependency-free local report and Swarms-ready prompt pack from current art, perf, Karu, repo-doc, and wiki evidence.                                                            |
 
 ## Commands
 
@@ -23,5 +24,6 @@
 - **`npm run test:e2e`** — full Playwright suite (starts `vite preview` on **4173** unless `reuseExistingServer` matches).
 - **`npm run test:e2e:smoke`** — smoke tests only.
 - **`npm run art:compare`** — route artifact/state sanity check after `npm run art:review`.
+- **`npm run agent:review`** — optional five-lane planning review for art, perf, Karu, docs/wiki, and next-pass synthesis.
 
 Headless runs should use **`/?e2e=1`** for the main game smoke. Manual real-browser QA that needs debug globals should include **`?qaDebug=1`**; add **`?e2e=1`** when deterministic automation does not need the full debug snapshot.

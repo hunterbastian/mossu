@@ -1,0 +1,485 @@
+/* Final loading shell: retro pixel ocean screen. Mirrors the first-paint CSS in index.html. */
+.instant-title {
+  --loading-progress: 0%;
+  --pixel-border: #f8fbff;
+  --pixel-border-soft: rgba(238, 247, 255, 0.72);
+  --pixel-blue: #1689d2;
+  --pixel-blue-deep: #075ba3;
+  --pixel-ocean: #1b99d5;
+  --pixel-ocean-deep: #076bb4;
+  --pixel-gold: #ffd35e;
+  --pixel-gold-deep: #e49a2f;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
+  color: #f8fbff;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(255, 240, 164, 0.56) 0 3.3rem, transparent 3.45rem),
+    linear-gradient(180deg, #1596dc 0%, #49bce9 36%, #8cddf1 49%, #31aee2 50%, #0a7ac4 100%) !important;
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+  image-rendering: pixelated;
+  pointer-events: none;
+  text-align: center;
+}
+
+.instant-title::before {
+  content: "";
+  position: absolute;
+  inset: 50% 0 0;
+  width: auto;
+  height: auto;
+  transform: none;
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.14) 0 2px, transparent 2px 10px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0 3px, transparent 3px 28px),
+    radial-gradient(ellipse at 24% 20%, rgba(255, 247, 214, 0.6) 0 5rem, transparent 8rem),
+    linear-gradient(180deg, rgba(115, 220, 244, 0.62), rgba(12, 119, 194, 0.92));
+  box-shadow: inset 0 2px 0 rgba(230, 251, 255, 0.78);
+  filter: none;
+  opacity: 1;
+}
+
+.instant-title::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(90deg, rgba(4, 48, 98, 0.05) 0 1px, transparent 1px 6px);
+  mix-blend-mode: soft-light;
+  opacity: 0.75;
+}
+
+.instant-title > div {
+  box-sizing: border-box;
+  width: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.instant-title > div:not(.instant-title__frame)::before,
+.instant-title > div:not(.instant-title__frame)::after {
+  content: none;
+}
+
+.instant-title__frame {
+  position: absolute;
+  inset: clamp(0.95rem, 3.2vw, 2rem);
+  z-index: 5;
+  border: 2px solid var(--pixel-border);
+  border-radius: clamp(1rem, 2vw, 1.8rem);
+  box-shadow:
+    inset 0 0 0 2px rgba(21, 138, 210, 0.34),
+    0 0 0 1px rgba(5, 78, 148, 0.18);
+}
+
+.instant-title > .instant-title__frame::before,
+.instant-title > .instant-title__frame::after {
+  content: "";
+  position: absolute;
+  width: clamp(1.1rem, 3vw, 2rem);
+  aspect-ratio: 1;
+  border: 2px solid var(--pixel-border);
+  border-radius: 50%;
+  background:
+    linear-gradient(45deg, transparent 0 42%, rgba(255, 255, 255, 0.9) 43% 56%, transparent 57%),
+    rgba(255, 255, 255, 0.08);
+}
+
+.instant-title > .instant-title__frame::before {
+  left: -0.15rem;
+  top: -0.15rem;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+.instant-title > .instant-title__frame::after {
+  right: -0.15rem;
+  bottom: -0.15rem;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
+.instant-title__art {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.instant-title__sun {
+  position: absolute;
+  left: clamp(5rem, 20vw, 18rem);
+  top: clamp(4rem, 13vh, 8rem);
+  width: clamp(3.5rem, 6vw, 5.6rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.28) 0 3px, transparent 3px 7px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.18) 0 3px, transparent 3px 7px),
+    radial-gradient(circle, #fff4ac 0 42%, #ffd66d 43% 70%, rgba(255, 202, 82, 0.2) 71%);
+  box-shadow: 0 0 2.2rem rgba(255, 225, 118, 0.55);
+}
+
+.instant-title__cloud {
+  position: absolute;
+  height: 0.75rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, transparent 0 8%, #fff6d6 9% 22%, transparent 23% 28%, #fff6d6 29% 60%, transparent 61%),
+    linear-gradient(180deg, transparent 0 48%, rgba(255, 246, 214, 0.82) 49% 68%, transparent 69%);
+  opacity: 0.86;
+}
+
+.instant-title__cloud--one {
+  left: 5vw;
+  top: 40vh;
+  width: clamp(3.5rem, 8vw, 7.4rem);
+}
+
+.instant-title__cloud--two {
+  right: 12vw;
+  top: 18vh;
+  width: clamp(3rem, 7vw, 6.2rem);
+}
+
+.instant-title__cloud--three {
+  right: 5vw;
+  top: 49vh;
+  width: clamp(2rem, 4vw, 3.8rem);
+}
+
+.instant-title__island {
+  position: absolute;
+  width: clamp(4rem, 10vw, 8.6rem);
+  aspect-ratio: 1.22;
+  filter: drop-shadow(0 0.35rem 0 rgba(5, 64, 116, 0.18));
+}
+
+.instant-title__island::before,
+.instant-title__island::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.instant-title__island::before {
+  top: 10%;
+  width: 100%;
+  height: 34%;
+  border-radius: 52% 48% 28% 32%;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0 8%,
+      #7fcf5b 9% 17%,
+      transparent 18% 26%,
+      #a9df62 27% 45%,
+      transparent 46% 58%,
+      #62b956 59% 68%,
+      transparent 69%
+    ),
+    linear-gradient(180deg, #b6e875 0 42%, #4aa75c 43% 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 247, 148, 0.52),
+    0 3px 0 rgba(37, 97, 76, 0.5);
+}
+
+.instant-title__island::after {
+  top: 35%;
+  width: 68%;
+  height: 58%;
+  clip-path: polygon(7% 0, 93% 0, 68% 82%, 50% 100%, 31% 80%);
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 214, 118, 0.2) 0 5px, transparent 5px 11px),
+    linear-gradient(180deg, #9d784e 0%, #6d5b58 48%, #315477 100%);
+}
+
+.instant-title__island--large {
+  left: 10vw;
+  top: 24vh;
+}
+
+.instant-title__island--mid {
+  right: 9vw;
+  top: 31vh;
+  width: clamp(4rem, 9vw, 7.6rem);
+}
+
+.instant-title__island--small {
+  left: 18vw;
+  top: 50vh;
+  width: clamp(2.4rem, 5vw, 4.2rem);
+  opacity: 0.9;
+}
+
+.instant-title__island--tiny {
+  right: 19vw;
+  top: 57vh;
+  width: clamp(2rem, 4vw, 3.4rem);
+  opacity: 0.84;
+}
+
+.instant-title__content {
+  position: relative;
+  z-index: 6;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  width: min(48rem, calc(100vw - 2rem));
+  min-height: 100%;
+  padding: clamp(1.5rem, 5vw, 3rem) 1rem;
+}
+
+.instant-title__logo,
+.instant-title strong.instant-title__logo {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  margin: 0;
+  color: var(--pixel-gold);
+  font-family: "Geist", "Arial Rounded MT Bold", ui-rounded, system-ui, sans-serif;
+  font-size: clamp(4.2rem, 13vw, 10rem);
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 0.82;
+  text-shadow:
+    0 3px 0 #fff4bb,
+    3px 0 0 #075cb2,
+    0 -3px 0 #075cb2,
+    -3px 0 0 #075cb2,
+    3px 3px 0 #064f9b,
+    -3px 3px 0 #064f9b,
+    5px 8px 0 #063d83,
+    0 12px 0 rgba(4, 62, 125, 0.45);
+  -webkit-text-stroke: 0;
+}
+
+.instant-title__letter-u {
+  position: relative;
+  display: inline-block;
+}
+
+.instant-title__sprout {
+  position: absolute;
+  left: 52%;
+  bottom: 82%;
+  width: clamp(1.4rem, 4vw, 3rem);
+  height: clamp(1.6rem, 4.4vw, 3.3rem);
+  transform: translateX(-50%);
+}
+
+.instant-title__sprout::before,
+.instant-title__sprout::after {
+  content: "";
+  position: absolute;
+  bottom: 42%;
+  width: 54%;
+  height: 42%;
+  border: 2px solid #0a5aa3;
+  background: linear-gradient(180deg, #baf06b, #4faf49);
+  box-shadow: inset 2px 2px 0 rgba(255, 250, 140, 0.42);
+}
+
+.instant-title__sprout::before {
+  left: 0;
+  border-radius: 100% 12% 84% 12%;
+  transform: rotate(-24deg);
+}
+
+.instant-title__sprout::after {
+  right: 0;
+  border-radius: 12% 100% 12% 84%;
+  transform: rotate(24deg);
+}
+
+.instant-title__progress-area {
+  position: absolute;
+  top: auto;
+  left: 50%;
+  bottom: clamp(4.4rem, 13vh, 7.4rem);
+  z-index: 7;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  width: min(48rem, calc(100vw - 2.4rem));
+  height: auto;
+  min-height: 0;
+  transform: translateX(-50%);
+}
+
+.instant-title__progress {
+  position: relative;
+  width: min(37rem, 82vw);
+  height: clamp(1.72rem, 3vw, 2.4rem);
+  padding: 0.22rem;
+  overflow: hidden;
+  border: 2px solid #eaf1f8;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, #fdfefe, #8f9cac 18%, #39485b 19%, #687787 100%),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 calc(8.333% - 2px),
+      rgba(255, 255, 255, 0.78) calc(8.333% - 2px) 8.333%
+    );
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -3px 0 rgba(31, 45, 61, 0.38),
+    0 4px 0 rgba(5, 62, 118, 0.42),
+    0 1.1rem 2.4rem rgba(4, 68, 124, 0.26);
+}
+
+.instant-title__progress::after {
+  content: "";
+  position: absolute;
+  inset: 0.32rem;
+  z-index: 3;
+  border-radius: inherit;
+  background: repeating-linear-gradient(
+    112deg,
+    transparent 0 calc(8.333% - 0.12rem),
+    rgba(69, 79, 93, 0.64) calc(8.333% - 0.1rem) 8.333%
+  );
+  pointer-events: none;
+}
+
+.instant-title__progress-fill {
+  position: relative;
+  display: block;
+  width: var(--loading-progress);
+  height: 100%;
+  overflow: visible;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0 18%, rgba(255, 255, 255, 0) 19%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.62) 0 0.44rem, rgba(210, 220, 231, 0.58) 0.44rem 0.88rem),
+    linear-gradient(180deg, #ffffff 0%, #e7edf4 42%, #aeb9c7 43%, #f9fbfd 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -3px 0 rgba(127, 143, 160, 0.46),
+    0 0 0.8rem rgba(255, 255, 255, 0.46);
+  transition: none;
+}
+
+.instant-title__progress-glint {
+  position: absolute;
+  right: -0.48rem;
+  top: 50%;
+  z-index: 4;
+  width: 1.45rem;
+  aspect-ratio: 1;
+  transform: translateY(-50%) rotate(45deg);
+  background:
+    linear-gradient(90deg, transparent 0 42%, #ffffff 43% 57%, transparent 58%),
+    linear-gradient(0deg, transparent 0 42%, #ffffff 43% 57%, transparent 58%);
+  filter: drop-shadow(0 0 0.45rem rgba(255, 255, 255, 0.9));
+  animation: instant-loading-glint 900ms ease-in-out infinite;
+}
+
+.instant-title--progress-empty .instant-title__progress-glint {
+  opacity: 0;
+}
+
+.instant-title__percent {
+  min-height: 1.2rem;
+  margin: 0.74rem 0 0;
+  color: rgba(244, 250, 255, 0.9);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  font-size: clamp(0.72rem, 1.6vw, 0.95rem);
+  font-weight: 900;
+  line-height: 1.1;
+  text-shadow:
+    0 2px 0 rgba(5, 80, 144, 0.7),
+    0 0 0.8rem rgba(255, 255, 255, 0.26);
+}
+
+.instant-title [data-loading-status] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  color: transparent;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@keyframes instant-loading-glint {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: translateY(-50%) rotate(45deg) scale(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-50%) rotate(45deg) scale(1.08);
+  }
+}
+
+@media (max-width: 720px) {
+  .instant-title__sun {
+    left: 12vw;
+    top: 10vh;
+  }
+
+  .instant-title__island--large {
+    left: 5vw;
+    top: 25vh;
+  }
+
+  .instant-title__island--mid {
+    right: 4vw;
+    top: 34vh;
+  }
+
+  .instant-title__island--small,
+  .instant-title__island--tiny,
+  .instant-title__cloud--three {
+    display: none;
+  }
+
+  .instant-title__logo,
+  .instant-title strong.instant-title__logo {
+    font-size: clamp(4rem, 22vw, 7rem);
+    text-shadow:
+      0 2px 0 #fff4bb,
+      2px 0 0 #075cb2,
+      0 -2px 0 #075cb2,
+      -2px 0 0 #075cb2,
+      2px 2px 0 #064f9b,
+      -2px 2px 0 #064f9b,
+      4px 6px 0 #063d83;
+  }
+
+  .instant-title__progress-area {
+    bottom: clamp(3.3rem, 11vh, 5rem);
+  }
+}
+
+@media (max-width: 420px) {
+  .instant-title__frame {
+    inset: 0.65rem;
+    border-radius: 0.9rem;
+  }
+
+  .instant-title__progress {
+    width: min(21rem, calc(100vw - 2rem));
+  }
+
+  .instant-title__cloud--one,
+  .instant-title__cloud--two {
+    opacity: 0.62;
+  }
+}

@@ -12,6 +12,7 @@
     "test:contracts": "tsc -p tsconfig.contracts.json && esbuild tests/contracts/runContracts.ts --bundle --platform=node --format=esm --outfile=.contract-test-build/runContracts.mjs && node .contract-test-build/runContracts.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "agent:review": "node scripts/mossuAgentReview.mjs",
     "art:review": "npm run build && node scripts/artReviewRoute.mjs --headed --browser=chrome",
     "art:compare": "node scripts/artReviewCompare.mjs",
     "karu:route": "npm run build && node scripts/karuRouteProbe.mjs",

@@ -27,1495 +27,538 @@
       html,
       body,
       #app {
+        width: 100%;
         height: 100%;
         margin: 0;
       }
 
       body {
         overflow: hidden;
-        background:
-          radial-gradient(circle at 28% 30%, rgba(221, 244, 143, 0.72), transparent 17rem),
-          radial-gradient(circle at 68% 38%, rgba(101, 205, 219, 0.46), transparent 19rem),
-          radial-gradient(circle at 52% 78%, rgba(124, 207, 111, 0.58), transparent 24rem),
-          linear-gradient(135deg, #d8f8ee 0%, #b8eadf 34%, #d7e999 62%, #87c880 100%);
-        color: #3d2a1a;
+        background: #2aa4df;
+        color: #f8fbff;
         font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
       }
 
       .instant-title {
+        --loading-progress: 0%;
+        --pixel-border: #f8fbff;
+        --pixel-border-soft: rgba(238, 247, 255, 0.72);
+        --pixel-blue: #1689d2;
+        --pixel-blue-deep: #075ba3;
+        --pixel-ocean: #1b99d5;
+        --pixel-ocean-deep: #076bb4;
+        --pixel-gold: #ffd35e;
+        --pixel-gold-deep: #e49a2f;
         position: fixed;
         inset: 0;
         z-index: 1000;
         display: grid;
         place-items: center;
-        padding: 1rem;
         overflow: hidden;
-        text-align: center;
-        --loading-progress: 16%;
         background:
-          radial-gradient(circle at 50% 18%, rgba(255, 246, 180, 0.7), transparent 14rem),
-          radial-gradient(circle at 16% 78%, rgba(62, 174, 112, 0.34) 0 5rem, transparent 14rem),
-          radial-gradient(circle at 84% 70%, rgba(55, 181, 172, 0.28) 0 4rem, transparent 13rem),
-          linear-gradient(180deg, #9fe5d8 0%, #d8f3d6 44%, #fff0b8 70%, #8fc56e 100%);
+          radial-gradient(circle at 20% 18%, rgba(255, 240, 164, 0.56) 0 3.3rem, transparent 3.45rem),
+          linear-gradient(180deg, #1596dc 0%, #49bce9 36%, #8cddf1 49%, #31aee2 50%, #0a7ac4 100%);
+        image-rendering: pixelated;
+        pointer-events: none;
+        text-align: center;
+        transition:
+          opacity 0.38s ease,
+          transform 0.38s ease;
       }
 
       .instant-title::before {
         content: "";
         position: absolute;
-        inset: auto auto 7vh 50%;
-        width: min(44rem, 112vw);
-        height: min(18rem, 46vh);
-        transform: translateX(-50%);
-        border-radius: 58% 58% 0 0;
+        inset: 50% 0 0;
         background:
-          radial-gradient(ellipse at 50% 10%, rgba(255, 247, 194, 0.92) 0 10%, transparent 11%),
-          radial-gradient(ellipse at 28% 58%, rgba(80, 152, 92, 0.64) 0 28%, transparent 29%),
-          radial-gradient(ellipse at 74% 64%, rgba(63, 142, 101, 0.58) 0 27%, transparent 28%),
-          linear-gradient(180deg, rgba(191, 224, 122, 0) 0 31%, #8fcf83 32% 67%, #57ad8e 68% 100%);
-        opacity: 0.88;
-        filter: blur(0.2px);
+          repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.14) 0 2px, transparent 2px 10px),
+          repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0 3px, transparent 3px 28px),
+          radial-gradient(ellipse at 24% 20%, rgba(255, 247, 214, 0.6) 0 5rem, transparent 8rem),
+          linear-gradient(180deg, rgba(115, 220, 244, 0.62), rgba(12, 119, 194, 0.92));
+        box-shadow: inset 0 2px 0 rgba(230, 251, 255, 0.78);
       }
 
       .instant-title::after {
         content: "";
         position: absolute;
         inset: 0;
+        z-index: 4;
         pointer-events: none;
         background:
-          radial-gradient(circle at 17% 72%, rgba(255, 255, 224, 0.34) 0 0.38rem, transparent 0.42rem),
-          radial-gradient(circle at 83% 30%, rgba(177, 246, 164, 0.28) 0 0.46rem, transparent 0.5rem),
-          radial-gradient(circle at 72% 82%, rgba(255, 246, 170, 0.3) 0 0.32rem, transparent 0.36rem),
-          repeating-linear-gradient(172deg, rgba(255, 255, 255, 0.15) 0 1px, transparent 1px 7px),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(53, 112, 88, 0.1));
+          repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 5px),
+          repeating-linear-gradient(90deg, rgba(4, 48, 98, 0.05) 0 1px, transparent 1px 6px);
         mix-blend-mode: soft-light;
-        opacity: 0.38;
+        opacity: 0.75;
       }
 
-      .instant-title > div {
-        position: relative;
-        z-index: 1;
-        display: grid;
-        justify-items: center;
-        box-sizing: border-box;
-        width: min(34rem, calc(100vw - 2rem));
-        padding: 1.05rem 1rem 1.25rem;
-        border: 2px solid rgba(105, 75, 34, 0.48);
-        border-radius: 1.2rem;
-        background:
-          linear-gradient(180deg, rgba(255, 249, 210, 0.94), rgba(248, 221, 133, 0.88)),
-          linear-gradient(135deg, rgba(124, 202, 170, 0.22), rgba(255, 255, 255, 0));
+      .instant-title--leaving {
+        opacity: 0;
+        transform: translateY(-0.8rem) scale(1.01);
+      }
+
+      .instant-title__frame {
+        position: absolute;
+        inset: clamp(0.95rem, 3.2vw, 2rem);
+        z-index: 5;
+        border: 2px solid var(--pixel-border);
+        border-radius: clamp(1rem, 2vw, 1.8rem);
         box-shadow:
-          inset 0 1px 0 rgba(255, 255, 240, 0.9),
-          inset 0 -0.42rem 1rem rgba(138, 99, 37, 0.12),
-          0 0.44rem 0 rgba(77, 112, 62, 0.26),
-          0 1.6rem 4rem rgba(37, 93, 75, 0.24);
+          inset 0 0 0 2px rgba(21, 138, 210, 0.34),
+          0 0 0 1px rgba(5, 78, 148, 0.18);
       }
 
-      .instant-title > div::after {
+      .instant-title__frame::before,
+      .instant-title__frame::after {
         content: "";
         position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        pointer-events: none;
+        width: clamp(1.1rem, 3vw, 2rem);
+        aspect-ratio: 1;
+        border: 2px solid var(--pixel-border);
+        border-radius: 50%;
         background:
-          linear-gradient(
-            180deg,
-            rgba(255, 255, 255, 0.38) 0 0.2rem,
-            rgba(255, 255, 255, 0) 0.2rem 70%,
-            rgba(103, 69, 25, 0.1)
-          ),
-          repeating-linear-gradient(90deg, rgba(122, 91, 41, 0.1) 0 1px, transparent 1px 7px);
-        opacity: 0.66;
+          linear-gradient(45deg, transparent 0 42%, rgba(255, 255, 255, 0.9) 43% 56%, transparent 57%),
+          rgba(255, 255, 255, 0.08);
       }
 
-      .instant-title strong {
-        display: block;
-        margin-top: -0.15rem;
-        font-size: clamp(3.5rem, 5.4rem, 5.4rem);
+      .instant-title__frame::before {
+        left: -0.15rem;
+        top: -0.15rem;
+        clip-path: polygon(0 0, 100% 0, 0 100%);
+      }
+
+      .instant-title__frame::after {
+        right: -0.15rem;
+        bottom: -0.15rem;
+        clip-path: polygon(100% 0, 100% 100%, 0 100%);
+      }
+
+      .instant-title__art {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+      }
+
+      .instant-title__sun {
+        position: absolute;
+        left: clamp(5rem, 20vw, 18rem);
+        top: clamp(4rem, 13vh, 8rem);
+        width: clamp(3.5rem, 6vw, 5.6rem);
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background:
+          repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.28) 0 3px, transparent 3px 7px),
+          repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.18) 0 3px, transparent 3px 7px),
+          radial-gradient(circle, #fff4ac 0 42%, #ffd66d 43% 70%, rgba(255, 202, 82, 0.2) 71%);
+        box-shadow: 0 0 2.2rem rgba(255, 225, 118, 0.55);
+      }
+
+      .instant-title__cloud {
+        position: absolute;
+        height: 0.75rem;
+        border-radius: 999px;
+        background:
+          linear-gradient(
+            90deg,
+            transparent 0 8%,
+            #fff6d6 9% 22%,
+            transparent 23% 28%,
+            #fff6d6 29% 60%,
+            transparent 61%
+          ),
+          linear-gradient(180deg, transparent 0 48%, rgba(255, 246, 214, 0.82) 49% 68%, transparent 69%);
+        opacity: 0.86;
+      }
+
+      .instant-title__cloud--one {
+        left: 5vw;
+        top: 40vh;
+        width: clamp(3.5rem, 8vw, 7.4rem);
+      }
+
+      .instant-title__cloud--two {
+        right: 12vw;
+        top: 18vh;
+        width: clamp(3rem, 7vw, 6.2rem);
+      }
+
+      .instant-title__cloud--three {
+        right: 5vw;
+        top: 49vh;
+        width: clamp(2rem, 4vw, 3.8rem);
+      }
+
+      .instant-title__island {
+        position: absolute;
+        width: clamp(4rem, 10vw, 8.6rem);
+        aspect-ratio: 1.22;
+        filter: drop-shadow(0 0.35rem 0 rgba(5, 64, 116, 0.18));
+      }
+
+      .instant-title__island::before,
+      .instant-title__island::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .instant-title__island::before {
+        top: 10%;
+        width: 100%;
+        height: 34%;
+        border-radius: 52% 48% 28% 32%;
+        background:
+          linear-gradient(
+            90deg,
+            transparent 0 8%,
+            #7fcf5b 9% 17%,
+            transparent 18% 26%,
+            #a9df62 27% 45%,
+            transparent 46% 58%,
+            #62b956 59% 68%,
+            transparent 69%
+          ),
+          linear-gradient(180deg, #b6e875 0 42%, #4aa75c 43% 100%);
+        box-shadow:
+          inset 0 2px 0 rgba(255, 247, 148, 0.52),
+          0 3px 0 rgba(37, 97, 76, 0.5);
+      }
+
+      .instant-title__island::after {
+        top: 35%;
+        width: 68%;
+        height: 58%;
+        clip-path: polygon(7% 0, 93% 0, 68% 82%, 50% 100%, 31% 80%);
+        background:
+          repeating-linear-gradient(90deg, rgba(255, 214, 118, 0.2) 0 5px, transparent 5px 11px),
+          linear-gradient(180deg, #9d784e 0%, #6d5b58 48%, #315477 100%);
+      }
+
+      .instant-title__island--large {
+        left: 10vw;
+        top: 24vh;
+      }
+
+      .instant-title__island--mid {
+        right: 9vw;
+        top: 31vh;
+        width: clamp(4rem, 9vw, 7.6rem);
+      }
+
+      .instant-title__island--small {
+        left: 18vw;
+        top: 50vh;
+        width: clamp(2.4rem, 5vw, 4.2rem);
+        opacity: 0.9;
+      }
+
+      .instant-title__island--tiny {
+        right: 19vw;
+        top: 57vh;
+        width: clamp(2rem, 4vw, 3.4rem);
+        opacity: 0.84;
+      }
+
+      .instant-title__content {
+        position: relative;
+        z-index: 6;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        width: min(48rem, calc(100vw - 2rem));
+        min-height: 100%;
+        padding: clamp(1.5rem, 5vw, 3rem) 1rem;
+      }
+
+      .instant-title__logo {
+        position: relative;
+        display: inline-flex;
+        align-items: flex-end;
+        justify-content: center;
+        margin: 0;
+        color: var(--pixel-gold);
+        font-family: "Geist", "Arial Rounded MT Bold", ui-rounded, system-ui, sans-serif;
+        font-size: clamp(4.2rem, 13vw, 10rem);
         font-weight: 950;
         letter-spacing: 0;
-        line-height: 0.88;
-        color: #f7cf5b;
-        -webkit-text-stroke: clamp(0.07rem, 0.28vw, 0.13rem) rgba(96, 56, 25, 0.92);
-        text-shadow:
-          0 0.04em 0 #fff5c4,
-          0 0.1em 0 #a66b2c,
-          0 0.18em 0 rgba(80, 106, 61, 0.6),
-          0 0.24em 0.46em rgba(66, 56, 30, 0.18);
-      }
-
-      .instant-title [data-loading-status] {
-        position: relative;
-        z-index: 1;
-        max-width: min(24rem, 82vw);
-        min-height: 1.35rem;
-        margin: 0.55rem 0 0;
-        color: rgba(47, 70, 39, 0.9);
-        font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
-        font-size: 0.92rem;
-        font-weight: 800;
-        line-height: 1.35;
-        text-shadow: 0 1px 0 rgba(255, 255, 232, 0.82);
-      }
-
-      .instant-title__mark {
-        position: relative;
-        width: 4.8rem;
-        height: 1.9rem;
-        margin: 0.65rem auto 0.45rem;
-      }
-
-      .instant-title__mark span {
-        position: absolute;
-        bottom: 0;
-        width: 1.34rem;
-        height: 1.34rem;
-        border: 1px solid rgba(255, 255, 255, 0.86);
-        border-radius: 999px 999px 999px 0;
-        background:
-          radial-gradient(
-            circle at 34% 25%,
-            rgba(255, 255, 255, 0.96) 0%,
-            rgba(255, 255, 255, 0.18) 32%,
-            transparent 44%
-          ),
-          linear-gradient(150deg, rgba(180, 240, 220, 0.86), rgba(92, 174, 150, 0.72));
-        box-shadow:
-          inset 0 -2px 4px rgba(38, 103, 88, 0.22),
-          0 0.32rem 0.64rem rgba(52, 110, 92, 0.24);
-        transform: rotate(-28deg);
-      }
-
-      .instant-title__mark span:nth-child(1) {
-        left: 0.35rem;
-      }
-
-      .instant-title__mark span:nth-child(2) {
-        left: 1.7rem;
-        width: 1.72rem;
-        height: 1.72rem;
-        background:
-          radial-gradient(
-            circle at 32% 25%,
-            rgba(255, 255, 255, 0.98) 0%,
-            rgba(255, 255, 255, 0.16) 32%,
-            transparent 44%
-          ),
-          linear-gradient(150deg, rgba(209, 247, 196, 0.9), rgba(111, 194, 128, 0.74));
-      }
-
-      .instant-title__mark span:nth-child(3) {
-        left: 3.15rem;
-        background:
-          radial-gradient(
-            circle at 34% 25%,
-            rgba(255, 255, 255, 0.96) 0%,
-            rgba(255, 255, 255, 0.18) 32%,
-            transparent 44%
-          ),
-          linear-gradient(150deg, rgba(234, 239, 171, 0.88), rgba(150, 190, 88, 0.72));
-      }
-
-      .instant-title__scene {
-        position: relative;
-        box-sizing: border-box;
-        width: min(27rem, 78vw);
-        aspect-ratio: 2.18;
-        overflow: hidden;
-        border: 2px solid rgba(86, 67, 35, 0.34);
-        border-radius: 1rem;
-        background:
-          radial-gradient(circle at 18% 18%, rgba(255, 244, 164, 0.94) 0 8%, transparent 9%),
-          linear-gradient(180deg, #86dfe2 0 38%, #bce9c4 39% 61%, #4fb7ac 62% 74%, #e5c979 75% 100%);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 240, 0.82),
-          inset 0 -0.55rem 1.1rem rgba(43, 93, 74, 0.18);
-      }
-
-      .instant-title__scene span {
-        position: absolute;
-        display: block;
-      }
-
-      .instant-title__hill {
-        bottom: 21%;
-        width: 58%;
-        height: 40%;
-        border-radius: 62% 62% 8% 8%;
-        background:
-          radial-gradient(ellipse at 50% 0%, rgba(255, 244, 169, 0.38), transparent 46%),
-          linear-gradient(180deg, #b9db72, #4f9f67);
-      }
-
-      .instant-title__hill--left {
-        left: -8%;
-      }
-
-      .instant-title__hill--right {
-        right: -12%;
-        bottom: 24%;
-        background:
-          radial-gradient(ellipse at 48% 0%, rgba(255, 250, 185, 0.34), transparent 44%),
-          linear-gradient(180deg, #9ccf70, #3f8f73);
-      }
-
-      .instant-title__water {
-        left: -4%;
-        right: -4%;
-        bottom: 19%;
-        height: 22%;
-        border-radius: 50% 50% 28% 28%;
-        background:
-          repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.24) 0 2px, transparent 2px 9px),
-          linear-gradient(90deg, #3da9b9, #85e4d7 45%, #2f91ad);
-        animation: instant-title-water 2.8s ease-in-out infinite;
-      }
-
-      .instant-title__path {
-        left: 38%;
-        bottom: -8%;
-        width: 25%;
-        height: 51%;
-        border-radius: 54% 54% 0 0;
-        background: linear-gradient(180deg, rgba(255, 229, 143, 0.95), rgba(181, 132, 62, 0.82));
-        transform: perspective(8rem) rotateX(50deg);
-      }
-
-      .instant-title__grass {
-        bottom: 0;
-        width: 34%;
-        height: 26%;
-        background:
-          repeating-linear-gradient(
-            105deg,
-            transparent 0 0.55rem,
-            rgba(62, 133, 72, 0.78) 0.58rem 0.72rem,
-            transparent 0.76rem 1.08rem
-          ),
-          linear-gradient(180deg, #abd765, #6caf58);
-      }
-
-      .instant-title__grass--left {
-        left: 0;
-        border-radius: 0 1.8rem 0 0;
-      }
-
-      .instant-title__grass--right {
-        right: 0;
-        border-radius: 1.8rem 0 0 0;
-      }
-
-      .instant-title__karu {
-        left: 55%;
-        bottom: 30%;
-        width: 1.45rem;
-        height: 1.05rem;
-        border: 1px solid rgba(84, 91, 57, 0.18);
-        border-radius: 54% 46% 48% 52%;
-        background:
-          radial-gradient(circle at 34% 42%, #2c392d 0 0.09rem, transparent 0.1rem),
-          radial-gradient(circle at 66% 42%, #2c392d 0 0.09rem, transparent 0.1rem),
-          linear-gradient(180deg, #fff7ce, #f1d88f);
-        box-shadow: 0 0.22rem 0 rgba(69, 95, 57, 0.18);
-        animation: instant-title-karu 1.8s ease-in-out infinite;
-      }
-
-      .instant-title__spore-bar {
-        position: relative;
-        z-index: 1;
-        box-sizing: border-box;
-        width: min(20rem, 76vw);
-        height: 1.08rem;
-        margin-top: 0.78rem;
-        padding: 0.17rem;
-        overflow: visible;
-        border: 2px solid rgba(69, 95, 43, 0.52);
-        border-radius: 999px;
-        background:
-          radial-gradient(circle at 14% 45%, rgba(255, 255, 226, 0.54) 0 0.18rem, transparent 0.2rem),
-          radial-gradient(circle at 74% 42%, rgba(255, 255, 226, 0.32) 0 0.14rem, transparent 0.16rem),
-          linear-gradient(180deg, rgba(231, 220, 137, 0.86), rgba(117, 136, 73, 0.62));
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 238, 0.82),
-          inset 0 -0.22rem 0.38rem rgba(56, 82, 35, 0.22),
-          0 0.24rem 0 rgba(68, 106, 57, 0.22);
-      }
-
-      .instant-title__spore-bar::before,
-      .instant-title__spore-bar::after {
-        content: "";
-        position: absolute;
-        z-index: 2;
-        width: 0.48rem;
-        height: 0.48rem;
-        border-radius: 999px;
-        background:
-          radial-gradient(circle at 34% 28%, rgba(255, 255, 238, 0.96), rgba(255, 255, 238, 0.1) 34%, transparent 48%),
-          linear-gradient(150deg, #a5e173, #3aa06f);
-        box-shadow: 0 0.14rem 0.28rem rgba(43, 92, 62, 0.24);
-        animation: instant-title-spore-drift 1.8s ease-in-out infinite;
-      }
-
-      .instant-title__spore-bar::before {
-        left: 13%;
-        top: -0.42rem;
-      }
-
-      .instant-title__spore-bar::after {
-        right: 18%;
-        bottom: -0.36rem;
-        width: 0.38rem;
-        height: 0.38rem;
-        animation-delay: 0.42s;
-      }
-
-      .instant-title__spore-fill {
-        position: relative;
-        display: block;
-        width: var(--loading-progress);
-        min-width: 1.1rem;
-        height: 100%;
-        overflow: hidden;
-        border-radius: 999px 58% 58% 999px;
-        background:
-          radial-gradient(circle at 92% 48%, rgba(252, 255, 167, 0.96) 0 0.3rem, transparent 0.32rem),
-          repeating-radial-gradient(
-            circle at 24% 45%,
-            rgba(255, 255, 225, 0.42) 0 0.07rem,
-            transparent 0.08rem 0.44rem
-          ),
-          linear-gradient(90deg, #269b64, #6fd247 55%, #e2f06a);
-        box-shadow:
-          inset 0 0.08rem 0 rgba(255, 255, 230, 0.82),
-          inset 0 -0.18rem 0.28rem rgba(31, 97, 55, 0.32),
-          0 0 0.72rem rgba(107, 218, 87, 0.58);
-        transition: width 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
-      }
-
-      .instant-title__spore-fill::before {
-        content: "";
-        position: absolute;
-        top: 50%;
-        right: -0.06rem;
-        z-index: 2;
-        width: 0.74rem;
-        height: 0.74rem;
-        border-radius: 48% 52% 46% 54%;
-        background:
-          radial-gradient(circle at 34% 28%, rgba(255, 255, 237, 0.98), rgba(255, 255, 237, 0.12) 38%, transparent 52%),
-          linear-gradient(150deg, #dff36f, #43b56c);
-        box-shadow:
-          inset 0 -0.1rem 0.16rem rgba(44, 111, 58, 0.2),
-          0 0 0.45rem rgba(202, 236, 95, 0.58);
-        transform: translateY(-50%);
-      }
-
-      .instant-title__spore-fill::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background:
-          linear-gradient(90deg, transparent 0 18%, rgba(255, 255, 218, 0.42) 32%, transparent 48%),
-          repeating-linear-gradient(
-            115deg,
-            transparent 0 0.7rem,
-            rgba(67, 135, 72, 0.28) 0.74rem 0.88rem,
-            transparent 0.92rem 1.42rem
-          );
-        animation: instant-title-spore-sheen 1.6s linear infinite;
-      }
-
-      .instant-title__spore-fill span {
-        position: absolute;
-        top: 50%;
-        z-index: 1;
-        width: 0.38rem;
-        height: 0.38rem;
-        border-radius: 50% 46% 54% 50%;
-        background:
-          radial-gradient(circle at 34% 28%, rgba(255, 255, 232, 0.96), rgba(255, 255, 232, 0.2) 42%, transparent 58%),
-          #6fc56c;
-        transform: translateY(-50%);
-        animation: instant-title-spore-pulse 1.34s ease-in-out infinite;
-      }
-
-      .instant-title__spore-fill span:nth-child(1) {
-        left: 18%;
-      }
-
-      .instant-title__spore-fill span:nth-child(2) {
-        left: 48%;
-        width: 0.5rem;
-        height: 0.5rem;
-        animation-delay: 0.18s;
-      }
-
-      .instant-title__spore-fill span:nth-child(3) {
-        left: 76%;
-        animation-delay: 0.36s;
-      }
-
-      @keyframes instant-title-water {
-        0%,
-        100% {
-          transform: translateX(-0.28rem);
-        }
-        50% {
-          transform: translateX(0.28rem);
-        }
-      }
-
-      @keyframes instant-title-karu {
-        0%,
-        100% {
-          transform: translateY(0);
-        }
-        50% {
-          transform: translateY(-0.16rem);
-        }
-      }
-
-      @keyframes instant-title-spore-drift {
-        0%,
-        100% {
-          transform: translateY(0) scale(1);
-        }
-        50% {
-          transform: translateY(-0.18rem) scale(1.08);
-        }
-      }
-
-      @keyframes instant-title-spore-sheen {
-        0% {
-          transform: translateX(-42%);
-        }
-        100% {
-          transform: translateX(42%);
-        }
-      }
-
-      @keyframes instant-title-spore-pulse {
-        0%,
-        100% {
-          opacity: 0.62;
-          transform: translateY(-50%) scale(0.86);
-        }
-        50% {
-          opacity: 1;
-          transform: translateY(-50%) scale(1.14);
-        }
-      }
-
-      @media (max-width: 540px) {
-        .instant-title > div {
-          padding: 0.86rem 0.78rem 1rem;
-        }
-
-        .instant-title strong {
-          font-size: 3.35rem;
-        }
-
-        .instant-title [data-loading-status] {
-          font-size: 0.84rem;
-        }
-
-        .instant-title__spore-bar {
-          width: min(17rem, 74vw);
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .instant-title__water,
-        .instant-title__karu,
-        .instant-title__slime,
-        .instant-title__cell-ring,
-        .instant-title__spore-bar::before,
-        .instant-title__spore-bar::after,
-        .instant-title__spore-fill::before,
-        .instant-title__spore-fill::after,
-        .instant-title__spore-fill span {
-          animation: none;
-        }
-      }
-
-      /* Aqua-glass first paint: matches the in-app creature-care UI before the bundle loads. */
-      body {
-        background:
-          radial-gradient(circle at 26% 18%, rgba(210, 253, 255, 0.72), transparent 18rem),
-          radial-gradient(circle at 72% 25%, rgba(91, 224, 238, 0.5), transparent 20rem),
-          radial-gradient(circle at 52% 84%, rgba(150, 244, 122, 0.45), transparent 24rem),
-          linear-gradient(180deg, #056eb0 0%, #31c3df 34%, #91eef0 58%, #56ca8b 100%);
-      }
-
-      .instant-title {
-        background:
-          radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.74), transparent 14rem),
-          radial-gradient(circle at 16% 78%, rgba(160, 249, 120, 0.34), transparent 14rem),
-          radial-gradient(circle at 84% 70%, rgba(70, 221, 234, 0.34), transparent 13rem),
-          linear-gradient(
-            180deg,
-            rgba(34, 178, 224, 0.92) 0%,
-            rgba(130, 235, 238, 0.84) 48%,
-            rgba(75, 189, 117, 0.9) 100%
-          );
-      }
-
-      .instant-title > div {
-        border-color: rgba(221, 255, 255, 0.72);
-        border-radius: 2rem;
-        background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.14) 42%, rgba(30, 182, 205, 0.38)),
-          linear-gradient(145deg, rgba(89, 223, 237, 0.64), rgba(16, 129, 180, 0.5));
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.96),
-          inset 0 -0.45rem 1rem rgba(0, 96, 126, 0.2),
-          0 0 0 1px rgba(255, 255, 255, 0.24),
-          0 0.72rem 0 rgba(8, 112, 156, 0.28),
-          0 2rem 4rem rgba(0, 77, 124, 0.28);
-      }
-
-      .instant-title__scene {
-        border-color: rgba(226, 255, 255, 0.62);
-        background:
-          radial-gradient(circle at 18% 18%, rgba(255, 255, 225, 0.94) 0 8%, transparent 9%),
-          radial-gradient(circle at 50% 72%, rgba(128, 246, 179, 0.48), transparent 34%),
-          linear-gradient(180deg, #6adff1 0 40%, #aef7ef 41% 62%, #40bdd2 63% 76%, #82d982 77% 100%);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.9),
-          inset 0 -0.6rem 1.1rem rgba(0, 113, 143, 0.2),
-          0 0 1.7rem rgba(172, 255, 255, 0.36);
-      }
-
-      .instant-title strong {
-        color: #fff49a;
-        -webkit-text-stroke-color: rgba(9, 88, 135, 0.86);
-        text-shadow:
-          0 0.04em 0 rgba(255, 255, 255, 0.88),
-          0 0.11em 0 rgba(40, 176, 214, 0.78),
-          0 0.19em 0 rgba(32, 116, 170, 0.46),
-          0 0 1.6rem rgba(156, 255, 255, 0.45);
-      }
-
-      .instant-title [data-loading-status] {
-        color: rgba(226, 255, 255, 0.94);
-        text-shadow: 0 0.12rem 0.4rem rgba(0, 82, 128, 0.4);
-      }
-
-      .instant-title__spore-bar {
-        border-color: rgba(226, 255, 255, 0.64);
-        background:
-          radial-gradient(circle at 18% 45%, rgba(255, 255, 255, 0.72) 0 0.18rem, transparent 0.2rem),
-          radial-gradient(circle at 74% 42%, rgba(174, 255, 255, 0.44) 0 0.14rem, transparent 0.16rem),
-          linear-gradient(180deg, rgba(167, 246, 255, 0.68), rgba(2, 103, 162, 0.46));
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.88),
-          inset 0 -0.2rem 0.42rem rgba(0, 90, 136, 0.25),
-          0 0 1rem rgba(117, 242, 255, 0.34);
-      }
-
-      .instant-title__spore-bar::before,
-      .instant-title__spore-bar::after,
-      .instant-title__spore-fill span {
-        background:
-          radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.1) 34%, transparent 48%),
-          linear-gradient(150deg, #d9ff75, #35d6d7);
-      }
-
-      .instant-title__spore-fill {
-        background:
-          radial-gradient(circle at 92% 48%, rgba(255, 255, 210, 0.96) 0 0.3rem, transparent 0.32rem),
-          repeating-radial-gradient(
-            circle at 24% 45%,
-            rgba(255, 255, 255, 0.44) 0 0.07rem,
-            transparent 0.08rem 0.44rem
-          ),
-          linear-gradient(90deg, #15b8da, #35e0d2 55%, #c8ff59);
-        box-shadow:
-          inset 0 0.08rem 0 rgba(255, 255, 255, 0.82),
-          inset 0 -0.18rem 0.28rem rgba(0, 104, 139, 0.32),
-          0 0 0.88rem rgba(82, 234, 255, 0.62);
-      }
-
-      /* Retro habitat-atlas first paint: adventure-map frame, sim ledger, organic cell progress. */
-      body {
-        background:
-          repeating-linear-gradient(0deg, rgba(22, 43, 36, 0.22) 0 1px, transparent 1px 40px),
-          repeating-linear-gradient(90deg, rgba(22, 43, 36, 0.16) 0 1px, transparent 1px 40px),
-          linear-gradient(180deg, #142e2d 0%, #2f5b50 42%, #8a6c3f 100%);
-        color: #2d2015;
-        font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
-      }
-
-      .instant-title {
-        --loading-progress: 16%;
-        padding: 1.5rem;
-        background:
-          linear-gradient(180deg, rgba(255, 235, 177, 0.08), rgba(15, 42, 39, 0.35) 48%, rgba(18, 35, 27, 0.12)),
-          repeating-linear-gradient(135deg, rgba(255, 245, 202, 0.08) 0 1px, transparent 1px 9px),
-          linear-gradient(145deg, #173a35 0%, #416958 42%, #c29a5c 100%);
-      }
-
-      .instant-title::before {
-        inset: auto 0 0;
-        width: auto;
-        height: 33vh;
-        transform: none;
-        border-radius: 0;
-        background:
-          linear-gradient(170deg, transparent 0 14%, rgba(35, 76, 48, 0.78) 15% 40%, transparent 41%),
-          linear-gradient(190deg, transparent 0 20%, rgba(24, 58, 42, 0.9) 21% 48%, transparent 49%),
-          linear-gradient(180deg, transparent 0%, rgba(17, 43, 35, 0.92) 58%, rgba(13, 31, 27, 0.98) 100%);
-        filter: none;
-        opacity: 1;
-      }
-
-      .instant-title::after {
-        background:
-          repeating-linear-gradient(0deg, rgba(255, 244, 194, 0.09) 0 1px, transparent 1px 5px),
-          repeating-linear-gradient(90deg, rgba(39, 27, 14, 0.06) 0 1px, transparent 1px 13px),
-          linear-gradient(180deg, rgba(255, 244, 194, 0.2), rgba(30, 50, 34, 0.18));
-        mix-blend-mode: multiply;
-        opacity: 0.58;
-      }
-
-      .instant-title > div {
-        width: min(47.5rem, calc(100vw - 2rem));
-        padding: 0.8rem;
-        border: 2px solid #28190f;
-        border-radius: 8px;
-        background:
-          linear-gradient(180deg, rgba(255, 239, 186, 0.98), rgba(204, 146, 73, 0.94)),
-          repeating-linear-gradient(90deg, rgba(97, 58, 24, 0.13) 0 1px, transparent 1px 12px);
-        box-shadow:
-          inset 0 0 0 1px rgba(255, 248, 209, 0.72),
-          inset 0 -0.34rem 0 rgba(94, 54, 23, 0.2),
-          0 0.34rem 0 #1b2f26,
-          0 1.6rem 3.2rem rgba(5, 22, 20, 0.42);
-      }
-
-      .instant-title > div::after {
-        inset: 0.44rem;
-        border: 1px solid rgba(71, 43, 21, 0.38);
-        border-radius: 6px;
-        background: none;
-        opacity: 1;
-      }
-
-      .instant-title__header,
-      .instant-title__ledger {
-        position: relative;
-        z-index: 1;
-        display: grid;
-        grid-template-columns: 1fr auto 1fr;
-        gap: 0.5rem;
-        align-items: center;
-        width: 100%;
-        box-sizing: border-box;
-        color: #f7e0a1;
-        font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
-        font-size: 0.68rem;
-        font-weight: 800;
-        line-height: 1.1;
-        text-transform: uppercase;
-        text-shadow: 0 1px 0 rgba(44, 24, 12, 0.72);
-      }
-
-      .instant-title__header {
-        margin-bottom: 0.5rem;
-        padding: 0.42rem 0.56rem;
-        border-radius: 6px;
-        background: linear-gradient(90deg, rgba(56, 31, 17, 0.92), rgba(87, 51, 24, 0.88) 50%, rgba(56, 31, 17, 0.92));
-        box-shadow:
-          inset 0 1px 0 rgba(255, 225, 151, 0.3),
-          0 1px 0 rgba(255, 241, 188, 0.44);
-      }
-
-      .instant-title__header span:nth-child(2) {
-        display: grid;
-        place-items: center;
-        width: 1.55rem;
-        height: 1.55rem;
-        border-radius: 50%;
-        color: #412915;
-        background: linear-gradient(180deg, #f9df84, #b9832e);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 253, 210, 0.82),
-          0 0 0 1px rgba(50, 27, 13, 0.5);
-      }
-
-      .instant-title__header span:last-child {
-        text-align: right;
-      }
-
-      .instant-title__scene {
-        position: relative;
-        z-index: 1;
-        width: 100%;
-        aspect-ratio: 2.18;
-        border: 2px solid #322113;
-        border-radius: 6px;
-        background: linear-gradient(180deg, #5dbfba 0 33%, #a9c86e 34% 53%, #d3b465 54% 68%, #6f8a45 69% 100%);
-        box-shadow:
-          inset 0 0 0 1px rgba(255, 250, 205, 0.52),
-          inset 0 -0.7rem 1rem rgba(43, 44, 20, 0.2),
-          0 0.4rem 0 rgba(91, 54, 22, 0.2);
-      }
-
-      .instant-title__scene::before,
-      .instant-title__scene::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-      }
-
-      .instant-title__scene::before {
-        background:
-          repeating-linear-gradient(0deg, rgba(65, 39, 21, 0.16) 0 1px, transparent 1px 1.3rem),
-          repeating-linear-gradient(90deg, rgba(65, 39, 21, 0.12) 0 1px, transparent 1px 1.3rem);
-        opacity: 0.36;
-      }
-
-      .instant-title__scene::after {
-        background:
-          linear-gradient(180deg, rgba(255, 245, 183, 0.26), transparent 28%),
-          linear-gradient(90deg, rgba(43, 24, 12, 0.22), transparent 15% 85%, rgba(43, 24, 12, 0.22));
-      }
-
-      .instant-title__scene span {
-        position: absolute;
-        display: block;
-      }
-
-      .instant-title__mountain {
-        bottom: 45%;
-        width: 30%;
-        height: 36%;
-        clip-path: polygon(50% 0, 100% 100%, 0 100%);
-        background:
-          linear-gradient(135deg, transparent 0 49%, rgba(255, 237, 180, 0.34) 50% 63%, transparent 64%),
-          linear-gradient(180deg, #e7d798, #7d7752 64%, #4e5e3c);
-      }
-
-      .instant-title__mountain--left {
-        left: 3%;
-      }
-
-      .instant-title__mountain--right {
-        right: 7%;
-        bottom: 43%;
-        width: 36%;
-        height: 41%;
-      }
-
-      .instant-title__plateau {
-        left: 0;
-        right: 0;
-        bottom: 30%;
-        height: 29%;
-        clip-path: polygon(0 36%, 18% 20%, 34% 34%, 52% 18%, 72% 30%, 100% 14%, 100% 100%, 0 100%);
-        background: linear-gradient(180deg, rgba(241, 210, 112, 0.8), rgba(94, 133, 70, 0.96));
-      }
-
-      .instant-title__water {
-        left: -7%;
-        right: -8%;
-        bottom: 19%;
-        height: 24%;
-        border-radius: 46% 54% 44% 40%;
-        background:
-          repeating-linear-gradient(0deg, rgba(255, 247, 190, 0.28) 0 2px, transparent 2px 0.7rem),
-          linear-gradient(90deg, #276c83, #52c6b6 46%, #1f6177);
-        box-shadow:
-          inset 0 0.18rem 0 rgba(255, 249, 202, 0.42),
-          inset 0 -0.34rem 0 rgba(18, 65, 73, 0.22);
-        animation: instant-title-water 2.8s ease-in-out infinite;
-      }
-
-      .instant-title__route {
-        left: 33%;
-        bottom: 2%;
-        width: 34%;
-        height: 61%;
-        border-radius: 48% 52% 6px 6px;
-        background:
-          repeating-linear-gradient(180deg, rgba(92, 53, 22, 0.28) 0 0.2rem, transparent 0.2rem 0.72rem),
-          linear-gradient(180deg, rgba(255, 225, 130, 0.95), rgba(157, 92, 38, 0.8));
-        clip-path: polygon(44% 0, 58% 0, 68% 42%, 56% 100%, 25% 100%, 40% 44%);
-        transform: perspective(9rem) rotateX(48deg);
-      }
-
-      .instant-title__trees {
-        left: 4%;
-        right: 5%;
-        bottom: 29%;
-        height: 18%;
-        background:
-          linear-gradient(135deg, transparent 0 26%, #244c31 27% 42%, transparent 43%),
-          linear-gradient(45deg, transparent 0 58%, #315f37 59% 72%, transparent 73%),
-          linear-gradient(180deg, transparent 0 58%, rgba(31, 72, 42, 0.86) 59% 100%);
-        opacity: 0.94;
-      }
-
-      .instant-title__pin {
-        width: 0.82rem;
-        height: 0.82rem;
-        border: 2px solid #3a2112;
-        border-radius: 50% 50% 50% 0;
-        background: #f6d15a;
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 219, 0.8),
-          0 0.18rem 0 rgba(45, 29, 16, 0.28);
-        transform: rotate(-45deg);
-      }
-
-      .instant-title__pin::after {
-        content: "";
-        position: absolute;
-        inset: 0.2rem;
-        border-radius: 50%;
-        background: #7b3427;
-      }
-
-      .instant-title__pin--burrow {
-        left: 31%;
-        bottom: 30%;
-      }
-
-      .instant-title__pin--crown {
-        right: 24%;
-        top: 28%;
-        background: #a7e266;
-      }
-
-      .instant-title__karu {
-        left: 54%;
-        bottom: 28%;
-        width: 1.65rem;
-        height: 1.16rem;
-        border: 1px solid rgba(45, 30, 15, 0.34);
-        border-radius: 55% 45% 48% 52%;
-        background:
-          radial-gradient(circle at 34% 42%, #2a2b1e 0 0.08rem, transparent 0.09rem),
-          radial-gradient(circle at 64% 41%, #2a2b1e 0 0.08rem, transparent 0.09rem),
-          linear-gradient(180deg, #fff3bf, #d69f54);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 252, 216, 0.72),
-          0 0.2rem 0 rgba(47, 55, 31, 0.22);
-        animation: instant-title-karu 1.9s ease-in-out infinite;
-      }
-
-      .instant-title__title-row {
-        position: relative;
-        z-index: 1;
-        display: grid;
-        grid-template-columns: 4rem auto 4rem;
-        align-items: center;
-        gap: 0.55rem;
-        margin-top: 0.66rem;
-      }
-
-      .instant-title strong {
-        margin: 0;
-        color: #f7c653;
-        font-family: Georgia, "Times New Roman", serif;
-        font-size: 4.8rem;
-        font-weight: 900;
-        letter-spacing: 0;
         line-height: 0.82;
-        -webkit-text-stroke: 0.11rem rgba(49, 27, 13, 0.96);
         text-shadow:
-          0 0.04em 0 #fff0a3,
-          0 0.11em 0 #7c3f1f,
-          0 0.18em 0 rgba(18, 52, 38, 0.52);
+          0 3px 0 #fff4bb,
+          3px 0 0 #075cb2,
+          0 -3px 0 #075cb2,
+          -3px 0 0 #075cb2,
+          3px 3px 0 #064f9b,
+          -3px 3px 0 #064f9b,
+          5px 8px 0 #063d83,
+          0 12px 0 rgba(4, 62, 125, 0.45);
       }
 
-      .instant-title__mark {
-        display: flex;
-        width: auto;
-        height: auto;
-        margin: 0;
-        gap: 0.22rem;
-        justify-content: flex-end;
+      .instant-title__letter-u {
+        position: relative;
+        display: inline-block;
       }
 
-      .instant-title__mark--right {
-        justify-content: flex-start;
+      .instant-title__sprout {
+        position: absolute;
+        left: 52%;
+        bottom: 82%;
+        width: clamp(1.4rem, 4vw, 3rem);
+        height: clamp(1.6rem, 4.4vw, 3.3rem);
+        transform: translateX(-50%);
       }
 
-      .instant-title__mark span {
-        position: static;
-        width: 0.76rem;
-        height: 0.76rem;
-        border: 1px solid rgba(47, 27, 13, 0.46);
-        border-radius: 50% 50% 50% 12%;
-        background:
-          radial-gradient(circle at 33% 26%, rgba(255, 255, 222, 0.9), transparent 38%),
-          linear-gradient(150deg, #c7ef75, #32a86d);
-        box-shadow:
-          inset 0 -1px 0 rgba(38, 78, 38, 0.2),
-          0 0.12rem 0 rgba(57, 33, 15, 0.2);
+      .instant-title__sprout::before,
+      .instant-title__sprout::after {
+        content: "";
+        position: absolute;
+        bottom: 42%;
+        width: 54%;
+        height: 42%;
+        border: 2px solid #0a5aa3;
+        background: linear-gradient(180deg, #baf06b, #4faf49);
+        box-shadow: inset 2px 2px 0 rgba(255, 250, 140, 0.42);
+      }
+
+      .instant-title__sprout::before {
+        left: 0;
+        border-radius: 100% 12% 84% 12%;
         transform: rotate(-24deg);
       }
 
-      .instant-title__mark span:nth-child(2) {
-        width: 1rem;
-        height: 1rem;
+      .instant-title__sprout::after {
+        right: 0;
+        border-radius: 12% 100% 12% 84%;
+        transform: rotate(24deg);
+      }
+
+      .instant-title__progress-area {
+        position: absolute;
+        top: auto;
+        left: 50%;
+        bottom: clamp(4.4rem, 13vh, 7.4rem);
+        display: grid;
+        align-content: start;
+        justify-items: center;
+        width: min(48rem, calc(100vw - 2.4rem));
+        height: auto;
+        min-height: 0;
+        transform: translateX(-50%);
+      }
+
+      .instant-title__progress {
+        position: relative;
+        width: min(37rem, 82vw);
+        height: clamp(1.72rem, 3vw, 2.4rem);
+        padding: 0.22rem;
+        overflow: hidden;
+        border: 2px solid #eaf1f8;
+        border-radius: 999px;
         background:
-          radial-gradient(circle at 33% 26%, rgba(255, 255, 222, 0.9), transparent 38%),
-          linear-gradient(150deg, #fde37a, #55b35b);
+          linear-gradient(180deg, #fdfefe, #8f9cac 18%, #39485b 19%, #687787 100%),
+          repeating-linear-gradient(
+            90deg,
+            transparent 0 calc(8.333% - 2px),
+            rgba(255, 255, 255, 0.78) calc(8.333% - 2px) 8.333%
+          );
+        box-shadow:
+          inset 0 2px 0 rgba(255, 255, 255, 0.9),
+          inset 0 -3px 0 rgba(31, 45, 61, 0.38),
+          0 4px 0 rgba(5, 62, 118, 0.42),
+          0 1.1rem 2.4rem rgba(4, 68, 124, 0.26);
+      }
+
+      .instant-title__progress::after {
+        content: "";
+        position: absolute;
+        inset: 0.32rem;
+        z-index: 3;
+        border-radius: inherit;
+        background: repeating-linear-gradient(
+          112deg,
+          transparent 0 calc(8.333% - 0.12rem),
+          rgba(69, 79, 93, 0.64) calc(8.333% - 0.1rem) 8.333%
+        );
+        pointer-events: none;
+      }
+
+      .instant-title__progress-fill {
+        position: relative;
+        display: block;
+        width: var(--loading-progress);
+        height: 100%;
+        overflow: visible;
+        border-radius: inherit;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0 18%, rgba(255, 255, 255, 0) 19%),
+          repeating-linear-gradient(
+            135deg,
+            rgba(255, 255, 255, 0.62) 0 0.44rem,
+            rgba(210, 220, 231, 0.58) 0.44rem 0.88rem
+          ),
+          linear-gradient(180deg, #ffffff 0%, #e7edf4 42%, #aeb9c7 43%, #f9fbfd 100%);
+        box-shadow:
+          inset 0 2px 0 rgba(255, 255, 255, 0.96),
+          inset 0 -3px 0 rgba(127, 143, 160, 0.46),
+          0 0 0.8rem rgba(255, 255, 255, 0.46);
+        transition: none;
+      }
+
+      .instant-title__progress-glint {
+        position: absolute;
+        right: -0.48rem;
+        top: 50%;
+        z-index: 4;
+        width: 1.45rem;
+        aspect-ratio: 1;
+        transform: translateY(-50%) rotate(45deg);
+        background:
+          linear-gradient(90deg, transparent 0 42%, #ffffff 43% 57%, transparent 58%),
+          linear-gradient(0deg, transparent 0 42%, #ffffff 43% 57%, transparent 58%);
+        filter: drop-shadow(0 0 0.45rem rgba(255, 255, 255, 0.9));
+        animation: instant-loading-glint 900ms ease-in-out infinite;
+      }
+
+      .instant-title--progress-empty .instant-title__progress-glint {
+        opacity: 0;
+      }
+
+      .instant-title__percent {
+        min-height: 1.2rem;
+        margin: 0.74rem 0 0;
+        color: rgba(244, 250, 255, 0.9);
+        font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+        font-size: clamp(0.72rem, 1.6vw, 0.95rem);
+        font-weight: 900;
+        line-height: 1.1;
+        text-shadow:
+          0 2px 0 rgba(5, 80, 144, 0.7),
+          0 0 0.8rem rgba(255, 255, 255, 0.26);
       }
 
       .instant-title [data-loading-status] {
-        position: relative;
-        z-index: 1;
-        min-height: 1.35rem;
-        margin: 0.42rem 0 0;
-        color: #412915;
-        font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
-        font-size: 0.8rem;
-        font-weight: 900;
-        letter-spacing: 0;
-        line-height: 1.35;
-        text-transform: uppercase;
-        text-shadow: 0 1px 0 rgba(255, 240, 188, 0.8);
-      }
-
-      .instant-title__spore-bar {
-        width: min(24rem, 78vw);
-        height: 1.04rem;
-        margin-top: 0.58rem;
-        padding: 0.16rem;
-        border: 2px solid #342113;
-        border-radius: 6px;
-        background: linear-gradient(180deg, #2d2115, #62401f);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 225, 156, 0.28),
-          0 1px 0 rgba(255, 244, 198, 0.5),
-          0 0.26rem 0 rgba(44, 30, 17, 0.18);
-      }
-
-      .instant-title__spore-bar::before,
-      .instant-title__spore-bar::after {
-        width: 0.34rem;
-        height: 0.34rem;
-        border-radius: 50%;
-        background:
-          radial-gradient(circle at 34% 28%, rgba(255, 248, 198, 0.95), transparent 44%),
-          linear-gradient(150deg, #d6f35c, #34a66d);
-        animation: instant-title-spore-drift 2.1s ease-in-out infinite;
-      }
-
-      .instant-title__spore-bar::before {
-        left: 0.74rem;
-        top: -0.42rem;
-      }
-
-      .instant-title__spore-bar::after {
-        right: 0.82rem;
-        bottom: -0.4rem;
-      }
-
-      .instant-title__spore-fill {
-        min-width: 1rem;
-        border-radius: 4px;
-        background:
-          radial-gradient(circle at 92% 50%, rgba(255, 252, 164, 0.96) 0 0.28rem, transparent 0.3rem),
-          repeating-radial-gradient(
-            circle at 24% 48%,
-            rgba(255, 245, 190, 0.45) 0 0.06rem,
-            transparent 0.07rem 0.42rem
-          ),
-          linear-gradient(90deg, #238763, #67bd43 58%, #e7d95a);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 218, 0.72),
-          inset 0 -0.16rem 0.18rem rgba(39, 88, 42, 0.34),
-          0 0 0.7rem rgba(173, 209, 71, 0.48);
-      }
-
-      .instant-title__spore-fill::before {
-        background:
-          radial-gradient(circle at 34% 28%, rgba(255, 255, 217, 0.98), rgba(255, 255, 217, 0.16) 38%, transparent 52%),
-          linear-gradient(150deg, #f6e96b, #52b34e);
-      }
-
-      .instant-title__spore-fill::after {
-        background:
-          linear-gradient(90deg, transparent 0 20%, rgba(255, 244, 177, 0.45) 36%, transparent 52%),
-          repeating-linear-gradient(
-            115deg,
-            transparent 0 0.56rem,
-            rgba(36, 91, 51, 0.3) 0.58rem 0.68rem,
-            transparent 0.72rem 1.18rem
-          );
-      }
-
-      .instant-title__spore-fill span {
-        background:
-          radial-gradient(circle at 34% 28%, rgba(255, 255, 232, 0.96), rgba(255, 255, 232, 0.2) 42%, transparent 58%),
-          #82cb5a;
-      }
-
-      .instant-title__ledger {
-        grid-template-columns: repeat(3, 1fr);
-        margin-top: 0.72rem;
-        color: #3d2715;
-        text-shadow: 0 1px 0 rgba(255, 236, 176, 0.82);
-      }
-
-      .instant-title__ledger span {
-        display: block;
-        min-width: 0;
-        padding: 0.42rem 0.46rem;
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
         overflow: hidden;
-        border: 1px solid rgba(92, 54, 23, 0.35);
-        border-radius: 6px;
-        background: linear-gradient(180deg, rgba(255, 239, 177, 0.72), rgba(184, 129, 61, 0.24));
-        text-overflow: ellipsis;
+        clip: rect(0, 0, 0, 0);
         white-space: nowrap;
       }
 
-      @media (max-width: 640px) {
-        .instant-title {
-          padding: 0.8rem;
+      @keyframes instant-loading-glint {
+        0%,
+        100% {
+          opacity: 0.65;
+          transform: translateY(-50%) rotate(45deg) scale(0.82);
+        }
+        50% {
+          opacity: 1;
+          transform: translateY(-50%) rotate(45deg) scale(1.08);
+        }
+      }
+
+      @media (max-width: 720px) {
+        .instant-title__sun {
+          left: 12vw;
+          top: 10vh;
         }
 
-        .instant-title > div {
-          padding: 0.58rem;
+        .instant-title__island--large {
+          left: 5vw;
+          top: 25vh;
         }
 
-        .instant-title__header {
-          grid-template-columns: 1fr auto;
+        .instant-title__island--mid {
+          right: 4vw;
+          top: 34vh;
         }
 
-        .instant-title__header span:last-child {
+        .instant-title__island--small,
+        .instant-title__island--tiny,
+        .instant-title__cloud--three {
           display: none;
         }
 
-        .instant-title__scene {
-          aspect-ratio: 1.48;
+        .instant-title__logo {
+          font-size: clamp(4rem, 22vw, 7rem);
+          text-shadow:
+            0 2px 0 #fff4bb,
+            2px 0 0 #075cb2,
+            0 -2px 0 #075cb2,
+            -2px 0 0 #075cb2,
+            2px 2px 0 #064f9b,
+            -2px 2px 0 #064f9b,
+            4px 6px 0 #063d83;
         }
 
-        .instant-title__title-row {
-          grid-template-columns: 2.2rem auto 2.2rem;
-          gap: 0.28rem;
+        .instant-title__progress-area {
+          bottom: clamp(3.3rem, 11vh, 5rem);
+        }
+      }
+
+      @media (max-width: 420px) {
+        .instant-title__frame {
+          inset: 0.65rem;
+          border-radius: 0.9rem;
         }
 
-        .instant-title strong {
-          font-size: 3.05rem;
-          -webkit-text-stroke-width: 0.07rem;
+        .instant-title__progress {
+          width: min(21rem, calc(100vw - 2rem));
         }
 
-        .instant-title__mark span {
-          width: 0.56rem;
-          height: 0.56rem;
-        }
-
-        .instant-title__mark span:nth-child(2) {
-          width: 0.74rem;
-          height: 0.74rem;
-        }
-
-        .instant-title [data-loading-status] {
-          font-size: 0.68rem;
-        }
-
-        .instant-title__ledger {
-          grid-template-columns: 1fr;
-          gap: 0.32rem;
-          margin-top: 0.54rem;
-        }
-
-        .instant-title__ledger span:nth-child(2),
-        .instant-title__ledger span:nth-child(3) {
-          display: none;
+        .instant-title__cloud--one,
+        .instant-title__cloud--two {
+          opacity: 0.62;
         }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .instant-title__water,
-        .instant-title__karu,
-        .instant-title__spore-bar::before,
-        .instant-title__spore-bar::after,
-        .instant-title__spore-fill::before,
-        .instant-title__spore-fill::after,
-        .instant-title__spore-fill span {
-          animation: none;
-        }
-      }
-
-      /* Creature-cell first paint: glossy gel pods before the bundled CSS takes over. */
-      .instant-title {
-        color: #07363f;
-        background:
-          radial-gradient(circle at 16% 20%, rgba(255, 233, 118, 0.78), transparent 15rem),
-          radial-gradient(circle at 82% 18%, rgba(255, 143, 173, 0.48), transparent 17rem),
-          radial-gradient(circle at 22% 86%, rgba(143, 242, 120, 0.5), transparent 20rem),
-          radial-gradient(circle at 78% 72%, rgba(34, 200, 216, 0.44), transparent 22rem),
-          linear-gradient(180deg, #85e8f2 0%, #8de1c5 43%, #caeb78 100%);
-      }
-
-      .instant-title::before {
-        inset: auto 3vw 0;
-        width: auto;
-        height: 33vh;
-        transform: none;
-        border-radius: 54% 54% 0 0;
-        background:
-          radial-gradient(ellipse at 24% 45%, rgba(143, 242, 120, 0.54) 0 23%, transparent 24%),
-          radial-gradient(ellipse at 74% 52%, rgba(34, 200, 216, 0.34) 0 26%, transparent 27%),
-          linear-gradient(
-            180deg,
-            rgba(255, 255, 255, 0) 0 30%,
-            rgba(86, 201, 122, 0.58) 31% 68%,
-            rgba(33, 158, 142, 0.62) 69% 100%
-          );
-        filter: none;
-        opacity: 1;
-      }
-
-      .instant-title::after {
-        background:
-          radial-gradient(circle at 18% 70%, rgba(255, 255, 255, 0.4) 0 0.42rem, transparent 0.48rem),
-          radial-gradient(circle at 80% 30%, rgba(255, 255, 255, 0.34) 0 0.36rem, transparent 0.42rem),
-          repeating-linear-gradient(160deg, rgba(255, 255, 255, 0.16) 0 1px, transparent 1px 10px);
-        mix-blend-mode: screen;
-        opacity: 0.5;
-      }
-
-      .instant-title > div {
-        width: min(42rem, calc(100vw - 2rem));
-        padding: 0.82rem;
-        border: 0.14rem solid rgba(255, 255, 255, 0.82);
-        border-radius: 2rem;
-        background:
-          radial-gradient(circle at 22% 12%, rgba(255, 255, 255, 0.88), transparent 8rem),
-          radial-gradient(circle at 83% 22%, rgba(255, 143, 173, 0.22), transparent 10rem),
-          linear-gradient(180deg, rgba(239, 255, 244, 0.9), rgba(126, 232, 220, 0.72));
-        box-shadow:
-          inset 0 0.12rem 0 rgba(255, 255, 255, 0.92),
-          inset 0 -0.5rem 1rem rgba(8, 117, 120, 0.14),
-          0 1.1rem 2.8rem rgba(8, 82, 89, 0.26);
-      }
-
-      .instant-title > div::after {
-        inset: 0.56rem;
-        border: 1px solid rgba(255, 255, 255, 0.68);
-        border-radius: 1.56rem;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 42%);
-        opacity: 1;
-      }
-
-      .instant-title__header,
-      .instant-title__ledger {
-        color: #064b56;
-        font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
-        text-shadow: none;
-      }
-
-      .instant-title__header {
-        border-radius: 999px;
-        background:
-          radial-gradient(circle at 16% 50%, rgba(255, 255, 255, 0.76) 0 0.22rem, transparent 0.24rem),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.22)), rgba(34, 200, 216, 0.24);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.82),
-          0 0.32rem 0.7rem rgba(8, 91, 104, 0.12);
-      }
-
-      .instant-title__header span:nth-child(2) {
-        color: #073f49;
-        background:
-          radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.94), transparent 36%),
-          linear-gradient(150deg, #ffe976, #ff8fad);
-      }
-
-      .instant-title__scene {
-        border-color: rgba(255, 255, 255, 0.78);
-        border-radius: 1.45rem;
-        background:
-          radial-gradient(circle at 18% 17%, #fff18c 0 7%, transparent 8%),
-          radial-gradient(circle at 79% 18%, rgba(255, 143, 173, 0.5) 0 9%, transparent 10%),
-          linear-gradient(180deg, #72dce8 0 36%, #9af4ce 37% 58%, #53c3c0 59% 71%, #d3ec75 72% 100%);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.82),
-          inset 0 -0.55rem 1.05rem rgba(8, 101, 112, 0.16);
-      }
-
-      .instant-title__scene::before {
-        background:
-          radial-gradient(circle at 22% 62%, rgba(255, 255, 255, 0.34) 0 0.28rem, transparent 0.32rem),
-          radial-gradient(circle at 62% 38%, rgba(255, 255, 255, 0.24) 0 0.2rem, transparent 0.24rem);
-        opacity: 0.7;
-      }
-
-      .instant-title__scene::after {
-        background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent 28%),
-          linear-gradient(90deg, rgba(7, 79, 92, 0.1), transparent 16% 84%, rgba(7, 79, 92, 0.1));
-      }
-
-      .instant-title__mountain {
-        background:
-          linear-gradient(135deg, transparent 0 48%, rgba(255, 255, 255, 0.3) 49% 63%, transparent 64%),
-          linear-gradient(180deg, #c5ed7a, #75bf6e 62%, #3da88d);
-      }
-
-      .instant-title__plateau {
-        background: linear-gradient(180deg, rgba(255, 235, 118, 0.7), rgba(92, 199, 112, 0.88));
-      }
-
-      .instant-title__water {
-        background:
-          repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.3) 0 2px, transparent 2px 0.72rem),
-          linear-gradient(90deg, #25a9c5, #83eee0 46%, #1c9bc2);
-        box-shadow:
-          inset 0 0.18rem 0 rgba(255, 255, 255, 0.42),
-          inset 0 -0.34rem 0 rgba(8, 98, 113, 0.18);
-      }
-
-      .instant-title__route {
-        background:
-          repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0 0.2rem, transparent 0.2rem 0.76rem),
-          linear-gradient(180deg, rgba(255, 233, 118, 0.96), rgba(255, 143, 173, 0.62));
-      }
-
-      .instant-title__trees {
-        background:
-          linear-gradient(135deg, transparent 0 26%, #248a63 27% 42%, transparent 43%),
-          linear-gradient(45deg, transparent 0 58%, #3da756 59% 72%, transparent 73%),
-          linear-gradient(180deg, transparent 0 58%, rgba(28, 142, 95, 0.84) 59% 100%);
-      }
-
-      .instant-title__pin {
-        border-color: rgba(255, 255, 255, 0.74);
-        background: #ffe976;
-      }
-
-      .instant-title__pin::after {
-        background: #ff8fad;
-      }
-
-      .instant-title__karu,
-      .instant-title__slime {
-        border-color: rgba(255, 255, 255, 0.68);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.72),
-          0 0.18rem 0.42rem rgba(8, 86, 96, 0.16);
-      }
-
-      .instant-title__karu {
-        background:
-          radial-gradient(circle at 34% 42%, #073f49 0 0.08rem, transparent 0.09rem),
-          radial-gradient(circle at 64% 41%, #073f49 0 0.08rem, transparent 0.09rem),
-          linear-gradient(180deg, #fff7ce, #ffe976);
-      }
-
-      .instant-title__slime {
-        width: 1.28rem;
-        aspect-ratio: 1.12;
-        border: 1px solid rgba(255, 255, 255, 0.68);
-        border-radius: 55% 45% 52% 48%;
-        background:
-          radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.92), transparent 34%),
-          linear-gradient(150deg, #ff8fad, #ffe976);
-        animation: instant-title-slime-bob 2.2s ease-in-out infinite;
-      }
-
-      .instant-title__slime--pink {
-        left: 23%;
-        bottom: 23%;
-      }
-
-      .instant-title__slime--mint {
-        right: 20%;
-        bottom: 25%;
-        width: 1.05rem;
-        background:
-          radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.92), transparent 34%),
-          linear-gradient(150deg, #8ff278, #22c8d8);
-        animation-delay: -0.72s;
-      }
-
-      .instant-title__cell-ring {
-        right: 31%;
-        top: 17%;
-        width: 3.2rem;
-        aspect-ratio: 1;
-        border: 0.12rem solid rgba(255, 255, 255, 0.58);
-        border-radius: 46% 54% 50% 50%;
-        box-shadow: inset 0 0 0.8rem rgba(255, 255, 255, 0.16);
-        animation: instant-title-cell-spin 7s linear infinite;
-      }
-
-      .instant-title strong {
-        color: #ffe976;
-        font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
-        font-size: clamp(3.5rem, 11vw, 5.8rem);
-        font-weight: 950;
-        -webkit-text-stroke: clamp(0.06rem, 0.22vw, 0.12rem) rgba(7, 81, 96, 0.86);
-        text-shadow:
-          0 0.045em 0 rgba(255, 255, 255, 0.94),
-          0 0.105em 0 rgba(255, 143, 173, 0.72),
-          0 0.17em 0 rgba(8, 91, 104, 0.34);
-      }
-
-      .instant-title__mark span,
-      .instant-title__mark span:nth-child(3) {
-        border-color: rgba(255, 255, 255, 0.74);
-        background:
-          radial-gradient(circle at 33% 26%, rgba(255, 255, 255, 0.92), transparent 38%),
-          linear-gradient(150deg, #8ff278, #22c8d8);
-      }
-
-      .instant-title__mark span:nth-child(2) {
-        background:
-          radial-gradient(circle at 33% 26%, rgba(255, 255, 255, 0.92), transparent 38%),
-          linear-gradient(150deg, #ffe976, #ff8fad);
-      }
-
-      .instant-title [data-loading-status] {
-        color: #064b56;
-        font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
-        text-shadow: none;
-      }
-
-      .instant-title__spore-bar {
-        border-color: rgba(255, 255, 255, 0.74);
-        border-radius: 999px;
-        background:
-          radial-gradient(circle at 14% 48%, rgba(255, 255, 255, 0.5) 0 0.18rem, transparent 0.2rem),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(7, 81, 96, 0.18));
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.82),
-          0 0.32rem 0.7rem rgba(8, 91, 104, 0.12);
-      }
-
-      .instant-title__spore-bar::before,
-      .instant-title__spore-bar::after,
-      .instant-title__spore-fill span {
-        background:
-          radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.96), transparent 44%),
-          linear-gradient(150deg, #ffe976, #8ff278);
-      }
-
-      .instant-title__spore-fill {
-        border-radius: 999px 58% 58% 999px;
-        background:
-          radial-gradient(circle at 92% 50%, rgba(255, 255, 255, 0.9) 0 0.28rem, transparent 0.3rem),
-          repeating-radial-gradient(
-            circle at 24% 48%,
-            rgba(255, 255, 255, 0.44) 0 0.06rem,
-            transparent 0.07rem 0.42rem
-          ),
-          linear-gradient(90deg, #22c8d8, #8ff278 58%, #ffe976);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.78),
-          inset 0 -0.16rem 0.18rem rgba(8, 91, 104, 0.22),
-          0 0 0.75rem rgba(143, 242, 120, 0.46);
-      }
-
-      .instant-title__spore-fill::before {
-        background:
-          radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.16) 38%, transparent 52%),
-          linear-gradient(150deg, #ffe976, #ff8fad);
-      }
-
-      .instant-title__ledger span {
-        border-color: rgba(255, 255, 255, 0.62);
-        border-radius: 999px;
-        background:
-          radial-gradient(circle at 16% 50%, rgba(255, 255, 255, 0.58) 0 0.16rem, transparent 0.18rem),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.18));
-        color: #064b56;
-      }
-
-      @keyframes instant-title-slime-bob {
-        0%,
-        100% {
-          transform: translateY(0) scale(1);
-        }
-        50% {
-          transform: translateY(-0.18rem) scale(1.05, 0.98);
-        }
-      }
-
-      @keyframes instant-title-cell-spin {
-        0% {
-          transform: rotate(0deg);
-        }
-        100% {
-          transform: rotate(360deg);
-        }
-      }
-
-      @media (max-width: 640px) {
-        .instant-title > div {
-          width: min(32rem, calc(100vw - 1rem));
-          padding: 0.62rem;
-          border-radius: 1.4rem;
-        }
-
-        .instant-title__scene {
-          aspect-ratio: 1.5;
-          border-radius: 1.1rem;
-        }
-
-        .instant-title strong {
-          font-size: clamp(3.05rem, 17vw, 4rem);
+        .instant-title *,
+        .instant-title::before,
+        .instant-title::after {
+          animation-duration: 1ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 1ms !important;
         }
       }
     </style>
   </head>
   <body>
     <div id="app">
-      <div class="instant-title" aria-label="Mossu loading screen">
-        <div>
-          <div class="instant-title__header" aria-hidden="true">
-            <span>Habitat glass atlas</span>
-            <span>boot</span>
-            <span>Mossu route</span>
+      <div class="instant-title instant-title--progress-empty" aria-label="Mossu loading screen">
+        <div class="instant-title__frame" aria-hidden="true"></div>
+        <div class="instant-title__art" aria-hidden="true">
+          <span class="instant-title__sun"></span>
+          <span class="instant-title__cloud instant-title__cloud--one"></span>
+          <span class="instant-title__cloud instant-title__cloud--two"></span>
+          <span class="instant-title__cloud instant-title__cloud--three"></span>
+          <span class="instant-title__island instant-title__island--large"></span>
+          <span class="instant-title__island instant-title__island--mid"></span>
+          <span class="instant-title__island instant-title__island--small"></span>
+          <span class="instant-title__island instant-title__island--tiny"></span>
+        </div>
+        <div class="instant-title__content">
+          <strong class="instant-title__logo" aria-label="Mossu">
+            <span aria-hidden="true">Moss</span
+            ><span class="instant-title__letter-u" aria-hidden="true"
+              >u<span class="instant-title__sprout"></span
+            ></span>
+          </strong>
+        </div>
+        <div class="instant-title__progress-area">
+          <div
+            class="instant-title__progress"
+            data-loading-bar
+            role="progressbar"
+            aria-label="Loading Mossu"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <span class="instant-title__progress-fill"><span class="instant-title__progress-glint"></span></span>
           </div>
-          <div class="instant-title__scene" aria-hidden="true">
-            <span class="instant-title__mountain instant-title__mountain--left"></span>
-            <span class="instant-title__mountain instant-title__mountain--right"></span>
-            <span class="instant-title__plateau"></span>
-            <span class="instant-title__water"></span>
-            <span class="instant-title__route"></span>
-            <span class="instant-title__trees"></span>
-            <span class="instant-title__pin instant-title__pin--burrow"></span>
-            <span class="instant-title__pin instant-title__pin--crown"></span>
-            <span class="instant-title__karu"></span>
-            <span class="instant-title__slime instant-title__slime--pink"></span>
-            <span class="instant-title__slime instant-title__slime--mint"></span>
-            <span class="instant-title__cell-ring"></span>
-          </div>
-          <div class="instant-title__title-row">
-            <div class="instant-title__mark" aria-hidden="true">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <strong>Mossu</strong>
-            <div class="instant-title__mark instant-title__mark--right" aria-hidden="true">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-          </div>
-          <p data-loading-status="" aria-live="polite">Polishing habitat glass</p>
-          <div class="instant-title__spore-bar" aria-hidden="true">
-            <span class="instant-title__spore-fill">
-              <span></span>
-              <span></span>
-              <span></span>
-            </span>
-          </div>
-          <div class="instant-title__ledger" aria-hidden="true">
-            <span>Burrow corral warm</span>
-            <span>Moss Crown route signal</span>
-            <span>Karu jelly signal</span>
-          </div>
+          <p class="instant-title__percent" data-loading-percent>0%</p>
+          <p data-loading-status="" aria-live="polite">Preparing Mossu</p>
         </div>
       </div>
     </div>

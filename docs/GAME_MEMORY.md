@@ -76,9 +76,11 @@ Mossu should read as cute without becoming too plastic or mascot-like. Motion sh
 - Recruited Karu persistence in local save state
 - Debug route jumps for focused route inspection
 - Debug save presets for fresh start, recruited Karu, populated handbook, water route, and summit-ready QA states
+- Isolated `?modelViewer=karu` Aqua workshop route for Karu/Mossu rig inspection, with macOS-style window chrome, Geist typography, playful creature controls, pose/lighting previews, timeline playback, and drag-to-orbit camera inspection
 - `npm run art:review` for named real-browser route screenshots using those debug jumps
 - `npm run art:compare` for route artifact/state validation after art review captures
 - `npm run karu:route` for a recruited-Karu route regression check from Burrow-side terrain through water banks, highland slopes, narrow ridge turns, and Moss Crown
+- `npm run agent:review` for an optional Swarms-ready five-lane review packet across art, performance, Karu follow quality, docs/wiki drift, and next-pass planning
 - Weekly wiki sync automation that compares repo docs/progress against local Mossu wiki pages after big passes
 - Premium instanced grass wind and Mossu push interaction
 - Mossu pressed-grass/path trace stamps tuned for readable route bands and shoulders without increasing the 34-stamp budget

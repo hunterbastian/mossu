@@ -22,6 +22,7 @@ Use this as the docs index before opening the longer historical `progress.md` lo
 | [Redesign Roadmap](REDESIGN_ROADMAP.md)     | Larger redesign plan and staged feature/polish direction.                                              |
 | [Rendering Notes](THREE_RENDERING_NOTES.md) | Three.js rendering guidance and local skill lookup reminder.                                           |
 | [Dev Scaffolding](DEV_SCAFFOLDING.md)       | App bootstrap, E2E hooks, and automation support notes.                                                |
+| [Agent Review](AGENT_REVIEW.md)             | Optional Swarms-ready review packet for art, perf, Karu, docs/wiki, and next-pass planning.            |
 
 ## Current Verification Bar
 
@@ -44,6 +45,14 @@ npm run perf:guard:candidate
 ```
 
 `npm run art:review` builds the production bundle, opens a real Chrome route pass, and writes named screenshots plus JSON under `output/art-review-route/`. `npm run qa` is the minimum shippable gate because it runs contract tests plus the production Vite build. A real desktop browser pass is still required for final visual judgement.
+
+For multi-agent planning around existing evidence, run:
+
+```bash
+npm run agent:review
+```
+
+This creates a dependency-free local report and Swarms-ready prompt pack under `output/agent-review/`.
 
 ## Current State
 

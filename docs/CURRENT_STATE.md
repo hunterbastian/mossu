@@ -15,6 +15,7 @@ The game currently supports walking, rolling, jumping, Breeze Float, swimming, f
 The current look is a cute painterly/anime creature-habitat route:
 
 - Aero creature interface UI with cool glass chrome, crisp handheld-RPG menu states, and small organism accents
+- the isolated Karu/model viewer now reads as a polished macOS Aqua workshop, with an app-window shell, traffic lights, Geist UI type, Geist Mono keys/timers, frosted panels, warm selected controls, a CSS meadow viewport, and drag-to-orbit inspection
 - default Nordic filmic render preset with lifted ACES exposure, pearl-cool fog, restrained bloom, and slightly lower render cap
 - warmer readable paths and wider clearings
 - sharper storybook tree silhouettes
@@ -38,6 +39,7 @@ Keep the look charming and readable. Do not push blur, bloom, fog, or glow so fa
 - Performance: `npm run perf:guard` runs the route guard with screenshots and frame metrics; the far ocean Gerstner plane keeps a reduced vertex grid for the default filmic pass.
 - Art review: `npm run art:review` builds production, opens headed Chrome with `?e2e=1&qaDebug=1&visualProbe=1`, uses debug route jumps, and captures named screenshots/JSON in `output/art-review-route/`; `npm run art:compare` validates those artifacts and can compare them to a saved summary baseline.
 - Karu route guard: `npm run karu:route` builds production, runs a state-first recruited-Karu route probe from Burrow toward Moss Crown, and fails if followers go missing or drift beyond the route threshold.
+- Agent review: `npm run agent:review` creates a dependency-free local review report plus a Swarms-ready prompt pack for art, perf, Karu, docs/wiki, and next-pass planning under `output/agent-review/`. Swarms is an optional workflow layer only, not a Mossu runtime dependency.
 
 ## Current Verification Bar
 
@@ -71,6 +73,7 @@ Final art judgement still needs a real desktop browser. Headless WebGL screensho
 - Local `.env.local` is ignored by git and DeepSec config, but should be treated as sensitive local state.
 - `CLAUDE.md` is a thin local pointer into `AGENTS.md`, `docs/CURRENT_STATE.md`, and `docs/NEXT_PASSES.md` so direct Claude Code sessions start with the same Mossu routing.
 - `Mossu weekly wiki sync` is active as a local weekly automation so wiki pages can be checked against repo docs after larger passes.
+- `npm run agent:review` can summarize existing route/perf/Karu/doc evidence, but fresh visual or performance calls still need the underlying capture commands first.
 
 ## Parked Work
 
