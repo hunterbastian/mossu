@@ -967,3 +967,13 @@ Populated handbook laptop-density pass:
 - Added a laptop-height-only density rule in `src/styles/handbook.css` for the character screen: tighter shell padding, smaller left-page preview, denser stats/cards, smaller inventory art chips, and corrected binder-spine positioning so it stays in the page gutter.
 - Rechecked screenshots at `output/handbook-playtest/laptop.png` and `output/handbook-playtest/compact-laptop.png`; route traits now show a full two-by-two card group above the fold, pouch samples are visible, and the browser reported no fatal console errors.
 - Verification so far: `npm run build` passed after the CSS change. The focused probe required approval for the known local static-server `listen EPERM` sandbox restriction.
+
+Karu route follow + Moss Crown destination silhouette pass:
+
+- Fixed the main Karu route-follow failure mode: recruited Karu could be restored from save/debug state while their meshes stayed near their original Burrow pocket, so route jumps and long climbs could leave HUD-visible followers hundreds of meters behind.
+- Stabilized recruited follow behavior with damped per-follower heading, short-lived dry-bank hold targets for non-brave deep-water edges, stronger far catch-up, lost-follower rehome slots, and smoother recruited vertical settling after large terrain/water changes.
+- Added follower telemetry to `render_game_to_text` plus `npm run karu:route` / `scripts/karuRouteProbe.mjs`, which checks three recruited Karu from Burrow-side terrain through slope banks, shallow water, highland slope, narrow ridge turns, and Moss Crown.
+- Strengthened the climb promise with brighter near/far destination mountain layers and a taller Moss Crown shrine silhouette with crown spires, moss caps, a moss ring, and a subtle glow disc.
+- Updated `docs/CURRENT_STATE.md`, `docs/NEXT_PASSES.md`, `docs/GAME_MEMORY.md`, and `docs/KNOWN_ISSUES.md` so future work treats Karu drift protection and the first destination-silhouette pass as current state, not untouched queue items.
+- Verification: `npm run format:check:all`, `npm run lint`, `npm run qa`, escalated `npm run karu:route`, `npm run test:e2e:smoke`, escalated `npm run test:e2e:visual`, and `git diff --check` pass. The route probe reports no follower failures; the Moss Crown checkpoint keeps all three recruited Karu under the 30m route threshold.
+- Browser/art caveat: `npm run art:review` built successfully, but headed Chrome route capture did not produce fresh artifacts in this Codex desktop session because the page/browser closed or screenshot capture timed out. Do not treat the older `output/art-review-route/` screenshots as current evidence for this pass; a manual real-browser art judgement is still the next visual risk.

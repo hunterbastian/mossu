@@ -286,13 +286,56 @@ export function buildShrine() {
   const shrine = new Group();
   const stoneMaterial = new MeshStandardMaterial({ color: "#f0e7ce", roughness: 1 });
   const mossMaterial = new MeshStandardMaterial({ color: "#8bb66f", roughness: 1 });
+  const crownStoneMaterial = new MeshStandardMaterial({ color: "#fff4d6", roughness: 0.96 });
+  const crownMossMaterial = new MeshStandardMaterial({ color: "#9bcf75", roughness: 1 });
+  const crownGlowMaterial = new MeshBasicMaterial({
+    color: "#fff6c7",
+    transparent: true,
+    opacity: 0.18,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
   const base = markCameraCollider(new Mesh(new CylinderGeometry(4.4, 5.6, 2.2, 7), stoneMaterial));
   const cap = markCameraCollider(new Mesh(new CylinderGeometry(3.5, 3.8, 3.2, 7), stoneMaterial));
   const moss = markCameraCollider(new Mesh(new CylinderGeometry(4.6, 4.4, 0.7, 7), mossMaterial));
   base.position.y = 1.1;
   cap.position.y = 3.6;
   moss.position.y = 2.2;
-  shrine.add(base, cap, moss);
+
+  const crown = new Group();
+  crown.name = "moss-crown-destination-silhouette";
+  const spires = [
+    { angle: -0.92, radius: 3.35, height: 5.2, width: 0.48 },
+    { angle: -0.42, radius: 3.8, height: 6.9, width: 0.56 },
+    { angle: 0, radius: 4.05, height: 8.4, width: 0.62 },
+    { angle: 0.42, radius: 3.8, height: 6.9, width: 0.56 },
+    { angle: 0.92, radius: 3.35, height: 5.2, width: 0.48 },
+  ] as const;
+  spires.forEach(({ angle, radius, height, width }, index) => {
+    const x = Math.sin(angle) * radius;
+    const z = Math.cos(angle) * radius * 0.72;
+    const pillar = markCameraCollider(
+      new Mesh(new CylinderGeometry(width * 0.66, width, height, 7), crownStoneMaterial),
+    );
+    pillar.position.set(x, 4.25 + height * 0.5, z);
+    pillar.rotation.z = -angle * 0.045;
+    const mossCap = new Mesh(new CylinderGeometry(width * 1.16, width * 1.02, 0.32, 7), crownMossMaterial);
+    mossCap.position.set(x, 4.25 + height + 0.16, z);
+    const tip = new Mesh(new ConeGeometry(width * 1.08, 1.24 + index * 0.04, 7), crownStoneMaterial);
+    tip.position.set(x, 4.25 + height + 0.88, z);
+    crown.add(pillar, mossCap, tip);
+  });
+  const mossRing = new Mesh(new TorusGeometry(4.34, 0.15, 8, 48), crownMossMaterial);
+  mossRing.rotation.x = Math.PI / 2;
+  mossRing.position.y = 6.05;
+  mossRing.scale.z = 0.72;
+  const crownGlow = new Mesh(new CircleGeometry(5.8, 32), crownGlowMaterial);
+  crownGlow.position.set(0, 8.4, -0.28);
+  crownGlow.scale.set(1.25, 1, 1);
+  crown.add(mossRing, crownGlow);
+
+  shrine.add(base, cap, moss, crown);
   shrine.position.set(18, sampleTerrainHeight(18, 214), 214);
   return shrine;
 }

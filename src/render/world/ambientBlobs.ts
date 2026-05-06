@@ -57,6 +57,9 @@ export interface AmbientBlob {
   home: Vector3;
   target: Vector3;
   velocity: Vector3;
+  followDirection: Vector3;
+  bankHoldTarget: Vector3;
+  bankHoldUntil: number;
   recruited: boolean;
   recruitedAt: number;
   leaderSlot: number;
@@ -95,6 +98,7 @@ export interface AmbientBlobBuildOptions {
 export interface AmbientBlobUpdateStats {
   speciesName: string;
   recruitedCount: number;
+  maxFollowerDistance: number;
   nearestRecruitableDistance: number | null;
   recruitedThisFrame: number;
   firstEncounterActive: boolean;
@@ -104,6 +108,19 @@ export interface AmbientBlobUpdateStats {
   regroupActive: boolean;
   callHeardActive: boolean;
   idleRoutineCount: number;
+  followers: AmbientBlobFollowerSnapshot[];
+}
+
+export interface AmbientBlobFollowerSnapshot {
+  id: string;
+  mood: KaruMood;
+  reaction: AmbientBlob["waterReaction"];
+  distanceToPlayer: number;
+  targetDistance: number;
+  speed: number;
+  x: number;
+  y: number;
+  z: number;
 }
 
 export const AMBIENT_BLOB_SPECIES_NAME = "Karu";
@@ -126,6 +143,8 @@ const FAUNA_COLLISION_VELOCITY_RESPONSE = 0.42;
 const FAUNA_RECRUITED_IDLE_PLAYER_SPEED = 0.65;
 const FAUNA_RECRUITED_IDLE_MAX_DISTANCE = 13.5;
 const FAUNA_RECRUITED_IDLE_SLOT_DISTANCE = 7.5;
+const FAUNA_FOLLOW_CATCHUP_DISTANCE = 28;
+const FAUNA_LOST_FOLLOW_REHOME_DISTANCE = 44;
 const FAUNA_NEST_WANDER_RADIUS = 2.8;
 const FAUNA_NEST_RETURN_RADIUS = 7.2;
 const FAUNA_NEST_SHY_LIMIT_RADIUS = 11.5;
@@ -142,6 +161,7 @@ const ambientSeparation = new Vector3();
 const ambientDesiredTarget = new Vector3();
 const ambientTrailDirection = new Vector3();
 const ambientFollowDirection = new Vector3();
+const ambientDesiredFollowDirection = new Vector3();
 const ambientRightDirection = new Vector3();
 const ambientLeaderSlot = new Vector3();
 const ambientBoidCohesion = new Vector3();
@@ -232,6 +252,40 @@ function setAmbientBlobVisualLod(blob: AmbientBlob, distanceToPlayer: number) {
 
 function planarDistance(a: Vector3, b: Vector3) {
   return Math.hypot(a.x - b.x, a.z - b.z);
+}
+
+function fixedStat(value: number, digits: number) {
+  return Number(value.toFixed(digits));
+}
+
+function isDeepWaterPoint(point: Vector3) {
+  const water = sampleWaterState(point.x, point.z);
+  return !!water && water.swimAllowed && water.depth >= FAUNA_DEEP_WATER_DEPTH;
+}
+
+function writeFollowerSnapshots(blobs: readonly AmbientBlob[], playerPosition: Vector3) {
+  const followers = blobs
+    .filter((blob) => blob.recruited)
+    .map((blob): AmbientBlobFollowerSnapshot => {
+      const distanceToPlayer = planarDistance(blob.group.position, playerPosition);
+      return {
+        id: blob.id,
+        mood: blob.mood,
+        reaction: blob.waterReaction,
+        distanceToPlayer: fixedStat(distanceToPlayer, 1),
+        targetDistance: fixedStat(planarDistance(blob.group.position, blob.target), 1),
+        speed: fixedStat(blob.velocity.length(), 2),
+        x: fixedStat(blob.group.position.x, 1),
+        y: fixedStat(blob.group.position.y, 1),
+        z: fixedStat(blob.group.position.z, 1),
+      };
+    });
+
+  return {
+    followers,
+    maxFollowerDistance:
+      followers.length > 0 ? fixedStat(Math.max(...followers.map((snapshot) => snapshot.distanceToPlayer)), 1) : 0,
+  };
 }
 
 function clampTargetAroundNest(blob: AmbientBlob, target: Vector3, radius: number) {
@@ -367,7 +421,13 @@ function countIdleRoutines(blobs: readonly AmbientBlob[], elapsed: number) {
 }
 
 /** Held interaction invites only the nearest Karu, so players move up to each one. */
-function recruitSingleBlob(blob: AmbientBlob, playerPosition: Vector3, elapsed: number, recruitedKaruIds: Set<string>) {
+function recruitSingleBlob(
+  blob: AmbientBlob,
+  playerPosition: Vector3,
+  playerHeading: number,
+  elapsed: number,
+  recruitedKaruIds: Set<string>,
+) {
   if (blob.recruited) {
     return 0;
   }
@@ -383,6 +443,8 @@ function recruitSingleBlob(blob: AmbientBlob, playerPosition: Vector3, elapsed: 
   blob.investigateAgainAt = elapsed + 5;
   blob.restUntil = elapsed + 0.18;
   blob.target.copy(playerPosition);
+  blob.followDirection.set(Math.sin(playerHeading), 0, Math.cos(playerHeading)).normalize();
+  blob.bankHoldUntil = 0;
   return 1;
 }
 
@@ -406,6 +468,7 @@ function syncAmbientBlobRecruitmentFromSave(
       blob.mode = "curious";
       blob.avoidPlayerUntil = 0;
       blob.restUntil = Math.min(blob.restUntil, elapsed + 0.12);
+      blob.bankHoldUntil = 0;
       return;
     }
 
@@ -413,6 +476,7 @@ function syncAmbientBlobRecruitmentFromSave(
     blob.regroupUntil = 0;
     blob.callRespondUntil = 0;
     blob.callWaveStartAt = 0;
+    blob.bankHoldUntil = 0;
     blob.rolling = false;
     blob.mode = "rest";
     blob.target.copy(blob.home);
@@ -445,7 +509,9 @@ function stageAmbientBlobCloseup(blobs: AmbientBlob[]) {
     blob.velocity.set(0, 0, 0);
     blob.mode = "rest";
     blob.restUntil = layout.restUntil;
+    blob.bankHoldUntil = 0;
     blob.facingYaw = facingYaw;
+    blob.followDirection.set(Math.sin(facingYaw), 0, Math.cos(facingYaw)).normalize();
     blob.group.rotation.y = facingYaw;
     blob.group.scale.setScalar(layout.groupScale);
   });
@@ -679,6 +745,9 @@ export function buildAmbientBlobs(options: AmbientBlobBuildOptions = {}) {
         home: new Vector3(x, y, z),
         target: new Vector3(x, y, z),
         velocity: new Vector3(),
+        followDirection: new Vector3(Math.sin(facingYaw), 0, Math.cos(facingYaw)).normalize(),
+        bankHoldTarget: new Vector3(x, y, z),
+        bankHoldUntil: 0,
         recruited: false,
         recruitedAt: 0,
         leaderSlot: pocketIndex * 3 + index,
@@ -728,9 +797,11 @@ export function updateAmbientBlobs(
   ambientBlobGroup.visible = !mapLookdown;
   syncAmbientBlobRecruitmentFromSave(blobs, frame.save.recruitedKaruIds, elapsed);
   if (mapLookdown) {
+    const followerDebug = writeFollowerSnapshots(blobs, frame.player.position);
     return {
       speciesName: AMBIENT_BLOB_SPECIES_NAME,
       recruitedCount: blobs.filter((blob) => blob.recruited).length,
+      maxFollowerDistance: followerDebug.maxFollowerDistance,
       nearestRecruitableDistance: null,
       recruitedThisFrame: 0,
       firstEncounterActive: false,
@@ -740,6 +811,7 @@ export function updateAmbientBlobs(
       regroupActive: false,
       callHeardActive: false,
       idleRoutineCount: countIdleRoutines(blobs, elapsed),
+      followers: followerDebug.followers,
     };
   }
 
@@ -754,7 +826,13 @@ export function updateAmbientBlobs(
     nearestBeforeRecruit.blob &&
     nearestBeforeRecruit.distance !== null &&
     nearestBeforeRecruit.distance <= FAUNA_RECRUIT_RADIUS
-      ? recruitSingleBlob(nearestBeforeRecruit.blob, playerPosition, elapsed, frame.save.recruitedKaruIds)
+      ? recruitSingleBlob(
+          nearestBeforeRecruit.blob,
+          playerPosition,
+          frame.player.heading,
+          elapsed,
+          frame.save.recruitedKaruIds,
+        )
       : 0;
   let mossuCollisionCount = 0;
   let firstEncounterActive = false;
@@ -770,9 +848,9 @@ export function updateAmbientBlobs(
   }
 
   blobs.forEach((blob, index) => {
-    const groundY = sampleTerrainHeight(blob.group.position.x, blob.group.position.z);
+    let groundY = sampleTerrainHeight(blob.group.position.x, blob.group.position.z);
     const toPlayer = ambientToPlayer.subVectors(playerPosition, blob.group.position);
-    const planarToPlayer = Math.hypot(toPlayer.x, toPlayer.z);
+    let planarToPlayer = Math.hypot(toPlayer.x, toPlayer.z);
     const farUnrecruited = !blob.recruited && planarToPlayer > FAUNA_VISIBLE_DISTANCE;
     blob.group.visible = !farUnrecruited;
     if (farUnrecruited) {
@@ -871,13 +949,20 @@ export function updateAmbientBlobs(
       blob.restUntil = elapsed + 0.3;
 
       if (playerPlanarSpeed > 0.25) {
-        ambientFollowDirection.copy(ambientPlayerMotion).normalize();
+        ambientDesiredFollowDirection.copy(ambientPlayerMotion).normalize();
       } else {
-        ambientFollowDirection.set(Math.sin(frame.player.heading), 0, Math.cos(frame.player.heading));
-        if (ambientFollowDirection.lengthSq() < 0.001) {
-          ambientFollowDirection.set(0, 0, 1);
+        ambientDesiredFollowDirection.set(Math.sin(frame.player.heading), 0, Math.cos(frame.player.heading));
+        if (ambientDesiredFollowDirection.lengthSq() < 0.001) {
+          ambientDesiredFollowDirection.set(0, 0, 1);
         }
       }
+      if (blob.followDirection.lengthSq() < 0.001) {
+        blob.followDirection.copy(ambientDesiredFollowDirection);
+      }
+      blob.followDirection
+        .lerp(ambientDesiredFollowDirection, 1 - Math.exp(-dt * (playerPlanarSpeed > 0.25 ? 7.6 : 4.2)))
+        .normalize();
+      ambientFollowDirection.copy(blob.followDirection);
       ambientRightDirection.set(ambientFollowDirection.z, 0, -ambientFollowDirection.x).normalize();
 
       const slotRow = Math.floor(blob.leaderSlot / 3);
@@ -940,8 +1025,49 @@ export function updateAmbientBlobs(
           ambientLeaderSlot.y = targetWater.surfaceY + 0.28;
         } else {
           blob.waterReaction = "bank_wait";
-          ambientLeaderSlot.copy(findNearestDryBank(ambientLeaderSlot, playerPosition));
+          const canReuseBankHold =
+            elapsed < blob.bankHoldUntil &&
+            planarDistance(blob.bankHoldTarget, ambientLeaderSlot) < 22 &&
+            planarDistance(blob.bankHoldTarget, playerPosition) < 34 &&
+            !isDeepWaterPoint(blob.bankHoldTarget);
+          if (canReuseBankHold) {
+            ambientLeaderSlot.copy(blob.bankHoldTarget);
+          } else {
+            ambientLeaderSlot.copy(findNearestDryBank(ambientLeaderSlot, playerPosition));
+            blob.bankHoldTarget.copy(ambientLeaderSlot);
+            blob.bankHoldUntil = elapsed + 1.25;
+          }
         }
+      }
+
+      if (planarToPlayer > FAUNA_LOST_FOLLOW_REHOME_DISTANCE) {
+        const catchUpBackDistance = 8.2 + slotRow * 1.5 + (blob.leaderSlot % 2) * 0.38 + tuning.backOffset * 0.42;
+        const catchUpSideDistance = (slotColumn * (2.25 + slotRow * 0.22) + slotJitter * 0.38) * tuning.sideScale;
+        ambientLeaderSlot
+          .copy(playerPosition)
+          .addScaledVector(ambientFollowDirection, -catchUpBackDistance)
+          .addScaledVector(ambientRightDirection, catchUpSideDistance);
+        ambientLeaderSlot.y = sampleTerrainHeight(ambientLeaderSlot.x, ambientLeaderSlot.z);
+        const catchUpWater = sampleWaterState(ambientLeaderSlot.x, ambientLeaderSlot.z);
+        if (catchUpWater && catchUpWater.depth > FAUNA_SHALLOW_WATER_DEPTH) {
+          const catchUpDeep = catchUpWater.swimAllowed && catchUpWater.depth >= FAUNA_DEEP_WATER_DEPTH;
+          if (catchUpDeep && blob.mood !== "brave") {
+            ambientLeaderSlot.copy(findNearestDryBank(ambientLeaderSlot, playerPosition));
+            blob.waterReaction = "bank_wait";
+            blob.bankHoldTarget.copy(ambientLeaderSlot);
+            blob.bankHoldUntil = elapsed + 0.9;
+          } else {
+            blob.waterReaction = catchUpDeep ? "float" : "splash";
+            ambientLeaderSlot.y = catchUpWater.surfaceY + (catchUpDeep ? 0.28 : 0.12);
+          }
+        }
+        blob.group.position.set(ambientLeaderSlot.x, ambientLeaderSlot.y + 0.08, ambientLeaderSlot.z);
+        blob.target.copy(ambientLeaderSlot);
+        blob.velocity.set(0, 0, 0);
+        blob.regroupUntil = Math.max(blob.regroupUntil, elapsed + 0.75);
+        blob.callRespondUntil = Math.max(blob.callRespondUntil, elapsed + 0.16);
+        toPlayer.subVectors(playerPosition, blob.group.position);
+        planarToPlayer = Math.hypot(toPlayer.x, toPlayer.z);
       }
 
       ambientBoidCohesion.set(0, 0, 0);
@@ -1041,7 +1167,16 @@ export function updateAmbientBlobs(
           );
       blob.target.copy(blob.group.position).addScaledVector(ambientBoidSteer, targetLead);
       blob.target.y = ambientLeaderSlot.y;
-      recruitedMoveStrength = followDistance > 18 ? 5.6 : followDistance > 9 ? 4.1 : followDistance > 3.4 ? 2.55 : 1.15;
+      recruitedMoveStrength =
+        followDistance > FAUNA_FOLLOW_CATCHUP_DISTANCE
+          ? 8.6
+          : followDistance > 18
+            ? 6.5
+            : followDistance > 9
+              ? 4.35
+              : followDistance > 3.4
+                ? 2.55
+                : 1.15;
       recruitedMoveStrength *=
         tuning.speedScale *
         (regroupActive && !waitingForCallWave ? 1.12 : 1) *
@@ -1272,6 +1407,7 @@ export function updateAmbientBlobs(
       mossuCollisionCount += 1;
     }
 
+    groundY = sampleTerrainHeight(blob.group.position.x, blob.group.position.z);
     const currentWater = sampleWaterState(blob.group.position.x, blob.group.position.z);
     if (blob.recruited && currentWater && currentWater.depth > FAUNA_SHALLOW_WATER_DEPTH) {
       const currentDeepWater = currentWater.swimAllowed && currentWater.depth >= FAUNA_DEEP_WATER_DEPTH;
@@ -1445,7 +1581,13 @@ export function updateAmbientBlobs(
       blob.recruited && currentWater && currentWater.depth > FAUNA_SHALLOW_WATER_DEPTH
         ? currentWater.surfaceY + (blob.waterReaction === "float" ? 0.36 : 0.12)
         : groundY + 0.08;
-    blob.group.position.y = visualWaterY + groundedBob;
+    const previousVisualY = blob.group.position.y;
+    const shouldSnapVisualY =
+      !Number.isFinite(previousVisualY) || !blob.recruited || Math.abs(previousVisualY - visualWaterY) > 9.5;
+    const smoothedVisualY = shouldSnapVisualY
+      ? visualWaterY
+      : MathUtils.damp(previousVisualY, visualWaterY, blob.waterReaction === "float" ? 8.5 : 12.5, dt);
+    blob.group.position.y = smoothedVisualY + groundedBob;
     blob.group.rotation.y = blob.facingYaw;
     blob.root.position.y = poseLift - poseDrop;
     blob.root.scale.setScalar(1 + joinPulse * 0.035);
@@ -1631,9 +1773,11 @@ export function updateAmbientBlobs(
   });
 
   const nearestAfterRecruit = findNearestRecruitable(blobs, playerPosition);
+  const followerDebug = writeFollowerSnapshots(blobs, playerPosition);
   return {
     speciesName: AMBIENT_BLOB_SPECIES_NAME,
     recruitedCount: blobs.filter((blob) => blob.recruited).length,
+    maxFollowerDistance: followerDebug.maxFollowerDistance,
     nearestRecruitableDistance: nearestAfterRecruit.distance,
     recruitedThisFrame,
     firstEncounterActive,
@@ -1643,5 +1787,6 @@ export function updateAmbientBlobs(
     regroupActive: blobs.some((blob) => blob.recruited && elapsed < blob.regroupUntil),
     callHeardActive: blobs.some((blob) => blob.recruited && elapsed < blob.callRespondUntil),
     idleRoutineCount: countIdleRoutines(blobs, elapsed),
+    followers: followerDebug.followers,
   };
 }

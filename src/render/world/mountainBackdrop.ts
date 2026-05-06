@@ -86,7 +86,7 @@ export function buildMountainBackdrop() {
     vertexColors: true,
     color: "#edf4e8",
     transparent: true,
-    opacity: 0.38,
+    opacity: 0.44,
     fog: true,
     depthWrite: false,
   });
@@ -94,7 +94,15 @@ export function buildMountainBackdrop() {
     vertexColors: true,
     color: "#d6edf0",
     transparent: true,
-    opacity: 0.24,
+    opacity: 0.29,
+    fog: true,
+    depthWrite: false,
+  });
+  const destinationMountainMaterial = new MeshBasicMaterial({
+    vertexColors: true,
+    color: "#f3f8eb",
+    transparent: true,
+    opacity: 0.5,
     fog: true,
     depthWrite: false,
   });
@@ -111,6 +119,11 @@ export function buildMountainBackdrop() {
     [-48, 172, 58, 78, 66, -0.52, 6],
     [62, 162, 64, 84, 70, 0.34, 6],
   ];
+  const crownBackdrop: readonly MountainPlacement[] = [
+    [-42, 218, 76, 126, 82, -0.08, 28],
+    [12, 228, 108, 166, 94, -0.02, 24],
+    [54, 218, 82, 132, 84, 0.12, 26],
+  ];
   const farBackdrop: readonly MountainPlacement[] = [
     [-260, 284, 160, 170, 150, -0.22, 2],
     [-168, 336, 210, 218, 176, 0.04, 5],
@@ -122,6 +135,7 @@ export function buildMountainBackdrop() {
   ];
 
   addMountainLayer(group, nearBackdrop, sharedGeometry, mountainMaterial);
+  addMountainLayer(group, crownBackdrop, sharedGeometry, destinationMountainMaterial, 1);
   addMountainLayer(group, farBackdrop, sharedGeometry, farMountainMaterial, -1);
 
   return group;

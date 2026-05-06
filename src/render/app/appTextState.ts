@@ -114,6 +114,7 @@ export function serializeE2eGameTextState({
     },
     fauna: {
       recruited: faunaStats.recruitedCount,
+      maxFollowerDistance: faunaStats.maxFollowerDistance,
       nearestRecruitableDistance:
         faunaStats.nearestRecruitableDistance === null ? null : fixed(faunaStats.nearestRecruitableDistance, 1),
       recruitedThisFrame: faunaStats.recruitedThisFrame,
@@ -123,6 +124,7 @@ export function serializeE2eGameTextState({
       regroupActive: faunaStats.regroupActive,
       callHeardActive: faunaStats.callHeardActive,
       idleRoutineCount: faunaStats.idleRoutineCount,
+      followers: faunaStats.followers,
     },
     camera,
     qualitySettings,
@@ -237,6 +239,7 @@ export function serializeGameTextState({
     fauna: {
       name: faunaStats.speciesName,
       recruited: faunaStats.recruitedCount,
+      maxFollowerDistance: faunaStats.maxFollowerDistance,
       nearestRecruitableDistance:
         faunaStats.nearestRecruitableDistance === null ? null : fixed(faunaStats.nearestRecruitableDistance, 1),
       recruitedThisFrame: faunaStats.recruitedThisFrame,
@@ -247,6 +250,7 @@ export function serializeGameTextState({
       regroupActive: faunaStats.regroupActive,
       callHeardActive: faunaStats.callHeardActive,
       idleRoutineCount: faunaStats.idleRoutineCount,
+      followers: faunaStats.followers,
     },
     audio: {
       ...movementAudio,

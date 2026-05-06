@@ -12,11 +12,12 @@ The normal runtime should use WebGLRenderer. The WebGPU request path can reach r
 
 Keep the explicit WebGL fallback behavior. Do not treat true WebGPU as shippable until the custom shader/material stack has a deliberate WebGPU-compatible pass.
 
-### Headless WebGL Screenshots Can Be Flaky
+### Browser WebGL Screenshots Can Be Flaky
 
-Some Playwright/headless screenshot probes have timed out or closed during heavy WebGL startup even when smoke tests, visual canvas probes, and perf guards pass. Prefer:
+Some Playwright/headless screenshot probes have timed out or closed during heavy WebGL startup even when smoke tests, visual canvas probes, and perf guards pass. Headed Chrome art-review captures can also close or time out in Codex desktop sessions even after the production build succeeds. Prefer:
 
 - `npm run test:e2e:visual` for deterministic canvas metrics.
+- `npm run karu:route` for state-first Karu follower route checks; pass `--screenshots` only when screenshot artifacts are explicitly needed.
 - `npm run perf:guard:headless` or the headed perf guard for route health.
 - A real desktop browser for final art, lighting, camera, and interaction judgement.
 

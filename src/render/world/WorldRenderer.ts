@@ -445,6 +445,7 @@ export class WorldRenderer {
   private faunaStats: AmbientBlobUpdateStats = {
     speciesName: AMBIENT_BLOB_SPECIES_NAME,
     recruitedCount: 0,
+    maxFollowerDistance: 0,
     nearestRecruitableDistance: null,
     recruitedThisFrame: 0,
     firstEncounterActive: false,
@@ -454,6 +455,7 @@ export class WorldRenderer {
     regroupActive: false,
     callHeardActive: false,
     idleRoutineCount: 0,
+    followers: [],
   };
   private readonly landingUp = new Vector3(0, 1, 0);
   private readonly landingQuat = new Quaternion();

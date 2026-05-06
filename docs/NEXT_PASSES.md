@@ -6,17 +6,17 @@ This is the prioritized work queue. Keep items narrow enough that Mossu remains 
 
 ## Do First
 
-1. **Wiki and repo-doc sync review**
-   `Mossu weekly wiki sync` now runs weekly against the repo and local wiki. Still do an immediate manual sync after substantial work when current direction changes before the next Monday run.
+1. **Opening minute polish**
+   Tighten the first 10 seconds: title transition, nest exit, first camera composition, first Karu read, and first route prompt.
 
-2. **Karu route playtest**
-   Play recruited Karu across slopes, water banks, shallow water, route turns, narrow clearings, and dense grass. Fix jitter, crowding, or lost followers before adding new companion systems.
+2. **Manual Karu route spot-check**
+   `npm run karu:route` now guards recruited-Karu drift across the route. Still do one real desktop-browser walk after companion-feel changes to judge cute motion, crowding, and narrow-turn readability.
 
-3. **Real-browser art review route**
+3. **Real-browser art review follow-up**
    Use `npm run art:review` for named Chrome screenshots, run `npm run art:compare` to catch artifact/state drift, then manually review any questionable route spots in Chrome/Dia before doing more art polish.
 
-4. **Opening minute polish**
-   Tighten the first 10 seconds: title transition, nest exit, first camera composition, first Karu read, and first route prompt.
+4. **Wiki and repo-doc sync review**
+   `Mossu weekly wiki sync` now runs weekly against the repo and local wiki. Still do an immediate manual sync after substantial work when current direction changes before the next Monday run.
 
 ## High-Value Small Passes
 
@@ -47,10 +47,10 @@ This is the prioritized work queue. Keep items narrow enough that Mossu remains 
 ## Medium Art And Feel Passes
 
 13. **Terrain and forest composition**
-    Improve mountain silhouettes, rock/snow/grass transitions, route overlooks, and biome-specific forest density.
+    Continue improving rock/snow/grass transitions, route overlooks, and biome-specific forest density now that Moss Crown has a stronger destination read.
 
-14. **Far mountain read**
-    Strengthen the distant peak layer so the route feels like it climbs toward a real place.
+14. **Route overlook read**
+    Tune specific early and mid-route viewpoints where the strengthened Moss Crown/highland silhouette still feels hidden, cluttered, or too hazy after screenshot review.
 
 15. **Tree silhouette polish**
     Keep trees storybook-sharp from gameplay distance; avoid broad blur or one-note green silhouettes.

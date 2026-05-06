@@ -72,11 +72,13 @@ Mossu should read as cute without becoming too plastic or mascot-like. Motion sh
 - Held-`E` individual recruitment for nearby Karu
 - Karu join feedback: one small `Karu joined Mossu's trail` prompt, briefly softened HUD, and a lightweight hop/glow pulse on the recruited Karu
 - Boids-style Karu follow behavior
+- Karu route follow stabilizers: damped per-follower heading, short-lived water-bank hold targets, lost-follower catch-up placement, and debug follower snapshots for route probes
 - Recruited Karu persistence in local save state
 - Debug route jumps for focused route inspection
 - Debug save presets for fresh start, recruited Karu, populated handbook, water route, and summit-ready QA states
 - `npm run art:review` for named real-browser route screenshots using those debug jumps
 - `npm run art:compare` for route artifact/state validation after art review captures
+- `npm run karu:route` for a recruited-Karu route regression check from Burrow-side terrain through water banks, highland slopes, narrow ridge turns, and Moss Crown
 - Weekly wiki sync automation that compares repo docs/progress against local Mossu wiki pages after big passes
 - Premium instanced grass wind and Mossu push interaction
 - Mossu pressed-grass/path trace stamps tuned for readable route bands and shoulders without increasing the 34-stamp budget
@@ -88,7 +90,7 @@ Mossu should read as cute without becoming too plastic or mascot-like. Motion sh
 Herd AI:
 
 - Recruited Karu should remain cute and blob-like, not robotic.
-- Followers should be playtested across slopes, banks, narrow clearings, and shallow water edges.
+- Followers now have route-level lost-follow protection; future companion work should preserve cute motion while improving celebration, visibility, and personality.
 - Recruitment is now individual and held, so each Karu should feel like a small deliberate invitation rather than a cluster pickup.
 - Karu recruitment now persists in save state; next work should make the saved companion state more visible and rewarding.
 
@@ -106,6 +108,7 @@ Terrain:
 - Layered heightmap feel: low-frequency rolling hills, ridged peaks, domain-warped organic shapes.
 - Color by height and slope: flat grass, steep rock, high snow, with smooth blending.
 - Mountains should be visible enough that the player can look up and admire them.
+- Moss Crown should feel like a real destination before arrival: far highland layers and the shrine crown silhouette should be readable from earlier climb checkpoints without becoming noisy props.
 - Route paths and clearings should stay readable without looking like hard roads: use warm dirt bands, soft edge strokes, and painted grass/brush clumps to imply travel.
 
 Anime / painterly finish:
@@ -185,10 +188,10 @@ Avoid visible tutorial prose that explains implementation. Keep copy in-world an
 
 ## Current Next Priorities
 
-1. Checkpoint the current water, Karu join, art-review, DeepSec, and documentation baseline before adding another big visual/system pass.
-2. Playtest the populated handbook: landmarks, forageables, and Karu notes should feel like a compact collectible field guide.
-3. Playtest recruited Karu across slopes, banks, shallow water, and dense grass.
-4. Review the generated `npm run art:review` route screenshots, then tune only the spots that still look hazy, cluttered, or hard to read.
-5. Polish terrain/forest composition: mountain silhouettes, route overlooks, snow/rock/grass transitions, and biome-specific forest density.
-6. Expand progression deliberately with shrine reward flavor, route memory moments, and companion presentation without turning the slice into a checklist-heavy game.
+1. Tighten the opening minute: title transition, nest exit, first camera composition, first Karu read, and first route prompt.
+2. Do a real desktop-browser manual Karu route spot-check after any companion-feel change; keep `npm run karu:route` as the automated drift/lost-follow guard.
+3. Review `npm run art:review` screenshots after destination-silhouette or terrain changes, then tune only the viewpoints that still look hazy, cluttered, or hard to read.
+4. Playtest the populated handbook: landmarks, forageables, and Karu notes should feel like a compact collectible field guide.
+5. Add shrine arrival reward flavor and Karu profile celebration without turning the slice into a checklist-heavy game.
+6. Continue terrain/forest composition around route overlooks, snow/rock/grass transitions, and biome-specific forest density.
 7. Keep route performance healthy with `npm run perf:guard:baseline` before and candidate route guards after visual-density changes.
