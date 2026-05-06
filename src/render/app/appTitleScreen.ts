@@ -43,12 +43,16 @@ export function createTitleScreen(onStart: () => void) {
         <span></span>
       </div>
       <h1 class="title-screen__logo">Mossu</h1>
-      <p class="title-screen__splash">Burrow Hollow creature cell</p>
+      <p class="title-screen__splash">Burrow Hollow habitat console</p>
       <div class="title-screen__actions">
         <button class="title-screen__button title-screen__button--play" type="button" aria-label="Begin Mossu">
           <span class="title-screen__button-icon" aria-hidden="true"></span>
           <span class="title-screen__button-label">Play</span>
         </button>
+        <a class="title-screen__button title-screen__button--karu-viewer" href="?modelViewer=karu" aria-label="Open Karu model viewer">
+          <span class="title-screen__button-icon" aria-hidden="true"></span>
+          <span class="title-screen__button-label">Karu Viewer</span>
+        </a>
         <button class="title-screen__button title-screen__button--settings" type="button" aria-label="Open settings">
           <span class="title-screen__button-icon" aria-hidden="true"></span>
           <span class="title-screen__button-label">Settings</span>
@@ -83,9 +87,9 @@ export function createOpeningSequenceOverlay() {
   overlay.setAttribute("aria-hidden", "true");
   overlay.innerHTML = `
     <div class="opening-sequence__panel">
-      <p class="opening-sequence__kicker">Habitat wake</p>
-      <strong>Burrow Hollow shimmers awake</strong>
-      <span>water light, route grass, and a first Karu stir near the lake path</span>
+      <p class="opening-sequence__kicker">Habitat boot</p>
+      <strong>Burrow Hollow comes online</strong>
+      <span>trail glass, route grass, and a first Karu signal near the lake path</span>
       <div class="opening-sequence__beats" aria-hidden="true">
         <i>meadow</i>
         <i>water</i>

@@ -177,6 +177,16 @@ export class ModelViewerApp {
   }
 
   private renderShell() {
+    const karuFirst = this.selectedModel === "karu";
+    const title = karuFirst ? "Karu Viewer" : "Character Viewer";
+    const kicker = karuFirst ? "Karu Workshop" : "Mossu Workshop";
+    const intro = karuFirst
+      ? "Open directly on Karu, test companion poses, and read the fluffy rig close-up before changes go back into the route."
+      : "Inspect one creature at a time, test poses, and tune the cozy world lighting before changes go back into the route.";
+    const stageHeading = karuFirst ? "Karu Companion" : "Mossu";
+    const initialNote = karuFirst
+      ? "Use this to tune fluffy puffs, big eyes, paws, and companion poses without searching the route for a herd."
+      : "Soft squash, small leg motion, and enough turntable movement to read the fluffy silhouette.";
     const modelButtons = MODEL_OPTIONS.map(
       (option) => `
         <button class="model-viewer__model-button" type="button" data-model="${option.id}">
@@ -198,9 +208,9 @@ export class ModelViewerApp {
     return `
       <section class="model-viewer__hero">
         <div class="model-viewer__title-block">
-          <p class="model-viewer__kicker">Mossu Workshop</p>
-          <h1>Character Viewer</h1>
-          <p>Inspect one creature at a time, test poses, and tune the cozy world lighting before changes go back into the route.</p>
+          <p class="model-viewer__kicker">${kicker}</p>
+          <h1>${title}</h1>
+          <p>${intro}</p>
         </div>
         <a class="model-viewer__back-link" href="./">Back to game</a>
       </section>
@@ -225,7 +235,7 @@ export class ModelViewerApp {
           <div class="model-viewer__stage-header">
             <div>
               <p class="model-viewer__label">Live Rig</p>
-              <h2 data-viewer-heading>Mossu</h2>
+              <h2 data-viewer-heading>${stageHeading}</h2>
             </div>
             <div class="model-viewer__stage-actions">
               <button class="model-viewer__icon-button" type="button" data-toggle-play>Pause</button>
@@ -243,8 +253,8 @@ export class ModelViewerApp {
         <aside class="model-viewer__panel model-viewer__panel--right">
           <div class="model-viewer__spec-card">
             <p class="model-viewer__label">Notes</p>
-            <h3 data-viewer-note-title>Mossu idle loop</h3>
-            <p data-viewer-note-copy>Soft squash, small leg motion, and enough turntable movement to read the fluffy silhouette.</p>
+            <h3 data-viewer-note-title>${karuFirst ? "Karu companion rig" : "Mossu idle loop"}</h3>
+            <p data-viewer-note-copy>${initialNote}</p>
           </div>
           <div class="model-viewer__spec-list">
             <div><span>Keyboard</span><strong>A / D rotate</strong></div>
@@ -257,7 +267,8 @@ export class ModelViewerApp {
   }
 
   private getInitialModel(): ModelViewerModel {
-    const requestedModel = new URLSearchParams(window.location.search).get("model");
+    const params = new URLSearchParams(window.location.search);
+    const requestedModel = params.get("model") ?? params.get("modelViewer");
     return requestedModel === "karu" || requestedModel === "mossu" ? requestedModel : "mossu";
   }
 
@@ -608,8 +619,8 @@ export class ModelViewerApp {
 
   private updateCamera(dt: number) {
     const orbit = this.manualOrbit + (this.turntable ? this.time * 0.24 : 0);
-    const radius = this.selectedModel === "mossu" ? 11.3 : 8.6;
-    const height = this.selectedModel === "mossu" ? 5.7 : 4.2;
+    const radius = this.selectedModel === "mossu" ? 11.3 : 6.8;
+    const height = this.selectedModel === "mossu" ? 5.7 : 3.25;
     this.cameraPosition.set(Math.sin(orbit) * radius, height, Math.cos(orbit) * radius);
     this.camera.position.lerp(this.cameraPosition, 1 - Math.exp(-dt * 7));
     this.camera.lookAt(this.getCameraTarget());
@@ -619,7 +630,7 @@ export class ModelViewerApp {
     if (this.selectedModel === "mossu") {
       CAMERA_TARGET.set(0, 1.6, 0);
     } else {
-      CAMERA_TARGET.set(0, 1.35, 0);
+      CAMERA_TARGET.set(0, 0.92, 0);
     }
     return CAMERA_TARGET;
   }

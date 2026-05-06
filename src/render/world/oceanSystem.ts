@@ -5,8 +5,8 @@
  * player is always near the visible center; waves are anchored to world space
  * via the shader so they don't slide as the mesh shifts.
  *
- * Vertex: 5 layered Gerstner waves give that rolling pirate-ocean motion.
- * Fragment: deep→turquoise gradient by wave height, fresnel rim with sky
+ * Vertex: 5 layered Gerstner waves give a calm Nordic-filmic swell.
+ * Fragment: deep→cool-cyan gradient by wave height, fresnel rim with sky
  * tint, sun specular, foam on crests, painterly shimmer, horizon fade.
  *
  * Sits below the floating sky island. Renders before everything else
@@ -68,12 +68,12 @@ const VERT = /* glsl */ `
     vec2 worldXZ = worldPos4.xz;
 
     vec3 offset = vec3(0.0);
-    // 5 waves: 2 long+slow rolling swells, 2 mid chop, 1 small detail
-    offset += gerstnerWave(vec2( 1.00,  0.20), 36.0, 0.60, 0.6, worldXZ, uTime);
-    offset += gerstnerWave(vec2( 0.45, -0.85), 24.0, 0.50, 0.85, worldXZ, uTime);
-    offset += gerstnerWave(vec2(-0.62,  0.78), 14.0, 0.42, 1.1, worldXZ, uTime);
-    offset += gerstnerWave(vec2( 0.92,  0.40),  8.0, 0.30, 1.5, worldXZ, uTime);
-    offset += gerstnerWave(vec2(-0.74, -0.32),  4.5, 0.18, 2.2, worldXZ, uTime);
+    // 5 waves: 2 long+slow swells, 2 mid chop, 1 restrained detail layer.
+    offset += gerstnerWave(vec2( 1.00,  0.20), 38.0, 0.52, 0.55, worldXZ, uTime);
+    offset += gerstnerWave(vec2( 0.45, -0.85), 26.0, 0.42, 0.78, worldXZ, uTime);
+    offset += gerstnerWave(vec2(-0.62,  0.78), 15.0, 0.34, 1.0, worldXZ, uTime);
+    offset += gerstnerWave(vec2( 0.92,  0.40),  8.5, 0.22, 1.35, worldXZ, uTime);
+    offset += gerstnerWave(vec2(-0.74, -0.32),  5.0, 0.12, 1.85, worldXZ, uTime);
 
     // Apply offset in object space so the mesh's rotation transports it correctly.
     // Since we rotated -PI/2 around X, world Y is local Z, world Z is -local Y.
@@ -130,7 +130,7 @@ const FRAG = /* glsl */ `
     vec3 viewDir = normalize(uCameraWorld - vWorldPos);
     float ndotv = clamp(dot(normal, viewDir), 0.0, 1.0);
 
-    // Body color: trough → crest reads as deep blue → turquoise
+    // Body color: trough → crest reads as deep blue → cool cyan.
     float heightT = clamp(vWaveHeight * 0.55 + 0.5, 0.0, 1.0);
     vec3 color = mix(uDeepColor, uShallowColor, heightT);
 
@@ -142,17 +142,17 @@ const FRAG = /* glsl */ `
     // Sun specular — sharp, small bright glint
     vec3 reflectDir = reflect(-uSunDir, normal);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 90.0);
-    color += uSunColor * spec * 0.95;
+    color += uSunColor * spec * 0.72;
 
     // Foam: bright caps on tall wave crests, broken up by shimmer noise
     float crest = smoothstep(0.5, 1.1, vWaveHeight);
     float shimmer = noise2d(vWorldPos.xz * 0.34 + uTime * 0.06);
-    float foamMask = smoothstep(0.55, 1.0, crest + shimmer * 0.28);
-    color = mix(color, uFoamColor, foamMask);
+    float foamMask = smoothstep(0.62, 1.08, crest + shimmer * 0.22);
+    color = mix(color, uFoamColor, foamMask * 0.82);
 
     // Body shimmer — subtle painterly variation everywhere
     float bodyNoise = noise2d(vWorldPos.xz * 0.62 + uTime * 0.13);
-    color += (bodyNoise - 0.5) * 0.05;
+    color += (bodyNoise - 0.5) * 0.035;
 
     // Distance fade — far ocean blends into horizon for a clean sea-meets-sky read
     float dist = length(uCameraWorld - vWorldPos);
@@ -167,7 +167,7 @@ const _scratchSunDir = new Vector3();
 
 export function buildOceanSystem(options: OceanOptions = {}): OceanSystem {
   const size = options.size ?? 8000;
-  const subdivisions = options.subdivisions ?? 200;
+  const subdivisions = options.subdivisions ?? 176;
   // Mossu's island shell extends down to ~y=-305 (lowerBelly bottom). Ocean sits
   // below that so the cliff/underbelly emerges from the sea cleanly.
   const level = options.level ?? -340;
@@ -184,11 +184,11 @@ export function buildOceanSystem(options: OceanOptions = {}): OceanSystem {
       uTime: { value: 0 },
       uSunDir: { value: new Vector3(0.4, 0.7, 0.3).normalize() },
       uSunColor: { value: new Color(0xfff1c8) },
-      uSkyColor: { value: new Color(options.skyColor ?? "#9bdff5") },
-      uHorizonColor: { value: new Color(options.horizonColor ?? "#faeed8") },
-      uDeepColor: { value: new Color(options.deepColor ?? "#0c3a55") },
-      uShallowColor: { value: new Color(options.shallowColor ?? "#44b8c7") },
-      uFoamColor: { value: new Color(options.foamColor ?? "#faffff") },
+      uSkyColor: { value: new Color(options.skyColor ?? "#cfe8ee") },
+      uHorizonColor: { value: new Color(options.horizonColor ?? "#edece4") },
+      uDeepColor: { value: new Color(options.deepColor ?? "#10384f") },
+      uShallowColor: { value: new Color(options.shallowColor ?? "#6bb7c8") },
+      uFoamColor: { value: new Color(options.foamColor ?? "#f7fbff") },
       uCameraWorld: { value: new Vector3() },
     },
   });

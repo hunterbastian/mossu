@@ -67,6 +67,7 @@ import {
 import {
   DEFAULT_QUALITY_SETTINGS,
   getQualitySettingOutput,
+  getQualityToneMappingExposure,
   normalizeQualitySettings,
   readQualitySettings,
   readQualitySettingsPatchFromControl,
@@ -307,7 +308,7 @@ export class GameApp {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.06;
+    this.renderer.toneMappingExposure = getQualityToneMappingExposure(this.qualitySettings.visualPreset);
     this.renderer.shadowMap.enabled = false;
     this.container.appendChild(this.renderer.domElement);
     this.underwaterEffect = new UnderwaterEffect(this.container);
@@ -682,7 +683,11 @@ export class GameApp {
     preferPixelRatio: boolean;
   }) {
     this.followCamera.setUserDistanceBias(this.qualitySettings.cameraDistance);
-    this.world.setVisualQualitySettings({ fogStrength: this.qualitySettings.fogStrength });
+    this.renderer.toneMappingExposure = getQualityToneMappingExposure(this.qualitySettings.visualPreset);
+    this.world.setVisualQualitySettings({
+      fogStrength: this.qualitySettings.fogStrength,
+      nordicFilmStrength: this.qualitySettings.visualPreset === "nordic" ? 1 : 0,
+    });
     this.updateBloomSettings();
     this.updateRenderResolutionPolicy({ preferSettingsPixelRatio: preferPixelRatio });
     this.perfPanelLastUpdatedAt = 0;
@@ -700,9 +705,10 @@ export class GameApp {
       return;
     }
 
+    const nordicFilm = this.qualitySettings.visualPreset === "nordic" ? 1 : 0;
     this.bloomPass.strength = BLOOM_STRENGTH * this.qualitySettings.bloomIntensity;
-    this.bloomPass.radius = BLOOM_RADIUS;
-    this.bloomPass.threshold = BLOOM_THRESHOLD;
+    this.bloomPass.radius = BLOOM_RADIUS * (1 + nordicFilm * 0.12);
+    this.bloomPass.threshold = BLOOM_THRESHOLD + nordicFilm * 0.04;
   }
 
   private syncQualitySettingsControls() {

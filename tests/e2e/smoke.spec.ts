@@ -309,12 +309,16 @@ test.describe("Mossu smoke", () => {
   });
 
   test("model viewer route loads", async ({ page }) => {
-    await page.goto("/?modelViewer=1&e2e=1", { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.goto("/?modelViewer=karu&e2e=1", { waitUntil: "domcontentloaded", timeout: 60_000 });
     await expect(page.locator("#app")).toBeVisible();
     await page.waitForFunction(
       () => window.__MOSSU_E2E__?.ready === true && window.__MOSSU_E2E__?.mode === "model_viewer",
       { timeout: 60_000 },
     );
     await expect(page.locator("canvas.model-viewer__canvas")).toBeVisible({ timeout: 60_000 });
+    const state = JSON.parse(await page.evaluate(() => window.render_game_to_text?.() ?? "{}")) as {
+      selectedModel?: string;
+    };
+    expect(state.selectedModel).toBe("karu");
   });
 });

@@ -1,4 +1,5 @@
-export type VisualQualityPreset = "soft" | "anime" | "crisp";
+export const VISUAL_QUALITY_PRESETS = ["soft", "anime", "crisp", "nordic"] as const;
+export type VisualQualityPreset = (typeof VISUAL_QUALITY_PRESETS)[number];
 
 export type QualitySettingKey =
   | "visualPreset"
@@ -57,9 +58,17 @@ export const QUALITY_PRESETS: Record<VisualQualityPreset, QualitySettings> = {
     fogStrength: 0.82,
     cameraDistance: -2,
   },
+  nordic: {
+    visualPreset: "nordic",
+    pixelRatioCap: 0.98,
+    bloomEnabled: true,
+    bloomIntensity: 0.72,
+    fogStrength: 1.02,
+    cameraDistance: 0,
+  },
 };
 
-export const DEFAULT_QUALITY_SETTINGS: QualitySettings = { ...QUALITY_PRESETS.anime };
+export const DEFAULT_QUALITY_SETTINGS: QualitySettings = { ...QUALITY_PRESETS.nordic };
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -70,8 +79,12 @@ function numberOrDefault(value: unknown, fallback: number, min: number, max: num
   return Number.isFinite(parsed) ? clamp(parsed, min, max) : fallback;
 }
 
+function isVisualQualityPreset(value: unknown): value is VisualQualityPreset {
+  return typeof value === "string" && (VISUAL_QUALITY_PRESETS as readonly string[]).includes(value);
+}
+
 function visualPresetOrDefault(value: unknown, fallback: VisualQualityPreset): VisualQualityPreset {
-  return value === "soft" || value === "anime" || value === "crisp" ? value : fallback;
+  return isVisualQualityPreset(value) ? value : fallback;
 }
 
 function booleanOrDefault(value: unknown, fallback: boolean) {
@@ -169,6 +182,19 @@ export function writeQualitySettings(settings: QualitySettings) {
   }
 }
 
+export function getQualityToneMappingExposure(preset: VisualQualityPreset) {
+  switch (preset) {
+    case "soft":
+      return 1.08;
+    case "anime":
+      return 1.06;
+    case "crisp":
+      return 1.02;
+    case "nordic":
+      return 1.14;
+  }
+}
+
 function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
 }
@@ -251,16 +277,14 @@ export function createQualitySettingsMarkup(surface: "title" | "pause") {
   return `
     <div class="quality-settings quality-settings--${surface}" data-quality-settings-surface="${surface}">
       <div class="quality-settings__presets" role="radiogroup" aria-label="Visual preset">
-        ${(["soft", "anime", "crisp"] as const)
-          .map(
-            (preset) => `
+        ${VISUAL_QUALITY_PRESETS.map(
+          (preset) => `
               <label class="quality-preset quality-preset--${preset}">
                 <input type="radio" name="${presetName}" value="${preset}" data-quality-setting="visualPreset" />
                 <span>${preset}</span>
               </label>
             `,
-          )
-          .join("")}
+        ).join("")}
       </div>
       <div class="quality-settings__grid">
         ${rangeControl("pixelRatioCap", "Pixel ratio", "Render scale cap")}

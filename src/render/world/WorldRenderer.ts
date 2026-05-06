@@ -363,6 +363,7 @@ export class WorldRenderer {
   private readonly scenePatchSunDir = new Vector3();
   private readonly worldLightingMood = createWorldLightingMoodState();
   private fogDensityScale = 1;
+  private nordicFilmStrength = 0;
   private elevationMood = 0;
   private waterDepthDebug = false;
   private grassLodFrame = 0;
@@ -825,9 +826,12 @@ export class WorldRenderer {
     return this.cameraCollisionMeshes;
   }
 
-  setVisualQualitySettings(settings: { fogStrength?: number }) {
+  setVisualQualitySettings(settings: { fogStrength?: number; nordicFilmStrength?: number }) {
     if (typeof settings.fogStrength === "number" && Number.isFinite(settings.fogStrength)) {
       this.fogDensityScale = MathUtils.clamp(settings.fogStrength, 0.7, 1.25);
+    }
+    if (typeof settings.nordicFilmStrength === "number" && Number.isFinite(settings.nordicFilmStrength)) {
+      this.nordicFilmStrength = MathUtils.clamp(settings.nordicFilmStrength, 0, 1);
     }
   }
 
@@ -1618,6 +1622,7 @@ export class WorldRenderer {
         typeof this.sun.userData.lowAngleWarmth === "number"
           ? MathUtils.clamp(this.sun.userData.lowAngleWarmth, 0, 1)
           : 0,
+      nordicFilm: this.nordicFilmStrength,
     });
     applySceneLightingColors(
       {

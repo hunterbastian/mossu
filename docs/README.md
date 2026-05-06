@@ -1,6 +1,6 @@
 # Mossu Docs
 
-Last updated: 2026-05-05
+Last updated: 2026-05-06
 
 Use this as the docs index before opening the longer historical `progress.md` log.
 
@@ -49,7 +49,7 @@ npm run perf:guard:candidate
 
 - Active runtime: TypeScript, Vite, Three.js, WebGLRenderer by default.
 - Current game slice: Burrow Hollow to Moss Crown Shrine, with walking, rolling, jumping, Breeze Float, swimming, forageables, landmarks, local save persistence, fresh-start reset, quality settings, map, handbook, pause, persistent held one-at-a-time Karu recruitment/following, and a quiet Karu join HUD beat.
-- Current art direction: cozy creature-habitat route, aqua handbook UI, painterly grass/water, light anime color grading, soft character outlines, readable route clearings, sharpened tree silhouettes, far-range atmosphere, hand-painted water/shoreline treatment, and a visible 3D orbiting sun that affects scene lighting with subtle ray bands.
+- Current art direction: cozy creature-habitat route, Aero creature-interface UI, default Nordic filmic lighting, painterly grass/water, soft character outlines, readable route clearings, sharpened tree silhouettes, far-range pearl fog, hand-painted water/shoreline treatment, and a visible 3D orbiting sun that affects scene lighting with subtle ray bands.
 - Current tech cleanup state: `npm prune` has removed stale extraneous packages, Playwright/perf temp output is workspace-local under `.codex-tmp`, and the known Three vendor chunk is managed rather than reported as an active Vite warning.
 - Current security tooling state: `.deepsec/` is initialized for Mossu with local-env/build/generated paths ignored. Regex scanning works; AI processing needs explicit source-export approval.
 - Current parked work: Mossback Titan is preserved in unused source files but removed from active simulation, world rendering, HUD copy, model viewer, and text-state output.

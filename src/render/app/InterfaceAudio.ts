@@ -74,7 +74,7 @@ export function isButtonLikeUiTarget(target: EventTarget | null) {
   }
 
   const button = target.closest<HTMLElement>(
-    "button, [role='button'], a.title-screen__tool-step, a.model-viewer__back-link",
+    "button, [role='button'], a.title-screen__button, a.title-screen__tool-step, a.model-viewer__back-link",
   );
   if (!button) {
     return false;

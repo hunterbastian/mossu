@@ -82,16 +82,16 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 
 async function startGame() {
-  setLoadingStatus("Growing the habitat gel", 36);
+  setLoadingStatus("Polishing habitat glass", 36);
   const { GameApp } = await import("./render/app/GameApp");
-  setLoadingStatus("Hatching route cells", 72);
+  setLoadingStatus("Mapping trail signals", 72);
   const game = await GameApp.create(appContainer);
   attachRuntime(game, "game");
   finishLoading();
 }
 
 async function startModelViewer() {
-  setLoadingStatus("Lighting the creature pod", 68);
+  setLoadingStatus("Lighting the creature console", 68);
   const { ModelViewerApp } = await import("./render/app/ModelViewerApp");
   const viewer = new ModelViewerApp(appContainer);
   attachRuntime(viewer, "model_viewer");

@@ -35,6 +35,17 @@ const PHASE_SHRINE_SUN = new Color("#fff3bf");
 const PHASE_SHRINE_FOG = new Color("#fff2df");
 const PHASE_SHRINE_SKY = new Color("#f3f7ff");
 const PHASE_SHRINE_GROUND = new Color("#d8e0c9");
+const NORDIC_FILM_SUN = new Color("#fff7df");
+const NORDIC_FILM_SKY = new Color("#e8f2f4");
+const NORDIC_FILM_GROUND = new Color("#c6d2c4");
+const NORDIC_FILM_FOG = new Color("#eceee9");
+const NORDIC_FILM_BACKGROUND_LOW = new Color("#d9eef0");
+const NORDIC_FILM_BACKGROUND_HIGH = new Color("#e8f0f2");
+const NORDIC_FILM_HORIZON = new Color("#edf3f1");
+const NORDIC_FILM_HAZE = new Color("#edece7");
+const NORDIC_FILM_CLOUD_BRIGHT = new Color("#fffdf5");
+const NORDIC_FILM_CLOUD_SHADOW = new Color("#c8d6d4");
+const _nordicBackgroundScratch = new Color();
 
 export type WorldLightingPhase = "meadow-day" | "highland-haze" | "ridge-silhouette" | "shrine-glow";
 
@@ -53,6 +64,7 @@ export interface WorldLightingMoodState {
   landmarkGlow: number;
   sunHaze: number;
   silhouetteContrast: number;
+  nordicFilm: number;
 }
 
 export interface WorldLightingMoodInput {
@@ -64,6 +76,7 @@ export interface WorldLightingMoodInput {
   decisionClarity: number;
   orbitHeight: number;
   lowAngleWarmth: number;
+  nordicFilm?: number;
 }
 
 export function createWorldLightingMoodState(): WorldLightingMoodState {
@@ -82,6 +95,7 @@ export function createWorldLightingMoodState(): WorldLightingMoodState {
     landmarkGlow: 0,
     sunHaze: 0,
     silhouetteContrast: 0,
+    nordicFilm: 0,
   };
 }
 
@@ -170,6 +184,7 @@ export function writeWorldLightingMood(target: WorldLightingMoodState, input: Wo
     0,
     0.34,
   );
+  target.nordicFilm = MathUtils.clamp(input.nordicFilm ?? 0, 0, 1);
 }
 
 /**
@@ -238,6 +253,7 @@ export function applySceneLightingMood(
   const landmarkGlow = worldMood?.landmarkGlow ?? 0;
   const watercolorFog = worldMood?.watercolorFog ?? 0;
   const silhouetteContrast = worldMood?.silhouetteContrast ?? 0;
+  const nordicFilm = MathUtils.clamp(worldMood?.nordicFilm ?? 0, 0, 1);
   const orbitKeyStrength = MathUtils.lerp(0.84, 1.12, orbitHeight) + lowAngleWarmth * 0.05;
   lights.sun.intensity =
     (MathUtils.lerp(3.42, 3.14, m) + cinematicLift * 0.18 + breath * 0.018 + warmHaze * 0.06 + landmarkGlow * 0.08) *
@@ -258,7 +274,17 @@ export function applySceneLightingMood(
   lights.fog.density =
     (MathUtils.lerp(0.0004, 0.00054, m) - cinematicLift * 0.000025) *
     MathUtils.lerp(1, 1.08, watercolorFog) *
-    MathUtils.lerp(1, 0.88, worldMood?.decisionClarity ?? 0);
+    MathUtils.lerp(1, 0.88, worldMood?.decisionClarity ?? 0) *
+    MathUtils.lerp(1, 1.06, nordicFilm);
+
+  if (nordicFilm > 0) {
+    lights.sun.intensity *= MathUtils.lerp(1, 0.9, nordicFilm);
+    lights.ambient.intensity *= MathUtils.lerp(1, 0.96, nordicFilm);
+    lights.hemi.intensity *= MathUtils.lerp(1, 1.02, nordicFilm);
+    lights.bounce.intensity *= MathUtils.lerp(1, 0.9, nordicFilm);
+    lights.meadowGlow.intensity *= MathUtils.lerp(1, 0.82, nordicFilm);
+    lights.alpineGlow.intensity *= MathUtils.lerp(1, 0.88, nordicFilm);
+  }
 }
 
 /**
@@ -297,6 +323,7 @@ export function applySceneLightingColors(
       ? MathUtils.clamp(targets.sun.userData.lowAngleWarmth, 0, 1)
       : 0;
   const tints = phaseTints(worldMood?.phase ?? "meadow-day");
+  const nordicFilm = MathUtils.clamp(worldMood?.nordicFilm ?? 0, 0, 1);
   const phaseStrength = MathUtils.clamp(
     (worldMood?.watercolorFog ?? 0) * 0.18 +
       (worldMood?.landmarkGlow ?? 0) * 0.34 +
@@ -307,17 +334,23 @@ export function applySceneLightingColors(
   targets.sun.color.copy(pairs.sun.lowland).lerp(pairs.sun.highland, m);
   targets.sun.color.lerp(LOW_SUN_WARM, lowAngleWarmth * 0.42);
   targets.sun.color.lerp(tints.sun, phaseStrength);
+  targets.sun.color.lerp(NORDIC_FILM_SUN, nordicFilm * 0.52);
   targets.hemi.color.copy(pairs.skyFill.lowland).lerp(pairs.skyFill.highland, m);
   targets.hemi.color.lerp(tints.sky, phaseStrength * 0.5);
+  targets.hemi.color.lerp(NORDIC_FILM_SKY, nordicFilm * 0.56);
   targets.hemi.groundColor.copy(pairs.skyGround.lowland).lerp(pairs.skyGround.highland, m);
   targets.hemi.groundColor.lerp(tints.ground, phaseStrength * 0.46);
+  targets.hemi.groundColor.lerp(NORDIC_FILM_GROUND, nordicFilm * 0.44);
   targets.fog.color.copy(pairs.fog.lowland).lerp(pairs.fog.highland, m);
   targets.fog.color.lerp(LOW_SUN_FOG, lowAngleWarmth * 0.15 * (1 - m * 0.42));
   targets.fog.color.lerp(tints.fog, phaseStrength * 0.72);
+  targets.fog.color.lerp(NORDIC_FILM_FOG, nordicFilm * 0.64);
   if (targets.background) {
     targets.background.copy(pairs.background.lowland).lerp(pairs.background.highland, m);
     targets.background.lerp(LOW_SUN_BACKGROUND, lowAngleWarmth * 0.065 * (1 - m * 0.35));
     targets.background.lerp(tints.sky, phaseStrength * 0.32);
+    _nordicBackgroundScratch.copy(NORDIC_FILM_BACKGROUND_LOW).lerp(NORDIC_FILM_BACKGROUND_HIGH, m);
+    targets.background.lerp(_nordicBackgroundScratch, nordicFilm * 0.66);
   }
 }
 
@@ -335,6 +368,7 @@ export function getAtmosphereHorizonTints(
 ) {
   const m = MathUtils.clamp(mood, 0, 1);
   const tints = phaseTints(worldMood?.phase ?? "meadow-day");
+  const nordicFilm = MathUtils.clamp(worldMood?.nordicFilm ?? 0, 0, 1);
   const phaseStrength = MathUtils.clamp(
     (worldMood?.watercolorFog ?? 0) * 0.24 + (worldMood?.landmarkGlow ?? 0) * 0.22,
     0,
@@ -342,12 +376,16 @@ export function getAtmosphereHorizonTints(
   );
   outHorizonTint.copy(HORIZON_TINT_LOW).lerp(HORIZON_TINT_HIGH, m * 0.62);
   outHorizonTint.lerp(tints.sky, phaseStrength);
+  outHorizonTint.lerp(NORDIC_FILM_HORIZON, nordicFilm * 0.58);
   outHorizonHaze.copy(HORIZON_HAZE_LOW).lerp(HORIZON_HAZE_HIGH, m * 0.5);
   outHorizonHaze.lerp(tints.fog, phaseStrength * 0.86);
+  outHorizonHaze.lerp(NORDIC_FILM_HAZE, nordicFilm * 0.62);
   outCloudBright.copy(CLOUD_BRIGHT_LOW).lerp(CLOUD_BRIGHT_HIGH, m * 0.35);
   outCloudBright.lerp(tints.sun, phaseStrength * 0.34);
+  outCloudBright.lerp(NORDIC_FILM_CLOUD_BRIGHT, nordicFilm * 0.54);
   outCloudShadow.copy(CLOUD_SHADOW_LOW).lerp(CLOUD_SHADOW_HIGH, m * 0.28);
   outCloudShadow.lerp(tints.ground, MathUtils.clamp((worldMood?.cloudShadow ?? 0) * 0.34, 0, 0.18));
+  outCloudShadow.lerp(NORDIC_FILM_CLOUD_SHADOW, nordicFilm * 0.46);
 }
 
 const _ambScratch = new Color();
@@ -396,10 +434,10 @@ export function writePatchSceneLightingUniforms(
     u.uSceneCloudShadow.value = worldMood?.cloudShadow ?? 0;
   }
   if (u.uSceneWaterSparkle) {
-    u.uSceneWaterSparkle.value = worldMood?.waterSparkle ?? 0;
+    u.uSceneWaterSparkle.value = (worldMood?.waterSparkle ?? 0) * MathUtils.lerp(1, 0.76, worldMood?.nordicFilm ?? 0);
   }
   if (u.uSceneSunHaze) {
-    u.uSceneSunHaze.value = worldMood?.sunHaze ?? 0;
+    u.uSceneSunHaze.value = (worldMood?.sunHaze ?? 0) * MathUtils.lerp(1, 1.06, worldMood?.nordicFilm ?? 0);
   }
 }
 

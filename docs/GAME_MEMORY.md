@@ -1,6 +1,6 @@
 # Mossu Game Memory
 
-Last updated: 2026-05-05
+Last updated: 2026-05-06
 
 This file is the durable project memory for Mossu. It captures the game we are making, the current design direction, and the decisions that should guide future implementation.
 
@@ -64,7 +64,7 @@ Mossu should read as cute without becoming too plastic or mascot-like. Motion sh
 - Inventory/profile screen
 - Region map
 - Pause menu
-- Quality/settings menu with Soft / Anime / Crisp visual presets, pixel-ratio cap, bloom, fog strength, and camera distance controls
+- Quality/settings menu with Soft / Anime / Crisp / Nordic visual presets, pixel-ratio cap, bloom, fog strength, and camera distance controls
 - Local save persistence with pause-menu save status
 - Fresh-start reset from pause or `window.mossuDebug.resetProgress()`
 - Route/progression summary used by the handbook and pause menu
@@ -145,11 +145,12 @@ Forest:
 Water:
 
 - Stylized/cartoon water with soft edges, depth tint, bank foam/milkiness, sparkles, and flow.
-- Anime/cel-shaded water now leans on simplified turquoise depth ramps, hand-drawn foam strokes, tiny stylized sparkle strokes, and soft shoreline milk. Close camera views should show readable bank milk and depth bands without making swimming or route guidance less clear.
+- Anime/cel-shaded water now leans on simplified blue-green depth ramps, hand-drawn foam strokes, tiny restrained sparkle strokes, and soft shoreline milk. Close camera views should show readable bank milk and depth bands without making swimming or route guidance less clear.
 
 Atmosphere:
 
 - Misty valleys, exponential fog, soft mountain haze.
+- Default lighting should read as Nordic filmic: lifted ACES exposure, cool pearl fog, clean highlights, restrained bloom, and matte midtones rather than heavy glow.
 - BotW-style readable depth, not dense horror fog.
 - The visible sun should feel like part of the world: it orbits around the route, drives the directional-light mood to a degree, and stays subtle enough that Mossu and the route remain readable.
 - Sky softness should come from warm sun haze, layered cream-blue cloud puffs, high watercolor veils, and very light moving cloud-shadow patches across grass.
@@ -157,12 +158,13 @@ Atmosphere:
 
 ## UI Direction
 
-The UI is moving toward a cozy collectible handbook:
+The UI is moving toward an Aero creature interface:
 
-- clear keycap controls
-- frosted-glass / handheld RPG surface language
+- cool Windows 7-style glass chrome without expensive runtime glass effects
+- crisp handheld RPG / Pokemon-like menu grouping, tabs, action rows, and readable keycap controls
+- small Spore-like organism accents for Karu, pouch samples, route signals, and specimen slots
 - profile/inventory that treats landmarks and gathered goods as keepsakes
-- map that is readable as an illustrated route board, not only raw 3D overhead terrain
+- map that is readable as an illustrated route board inside a clear glass route window
 - future collectible cards with holographic treatment
 
 Avoid visible tutorial prose that explains implementation. Keep copy in-world and concise.

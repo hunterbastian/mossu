@@ -1,6 +1,6 @@
 # Mossu Current State
 
-Last updated: 2026-05-05
+Last updated: 2026-05-06
 
 This is the short current-state brief for future agents. Use it before opening the longer chronological `progress.md` log.
 
@@ -14,12 +14,13 @@ The game currently supports walking, rolling, jumping, Breeze Float, swimming, f
 
 The current look is a cute painterly/anime creature-habitat route:
 
-- aqua handheld/field-guide UI
+- Aero creature interface UI with cool glass chrome, crisp handheld-RPG menu states, and small organism accents
+- default Nordic filmic render preset with lifted ACES exposure, pearl-cool fog, restrained bloom, and slightly lower render cap
 - warmer readable paths and wider clearings
 - sharper storybook tree silhouettes
 - hand-painted grass clumps and reactive grass motion
-- turquoise water with shoreline milk, foam strokes, sparkles, and readable depth bands
-- soft far-range fog and warm sun haze
+- cooler blue-green water with shoreline milk, foam strokes, restrained sparkles, and readable depth bands
+- soft pearl far-range fog and controlled warm sun haze
 - a small world-space 3D sun that drives scene lighting and subtle sky ray bands
 - a taller Moss Crown shrine/crown silhouette plus destination peak layers that read from earlier climb checkpoints
 
@@ -34,7 +35,7 @@ Keep the look charming and readable. Do not push blur, bloom, fog, or glow so fa
 - CSS: `src/styles.css` imports semantic chunks under `src/styles/`; `src/styles/theme-overrides.css` now imports named late-cascade theme layers under `src/styles/theme/`.
 - Water: `src/render/world/waterSystem.ts` plus `src/render/world/waterProfiles.ts`; underfill must keep the same vertex wave displacement as the main water surface.
 - Debug hooks: `?qaDebug=1` exposes `window.mossuDebug`, including route jumps and named save presets; `?e2e=1` keeps browser tests lightweight. Normal player URLs do not expose `advanceTime`, `render_game_to_text`, or `__MOSSU_E2E__`.
-- Performance: `npm run perf:guard` runs the route guard with screenshots and frame metrics.
+- Performance: `npm run perf:guard` runs the route guard with screenshots and frame metrics; the far ocean Gerstner plane keeps a reduced vertex grid for the default filmic pass.
 - Art review: `npm run art:review` builds production, opens headed Chrome with `?e2e=1&qaDebug=1&visualProbe=1`, uses debug route jumps, and captures named screenshots/JSON in `output/art-review-route/`; `npm run art:compare` validates those artifacts and can compare them to a saved summary baseline.
 - Karu route guard: `npm run karu:route` builds production, runs a state-first recruited-Karu route probe from Burrow toward Moss Crown, and fails if followers go missing or drift beyond the route threshold.
 

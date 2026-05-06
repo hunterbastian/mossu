@@ -10,7 +10,13 @@ import {
   shouldUseRetroTexture,
 } from "../../src/render/app/appPostProcessing";
 import { BLOOM_MIN_PIXEL_RATIO, POST_PROCESSING_MIN_PIXEL_RATIO } from "../../src/render/app/appRuntimeConfig";
-import { normalizeQualitySettings, QUALITY_PRESETS } from "../../src/render/app/appQualitySettings";
+import {
+  DEFAULT_QUALITY_SETTINGS,
+  getQualityToneMappingExposure,
+  normalizeQualitySettings,
+  QUALITY_PRESETS,
+  VISUAL_QUALITY_PRESETS,
+} from "../../src/render/app/appQualitySettings";
 import { Color } from "three";
 import { createGrassMesh, getGrassMeshLodStats } from "../../src/render/world/grassSystem";
 import { MOSSU_TRACE_STAMP_COUNT } from "../../src/render/world/WorldRenderer";
@@ -80,6 +86,15 @@ export function runRenderQualityContracts() {
   assert(
     crisp.pixelRatioCap > QUALITY_PRESETS.soft.pixelRatioCap,
     "crisp preset keeps a higher render scale than soft",
+  );
+  const nordic = normalizeQualitySettings(QUALITY_PRESETS.nordic);
+  assert(VISUAL_QUALITY_PRESETS.includes("nordic"), "nordic filmic preset is available in quality settings");
+  assert(DEFAULT_QUALITY_SETTINGS.visualPreset === "nordic", "nordic filmic is the default player-facing preset");
+  assert(nordic.bloomIntensity < QUALITY_PRESETS.anime.bloomIntensity, "nordic preset keeps bloom below anime");
+  assert(nordic.pixelRatioCap < QUALITY_PRESETS.anime.pixelRatioCap, "nordic preset saves a little render budget");
+  assert(
+    getQualityToneMappingExposure("nordic") > getQualityToneMappingExposure("anime"),
+    "nordic preset lifts ACES exposure instead of relying on saturated bloom",
   );
   assert(
     shouldUsePostProcessing({
