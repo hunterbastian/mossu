@@ -18,6 +18,27 @@ function openingKaruPosition(forwardOffset: number, rightOffset: number) {
 test.describe("Mossu smoke", () => {
   test.describe.configure({ timeout: 180_000 });
 
+  test("keeps automation globals behind explicit debug or test params", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded", timeout: 60_000 });
+
+    await expect(page.locator("#app")).toBeVisible();
+    await expect(page.locator("#app > canvas")).toBeVisible({ timeout: 60_000 });
+
+    const globals = await page.evaluate(() => ({
+      e2e: typeof window.__MOSSU_E2E__,
+      advanceTime: typeof window.advanceTime,
+      renderText: typeof window.render_game_to_text,
+      debug: typeof window.mossuDebug,
+    }));
+
+    expect(globals).toEqual({
+      e2e: "undefined",
+      advanceTime: "undefined",
+      renderText: "undefined",
+      debug: "undefined",
+    });
+  });
+
   test("loads game shell and reaches interactive canvas", async ({ page }) => {
     const errors: string[] = [];
     page.on("console", (msg) => {

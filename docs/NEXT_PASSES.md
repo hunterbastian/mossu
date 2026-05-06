@@ -9,19 +9,19 @@ This is the prioritized work queue. Keep items narrow enough that Mossu remains 
 1. **Wiki and repo-doc sync review**
    `Mossu weekly wiki sync` now runs weekly against the repo and local wiki. Still do an immediate manual sync after substantial work when current direction changes before the next Monday run.
 
-2. **Populated handbook playtest**
-   Collect several landmarks, forageables, and Karu, then inspect the field guide at laptop sizes. Tune card density, copy, and holo treatment only where the populated state feels weak.
-
-3. **Karu route playtest**
+2. **Karu route playtest**
    Play recruited Karu across slopes, water banks, shallow water, route turns, narrow clearings, and dense grass. Fix jitter, crowding, or lost followers before adding new companion systems.
 
-4. **Real-browser art review route**
-   Use `npm run art:review` for named Chrome screenshots, then manually review any questionable route spots in Chrome/Dia before doing more art polish.
+3. **Real-browser art review route**
+   Use `npm run art:review` for named Chrome screenshots, run `npm run art:compare` to catch artifact/state drift, then manually review any questionable route spots in Chrome/Dia before doing more art polish.
+
+4. **Opening minute polish**
+   Tighten the first 10 seconds: title transition, nest exit, first camera composition, first Karu read, and first route prompt.
 
 ## High-Value Small Passes
 
-5. **Opening minute polish**
-   Tighten the first 10 seconds: title transition, nest exit, first camera composition, first Karu read, and first route prompt.
+5. **Populated handbook follow-up**
+   The laptop-density pass is complete for the `handbook-populated` debug preset. Revisit only after manual playtesting shows a specific copy, scrolling, or mobile issue.
 
 6. **Shrine arrival reward**
    Make Moss Crown arrival feel more complete with a small visual/audio/state beat, without turning progression into a checklist.
@@ -41,8 +41,8 @@ This is the prioritized work queue. Keep items narrow enough that Mossu remains 
 11. **Accessibility settings**
     Add or tune motion-intensity and stronger-contrast options if playtest shows blur, motion, or HUD contrast is uncomfortable.
 
-12. **Debug save presets**
-    Add a small QA preset menu or helper for common save states: fresh nest, recruited Karu, populated handbook, shrine complete, water/swim checks.
+12. **Debug preset UX polish**
+    The `window.mossuDebug` save preset helper exists. Add a visible QA-only preset picker only if repeated playtesting shows console calls are too slow.
 
 ## Medium Art And Feel Passes
 
@@ -71,6 +71,9 @@ This is the prioritized work queue. Keep items narrow enough that Mossu remains 
 
 20. **Performance baseline refresh**
     Refresh `npm run perf:guard:baseline` before a visual-density pass and compare after with a candidate run.
+
+21. **Large-module follow-up**
+    Continue only if it serves an active pass: `terrainDecorations.ts`, `HudShell.ts`, and `simulation/world.ts` are still large, but recent splits now define the preferred pattern. Move stable ownership slices into neighboring modules instead of rewriting behavior.
 
 ## Rule Of Thumb
 

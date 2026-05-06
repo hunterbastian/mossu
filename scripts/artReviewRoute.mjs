@@ -118,6 +118,7 @@ async function main() {
   const localServer = args.url ? null : await startDistServer();
   const baseUrl = args.url ?? localServer.url;
   const reviewUrl = new URL(baseUrl);
+  reviewUrl.searchParams.set("e2e", "1");
   reviewUrl.searchParams.set("qaDebug", "1");
   reviewUrl.searchParams.set("visualProbe", "1");
 

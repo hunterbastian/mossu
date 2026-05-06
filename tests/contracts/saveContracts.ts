@@ -1,5 +1,6 @@
 import { GameState, createDefaultSaveState } from "../../src/simulation/gameState";
 import { startingPosition } from "../../src/simulation/world";
+import { buildDebugSavePresetPayload, listDebugSavePresets } from "../../src/render/app/debugSavePresets";
 import { assert, assertApprox, assertDeepEqual } from "./testHarness";
 
 export function runSaveContracts() {
@@ -34,4 +35,33 @@ export function runSaveContracts() {
   );
   assert(state.frame.save.gatheredForageableIds.size === 0, "reset clears gathered goods");
   assert(state.frame.save.recruitedKaruIds.size === 0, "reset clears recruited Karu");
+
+  const presetSummaries = listDebugSavePresets();
+  assert(
+    presetSummaries.some((preset) => preset.id === "handbook-populated"),
+    "debug presets include handbook state",
+  );
+  assert(
+    presetSummaries.some((preset) => preset.id === "water-route"),
+    "debug presets include water route state",
+  );
+
+  const handbookPreset = buildDebugSavePresetPayload("handbook-populated");
+  assert(handbookPreset !== null, "handbook debug preset resolves to a payload");
+  assert(
+    handbookPreset?.save?.catalogedLandmarkIds?.includes("river-bend") === true,
+    "handbook debug preset includes route landmark progress",
+  );
+  assert(
+    handbookPreset?.save?.recruitedKaruIds?.includes("karu-0-0") === true,
+    "handbook debug preset includes a recruited Karu",
+  );
+
+  const firstCopy = buildDebugSavePresetPayload("fresh-start");
+  const secondCopy = buildDebugSavePresetPayload("fresh-start");
+  firstCopy?.save?.catalogedLandmarkIds?.push("mutated-test-id");
+  assert(
+    secondCopy?.save?.catalogedLandmarkIds?.includes("mutated-test-id") === false,
+    "debug preset payloads return independent copies",
+  );
 }

@@ -28,6 +28,18 @@ import {
   routeLandmarks,
 } from "./worldMap";
 import { createQualitySettingsMarkup } from "./appQualitySettings";
+import {
+  buildCharacterProgressRow,
+  buildCharacterSection,
+  buildCollectionCards,
+  buildGatheredGoodCards,
+  buildMapFilter,
+  buildMapLegendRow,
+  buildPauseAction,
+  buildPauseStat,
+  buildStatusMetric,
+  renderQuickActions,
+} from "./hudSurfaceBuilders";
 
 const POUCH_KIND_ORDER: ForageableKind[] = ["seed", "shell", "moss_tuft", "berry", "smooth_stone", "feather"];
 const POUCH_REVEAL_MS = 4200;
@@ -36,7 +48,6 @@ const KARU_RECRUIT_PROMPT_RADIUS = 11.5;
 const KARU_JOIN_FOCUS_MS = 2200;
 const KARU_JOIN_FOCUS_MIN_FRAMES = 18;
 type BinderSectionId = "profile" | "cards" | "pouch";
-type PauseCommandId = "resume" | "handbook" | "map" | "reset-progress";
 
 export interface HudShellUpdate {
   frame: FrameState;
@@ -353,7 +364,7 @@ export class HudShell {
       this.statusValues.prompt.innerHTML =
         "<strong>Care pause</strong> Resume, open the field guide, or swing out to the habitat map.";
       this.controlsPanelStatus.innerHTML = "Everything is paused while the menu is open.";
-      this.statusValues.hint.innerHTML = this.renderQuickActions([
+      this.statusValues.hint.innerHTML = renderQuickActions([
         ["Esc", "resume"],
         ["Tab", "guide"],
         ["M", "map"],
@@ -370,7 +381,7 @@ export class HudShell {
       this.statusValues.prompt.innerHTML = "<strong>Habitat view</strong>";
       this.controlsPanelStatus.innerHTML =
         "Scroll to zoom the island view. Press <strong>R</strong> or <strong>Home</strong> to reset zoom. <strong>M</strong> or <strong>Esc</strong> returns to the trail.";
-      this.statusValues.hint.innerHTML = this.renderQuickActions([
+      this.statusValues.hint.innerHTML = renderQuickActions([
         ["Tab", "guide"],
         ["R / Home", "reset zoom"],
         ["M", "close"],
@@ -473,7 +484,7 @@ export class HudShell {
       this.controlsPanelStatus.innerHTML = `Click the world to look around. ${MOVEMENT_CONTROL_SUMMARY}.`;
     }
 
-    this.statusValues.hint.innerHTML = this.renderQuickActions(
+    this.statusValues.hint.innerHTML = renderQuickActions(
       pointerLocked
         ? [
             ["Tab", "guide"],
@@ -761,189 +772,31 @@ export class HudShell {
       }),
     );
 
+    const inventoryCardHandlers = {
+      pointerMove: this.handleInventoryCardPointerMove,
+      pointerLeave: this.handleInventoryCardPointerLeave,
+      focus: this.handleInventoryCardFocus,
+      blur: this.handleInventoryCardBlur,
+    };
+
     this.collectionsList.replaceChildren(
-      ...characterData.collections.map((entry, index) => {
-        const article = document.createElement("article");
-        article.className = [
-          "collection-entry",
-          "inventory-holo-card",
-          "inventory-holo-card--keepsake",
-          `inventory-holo-card--tone-${index % 5}`,
-          entry.discovered ? "inventory-holo-card--owned" : "inventory-holo-card--missing",
-          entry.discovered ? "collection-entry--discovered" : "collection-entry--locked",
-          entry.landmarkId === highlightedCollectionId ? "collection-entry--highlighted" : "",
-        ]
-          .filter((className) => className.length > 0)
-          .join(" ");
-        article.tabIndex = 0;
-        article.setAttribute(
-          "aria-label",
-          entry.discovered
-            ? `${entry.keepsakeTitle}, ${entry.landmarkTitle}, logged keepsake card`
-            : `${entry.landmarkTitle}, hidden keepsake card`,
-        );
-        article.addEventListener("pointermove", this.handleInventoryCardPointerMove);
-        article.addEventListener("pointerleave", this.handleInventoryCardPointerLeave);
-        article.addEventListener("focus", this.handleInventoryCardFocus);
-        article.addEventListener("blur", this.handleInventoryCardBlur);
-
-        const foil = document.createElement("div");
-        foil.className = "inventory-holo-card__foil";
-        foil.setAttribute("aria-hidden", "true");
-
-        const sheen = document.createElement("div");
-        sheen.className = "inventory-holo-card__sheen";
-        sheen.setAttribute("aria-hidden", "true");
-
-        const content = document.createElement("div");
-        content.className = "inventory-holo-card__content";
-
-        const header = document.createElement("div");
-        header.className = "inventory-holo-card__header";
-
-        const number = document.createElement("p");
-        number.className = "inventory-holo-card__index";
-        number.textContent = `No. ${String(index + 1).padStart(2, "0")}`;
-
-        const status = document.createElement("p");
-        status.className = "inventory-holo-card__status";
-        status.textContent = entry.discovered ? "Sleeved" : "Blank";
-
-        header.append(number, status);
-
-        const art = document.createElement("div");
-        art.className = "inventory-holo-card__art inventory-holo-card__art--keepsake";
-        const artLabel = document.createElement("span");
-        artLabel.className = "inventory-holo-card__symbol";
-        artLabel.textContent = entry.discovered ? this.binderZoneCode(entry.zone) : "???";
-        art.append(artLabel);
-
-        const zone = document.createElement("p");
-        zone.className = "collection-entry__zone";
-        zone.textContent = this.prettyZone(entry.zone);
-
-        const rarity = document.createElement("p");
-        rarity.className = "inventory-holo-card__rarity";
-        rarity.textContent = entry.discovered
-          ? this.cardSeriesLabel(index, characterData.collections.length)
-          : "unfound";
-
-        const title = document.createElement("h3");
-        title.className = "collection-entry__title";
-        title.textContent = entry.discovered ? entry.keepsakeTitle : "Unfound keepsake";
-
-        const landmark = document.createElement("p");
-        landmark.className = "collection-entry__landmark";
-        landmark.textContent = entry.landmarkTitle;
-
-        const meta = document.createElement("div");
-        meta.className = "inventory-holo-card__meta";
-        meta.append(zone, rarity, landmark);
-
-        const body = document.createElement("p");
-        body.className = "collection-entry__body";
-        body.textContent = entry.discovered
-          ? entry.keepsakeSummary
-          : `A blank sleeve points toward ${entry.landmarkTitle}. Reach the spot to stamp this page.`;
-
-        const stamp = document.createElement("p");
-        stamp.className = "inventory-holo-card__binder-stamp";
-        stamp.textContent = entry.discovered ? "Filed in Mossu's route set" : "Not stamped yet";
-
-        content.append(header, art, title, meta, body, stamp);
-        article.append(foil, sheen, content);
-        return article;
+      ...buildCollectionCards({
+        entries: characterData.collections,
+        highlightedCollectionId,
+        handlers: inventoryCardHandlers,
+        prettyZone: (zone) => this.prettyZone(zone),
+        binderZoneCode: (zone) => this.binderZoneCode(zone),
+        cardSeriesLabel: (index, total) => this.cardSeriesLabel(index, total),
       }),
     );
 
     this.gatheredGoodsList.replaceChildren(
-      ...characterData.gatheredGoods.map((entry, index) => {
-        const article = document.createElement("article");
-        article.className = [
-          "gathered-good",
-          "inventory-holo-card",
-          "inventory-holo-card--good",
-          `inventory-holo-card--tone-${(index + 2) % 5}`,
-          entry.gathered ? "inventory-holo-card--owned" : "inventory-holo-card--missing",
-          entry.gathered ? "gathered-good--collected" : "gathered-good--locked",
-          `gathered-good--${entry.kind}`,
-        ].join(" ");
-        article.tabIndex = 0;
-        article.setAttribute(
-          "aria-label",
-          entry.gathered
-            ? `${entry.title}, ${this.formatForageableKind(entry.kind)}, gathered pouch good`
-            : `${this.prettyZone(entry.zone)}, unknown pouch good`,
-        );
-        article.addEventListener("pointermove", this.handleInventoryCardPointerMove);
-        article.addEventListener("pointerleave", this.handleInventoryCardPointerLeave);
-        article.addEventListener("focus", this.handleInventoryCardFocus);
-        article.addEventListener("blur", this.handleInventoryCardBlur);
-
-        const foil = document.createElement("div");
-        foil.className = "inventory-holo-card__foil";
-        foil.setAttribute("aria-hidden", "true");
-
-        const sheen = document.createElement("div");
-        sheen.className = "inventory-holo-card__sheen";
-        sheen.setAttribute("aria-hidden", "true");
-
-        const content = document.createElement("div");
-        content.className = "inventory-holo-card__content";
-
-        const header = document.createElement("div");
-        header.className = "inventory-holo-card__header";
-
-        const number = document.createElement("p");
-        number.className = "inventory-holo-card__index";
-        number.textContent = `No. ${String(index + 1).padStart(2, "0")}`;
-
-        const status = document.createElement("p");
-        status.className = "inventory-holo-card__status";
-        status.textContent = entry.gathered ? "Sleeved" : "Trace";
-
-        header.append(number, status);
-
-        const art = document.createElement("div");
-        art.className = `inventory-holo-card__art inventory-holo-card__art--good inventory-holo-card__art--${entry.kind}`;
-        const artLabel = document.createElement("span");
-        artLabel.className = "inventory-holo-card__symbol";
-        artLabel.textContent = entry.gathered ? this.formatForageableKind(entry.kind) : "???";
-        art.append(artLabel);
-
-        const zone = document.createElement("p");
-        zone.className = "gathered-good__zone";
-        zone.textContent = this.prettyZone(entry.zone);
-
-        const title = document.createElement("h3");
-        title.className = "gathered-good__title";
-        title.textContent = entry.gathered ? entry.title : "Unknown wild good";
-
-        const kind = document.createElement("p");
-        kind.className = "gathered-good__kind";
-        kind.textContent = entry.gathered ? this.formatForageableKind(entry.kind) : "Uncollected";
-
-        const rarity = document.createElement("p");
-        rarity.className = "inventory-holo-card__rarity";
-        rarity.textContent = entry.gathered ? this.cardSeriesLabel(index, characterData.gatheredGoods.length) : "trace";
-
-        const meta = document.createElement("div");
-        meta.className = "inventory-holo-card__meta";
-        meta.append(zone, rarity, kind);
-
-        const body = document.createElement("p");
-        body.className = "gathered-good__body";
-        body.textContent = entry.gathered
-          ? entry.summary
-          : "A faint outline waits on this sleeve. Gather the trail good to reveal its full field card.";
-
-        const stamp = document.createElement("p");
-        stamp.className = "inventory-holo-card__binder-stamp";
-        stamp.textContent = entry.gathered ? "Filed in Mossu's pouch set" : "Not gathered yet";
-
-        content.append(header, art, title, meta, body, stamp);
-        article.append(foil, sheen, content);
-        return article;
+      ...buildGatheredGoodCards({
+        entries: characterData.gatheredGoods,
+        handlers: inventoryCardHandlers,
+        prettyZone: (zone) => this.prettyZone(zone),
+        formatForageableKind: (kind) => this.formatForageableKind(kind),
+        cardSeriesLabel: (index, total) => this.cardSeriesLabel(index, total),
       }),
     );
   }
@@ -958,10 +811,10 @@ export class HudShell {
     const status = document.createElement("section");
     status.className = "status-strip";
     status.append(
-      this.buildMetric("Habitat", this.statusValues.zone, "area"),
-      this.buildMetric("Landmark", this.statusValues.landmark, "landmark"),
-      this.buildMetric("Breeze", this.statusValues.wind, "breeze"),
-      this.buildMetric("Notes", this.statusValues.collections, "cards"),
+      buildStatusMetric("Habitat", this.statusValues.zone, "area"),
+      buildStatusMetric("Landmark", this.statusValues.landmark, "landmark"),
+      buildStatusMetric("Breeze", this.statusValues.wind, "breeze"),
+      buildStatusMetric("Notes", this.statusValues.collections, "cards"),
     );
 
     const bottom = document.createElement("div");
@@ -1005,23 +858,6 @@ export class HudShell {
       this.buildCharacterScreen(previewElement),
     );
     return hud;
-  }
-
-  private buildMetric(label: string, value: HTMLElement, kind: "area" | "landmark" | "breeze" | "cards") {
-    const wrapper = document.createElement("div");
-    wrapper.className = `status-metric status-metric--${kind}`;
-    const icon = document.createElement("span");
-    icon.className = "status-metric__icon";
-    icon.setAttribute("aria-hidden", "true");
-    const body = document.createElement("div");
-    body.className = "status-metric__body";
-    const labelNode = document.createElement("p");
-    labelNode.className = "status-label";
-    labelNode.textContent = label;
-    value.className = "status-value";
-    body.append(labelNode, value);
-    wrapper.append(icon, body);
-    return wrapper;
   }
 
   private buildPickupCard() {
@@ -1205,8 +1041,8 @@ export class HudShell {
     this.characterStamp.className = "character-screen__stamp";
     this.characterProgress.className = "character-screen__progress";
     this.characterProgress.append(
-      this.buildCharacterProgressRow("Notes", "keepsake", this.keepsakeProgressLabel, this.keepsakeProgressFill),
-      this.buildCharacterProgressRow("Samples", "goods", this.goodsProgressLabel, this.goodsProgressFill),
+      buildCharacterProgressRow("Notes", "keepsake", this.keepsakeProgressLabel, this.keepsakeProgressFill),
+      buildCharacterProgressRow("Samples", "goods", this.goodsProgressLabel, this.goodsProgressFill),
     );
     const previewCard = document.createElement("div");
     previewCard.className = "character-screen__preview-card";
@@ -1229,18 +1065,18 @@ export class HudShell {
     const collectionsColumn = document.createElement("div");
     collectionsColumn.className = "character-screen__column character-screen__column--collections";
 
-    const statsSection = this.buildCharacterSection("Care stats", "Trail condition");
+    const statsSection = buildCharacterSection("Care stats", "Trail condition");
     statsSection.classList.add("character-section--stats");
     this.binderSections.set("profile", statsSection);
     this.statsGrid.className = "character-stat-grid";
     statsSection.append(this.statsGrid);
 
-    const upgradesSection = this.buildCharacterSection("Traits", "Known techniques");
+    const upgradesSection = buildCharacterSection("Traits", "Known techniques");
     upgradesSection.classList.add("character-section--abilities");
     this.upgradesGrid.className = "upgrade-grid";
     upgradesSection.append(this.upgradesGrid);
 
-    const collectionsSection = this.buildCharacterSection(
+    const collectionsSection = buildCharacterSection(
       "Route traits",
       "Habitat landmarks - stamp by visiting",
       this.collectionsSectionBadge,
@@ -1250,7 +1086,7 @@ export class HudShell {
     this.collectionsList.className = "collection-list";
     collectionsSection.append(this.collectionsList);
 
-    const gatheredGoodsSection = this.buildCharacterSection(
+    const gatheredGoodsSection = buildCharacterSection(
       "Pouch samples",
       "Forage along the route - press E when the pouch glows",
       this.gatheredGoodsSectionBadge,
@@ -1297,31 +1133,6 @@ export class HudShell {
     return tabs;
   }
 
-  private buildCharacterProgressRow(
-    labelText: string,
-    kind: "keepsake" | "goods",
-    valueNode: HTMLElement,
-    fillNode: HTMLElement,
-  ) {
-    const row = document.createElement("div");
-    row.className = `character-screen__progress-row character-screen__progress-row--${kind}`;
-
-    const header = document.createElement("div");
-    header.className = "character-screen__progress-header";
-    const label = document.createElement("span");
-    label.textContent = labelText;
-    valueNode.textContent = "0/0";
-    header.append(label, valueNode);
-
-    const track = document.createElement("span");
-    track.className = "character-screen__progress-track";
-    fillNode.className = "character-screen__progress-fill";
-    track.append(fillNode);
-
-    row.append(header, track);
-    return row;
-  }
-
   private setActiveBinderSection(sectionId: BinderSectionId, scrollToSection: boolean) {
     this.activeBinderSection = sectionId;
     this.binderTabs.forEach((tab, tabSectionId) => {
@@ -1362,20 +1173,20 @@ export class HudShell {
     const actions = document.createElement("div");
     actions.className = "pause-menu__actions";
     actions.append(
-      this.buildPauseAction("resume", "Esc", "Resume care", "Return to the meadow exactly where Mossu paused."),
-      this.buildPauseAction(
+      buildPauseAction("resume", "Esc", "Resume care", "Return to the meadow exactly where Mossu paused."),
+      buildPauseAction(
         "handbook",
         "Tab",
         "Field guide",
         "Check habitat notes, route traits, trail moves, and pouch samples.",
       ),
-      this.buildPauseAction(
+      buildPauseAction(
         "map",
         "M",
         "Habitat view",
         "Pull the camera above the island with no extra map panel covering the scenery.",
       ),
-      this.buildPauseAction(
+      buildPauseAction(
         "reset-progress",
         "Reset",
         "Fresh start",
@@ -1396,53 +1207,18 @@ export class HudShell {
     const status = document.createElement("div");
     status.className = "pause-menu__status-grid";
     status.append(
-      this.buildPauseStat("Habitat", this.pauseStatusValues.area),
-      this.buildPauseStat("Landmark", this.pauseStatusValues.landmark),
-      this.buildPauseStat("Breeze", this.pauseStatusValues.breeze),
-      this.buildPauseStat("Trail", this.pauseStatusValues.trail),
-      this.buildPauseStat("Notes", this.pauseStatusValues.collections),
-      this.buildPauseStat("Samples", this.pauseStatusValues.goods),
-      this.buildPauseStat("Save", this.pauseStatusValues.save),
+      buildPauseStat("Habitat", this.pauseStatusValues.area),
+      buildPauseStat("Landmark", this.pauseStatusValues.landmark),
+      buildPauseStat("Breeze", this.pauseStatusValues.breeze),
+      buildPauseStat("Trail", this.pauseStatusValues.trail),
+      buildPauseStat("Notes", this.pauseStatusValues.collections),
+      buildPauseStat("Samples", this.pauseStatusValues.goods),
+      buildPauseStat("Save", this.pauseStatusValues.save),
     );
 
     shell.append(header, actions, settings, status);
     this.pauseMenu.append(shell);
     return this.pauseMenu;
-  }
-
-  private buildPauseAction(command: PauseCommandId, keyText: string, titleText: string, bodyText: string) {
-    const article = document.createElement("button");
-    article.type = "button";
-    article.className = `pause-action pause-action--${command}`;
-    article.dataset.uiCommand = command;
-
-    const key = document.createElement("kbd");
-    key.className = "pause-action__key";
-    key.textContent = keyText;
-
-    const title = document.createElement("h3");
-    title.className = "pause-action__title";
-    title.textContent = titleText;
-
-    const body = document.createElement("p");
-    body.className = "pause-action__body";
-    body.textContent = bodyText;
-
-    article.append(key, title, body);
-    return article;
-  }
-
-  private buildPauseStat(labelText: string, valueNode: HTMLElement) {
-    const article = document.createElement("article");
-    article.className = "pause-stat";
-
-    const label = document.createElement("p");
-    label.className = "pause-stat__label";
-    label.textContent = labelText;
-
-    valueNode.className = "pause-stat__value";
-    article.append(label, valueNode);
-    return article;
   }
 
   private buildMapOverlay() {
@@ -1495,9 +1271,9 @@ export class HudShell {
     const legend = document.createElement("div");
     legend.className = "world-map__legend";
     legend.append(
-      this.buildLegendRow("world-map__row-icon world-map__row-icon--poi", "Field Notes"),
-      this.buildLegendRow("world-map__row-icon world-map__row-icon--bridge", "Bridges"),
-      this.buildLegendRow("world-map__row-icon world-map__row-icon--special", "Rare Finds"),
+      buildMapLegendRow("world-map__row-icon world-map__row-icon--poi", "Field Notes"),
+      buildMapLegendRow("world-map__row-icon world-map__row-icon--bridge", "Bridges"),
+      buildMapLegendRow("world-map__row-icon world-map__row-icon--special", "Rare Finds"),
     );
 
     this.mapNextStop.className = "world-map__route-note";
@@ -1522,10 +1298,10 @@ export class HudShell {
     const filters = document.createElement("div");
     filters.className = "world-map__filters";
     filters.append(
-      this.buildMapFilter("world-map__filter--poi", "T", "POI"),
-      this.buildMapFilter("world-map__filter--bridge", "B", "Bridge"),
-      this.buildMapFilter("world-map__filter--special", "S", "Special"),
-      this.buildMapFilter("world-map__filter--you", "", "You"),
+      buildMapFilter("world-map__filter--poi", "T", "POI"),
+      buildMapFilter("world-map__filter--bridge", "B", "Bridge"),
+      buildMapFilter("world-map__filter--special", "S", "Special"),
+      buildMapFilter("world-map__filter--you", "", "You"),
     );
 
     const footer = document.createElement("div");
@@ -1805,45 +1581,6 @@ export class HudShell {
     return this.mapSvg;
   }
 
-  private buildLegendRow(swatchClassName: string, labelText: string) {
-    const row = document.createElement("div");
-    row.className = "world-map__legend-row";
-    const swatch = document.createElement("span");
-    swatch.className = swatchClassName;
-    swatch.setAttribute("aria-hidden", "true");
-    const label = document.createElement("span");
-    label.className = "world-map__legend-label";
-    label.textContent = labelText;
-    row.append(swatch, label);
-    return row;
-  }
-
-  private buildMapFilter(className: string, symbolText: string, labelText: string) {
-    const item = document.createElement("div");
-    item.className = `world-map__filter ${className}`;
-    const icon = document.createElement("span");
-    icon.className = "world-map__filter-icon";
-    icon.textContent = symbolText;
-    icon.setAttribute("aria-hidden", "true");
-    const label = document.createElement("span");
-    label.className = "world-map__filter-label";
-    label.textContent = labelText;
-    item.append(icon, label);
-    return item;
-  }
-
-  private buildMapInfoCard(eyebrowText: string, title: HTMLElement, body: HTMLElement) {
-    const card = document.createElement("section");
-    card.className = "world-map__card";
-
-    const eyebrow = document.createElement("p");
-    eyebrow.className = "world-map__card-eyebrow";
-    eyebrow.textContent = eyebrowText;
-
-    card.append(eyebrow, title, body);
-    return card;
-  }
-
   private createMapPlayerMarker() {
     const group = createSvgElement("g");
     group.classList.add("world-map__marker", "world-map__marker--player");
@@ -2078,32 +1815,6 @@ export class HudShell {
     return "The shrine plateau is the quiet crown of the route, above the rest of the climb.";
   }
 
-  private buildCharacterSection(titleText: string, eyebrowText: string, badgeNode?: HTMLElement) {
-    const section = document.createElement("section");
-    section.className = "character-section";
-
-    const eyebrow = document.createElement("p");
-    eyebrow.className = "character-section__eyebrow";
-    eyebrow.textContent = eyebrowText;
-
-    const heading = document.createElement("div");
-    heading.className = "character-section__heading";
-
-    const title = document.createElement("h3");
-    title.className = "character-section__title";
-    title.textContent = titleText;
-
-    if (badgeNode) {
-      badgeNode.className = "character-section__badge";
-      heading.append(title, badgeNode);
-    } else {
-      heading.append(title);
-    }
-
-    section.append(eyebrow, heading);
-    return section;
-  }
-
   private prettyZone(zone: string) {
     return zone.replace("_", " ");
   }
@@ -2136,9 +1847,5 @@ export class HudShell {
       .join("")
       .slice(0, 3)
       .toUpperCase();
-  }
-
-  private renderQuickActions(actions: Array<[string, string]>) {
-    return `<span class="quick-actions">${actions.map(([key, label]) => `<span class="quick-actions__item"><kbd>${key}</kbd><span>${label}</span></span>`).join("")}</span>`;
   }
 }

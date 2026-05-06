@@ -28,12 +28,13 @@ Keep the look charming and readable. Do not push blur, bloom, fog, or glow so fa
 
 - Runtime: TypeScript + Vite + Three.js, WebGLRenderer by default.
 - Gameplay truth: `src/simulation/world.ts` terrain/water samplers and movement contracts.
-- World rendering: `src/render/world/WorldRenderer.ts` and system files under `src/render/world/`.
-- UI/HUD: `src/render/app/HudShell.ts`, `src/render/app/GameApp.ts`, and `src/styles.css`.
-- Water: `src/render/world/waterSystem.ts`; underfill must keep the same vertex wave displacement as the main water surface.
-- Debug hooks: `?qaDebug=1` exposes `window.mossuDebug`; `?e2e=1` keeps browser tests lightweight.
+- World rendering: `src/render/world/WorldRenderer.ts` delegates authored set pieces, forageables, map markers, co-op visual helpers, water profiles, terrain prop primitives, and small-prop instancing to focused files under `src/render/world/`.
+- UI/HUD: `src/render/app/HudShell.ts` owns HUD state and DOM node lifecycle, while `src/render/app/hudSurfaceBuilders.ts` owns reusable card/section/pause/map builders.
+- CSS: `src/styles.css` imports semantic chunks under `src/styles/`; `src/styles/theme-overrides.css` now imports named late-cascade theme layers under `src/styles/theme/`.
+- Water: `src/render/world/waterSystem.ts` plus `src/render/world/waterProfiles.ts`; underfill must keep the same vertex wave displacement as the main water surface.
+- Debug hooks: `?qaDebug=1` exposes `window.mossuDebug`, including route jumps and named save presets; `?e2e=1` keeps browser tests lightweight. Normal player URLs do not expose `advanceTime`, `render_game_to_text`, or `__MOSSU_E2E__`.
 - Performance: `npm run perf:guard` runs the route guard with screenshots and frame metrics.
-- Art review: `npm run art:review` builds production, opens headed Chrome, uses debug route jumps, and captures named screenshots/JSON in `output/art-review-route/`.
+- Art review: `npm run art:review` builds production, opens headed Chrome with `?e2e=1&qaDebug=1&visualProbe=1`, uses debug route jumps, and captures named screenshots/JSON in `output/art-review-route/`; `npm run art:compare` validates those artifacts and can compare them to a saved summary baseline.
 
 ## Current Verification Bar
 
@@ -43,6 +44,7 @@ Minimum for shippable code changes:
 npm run lint
 npm run qa
 npm run test:e2e:smoke
+npm run art:compare
 git diff --check
 ```
 

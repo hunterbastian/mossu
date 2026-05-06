@@ -103,6 +103,7 @@ import {
 import { createOpeningSequenceOverlay, createTitleScreen } from "./appTitleScreen";
 import { serializeE2eGameTextState, serializeGameTextState } from "./appTextState";
 import { ANIME_COLOR_GRADE_SHADER } from "./animeColorGradeShader";
+import { buildDebugSavePresetPayload, listDebugSavePresets } from "./debugSavePresets";
 
 const KARU_RECRUIT_HOLD_SECONDS = 0.68;
 const KARU_RECRUIT_PROMPT_RADIUS = 11.5;
@@ -602,6 +603,20 @@ export class GameApp {
     this.state.update(0, PAUSED_INPUT, this.followCamera.getYaw());
     this.persistLocalSaveState();
     this.syncHud();
+  }
+
+  debugListSavePresets() {
+    return listDebugSavePresets();
+  }
+
+  debugApplySavePreset(id: string) {
+    const payload = buildDebugSavePresetPayload(id);
+    if (!payload) {
+      return false;
+    }
+
+    this.debugApplySaveState(payload);
+    return true;
   }
 
   private restoreLocalSaveState() {

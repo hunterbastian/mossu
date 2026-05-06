@@ -1,0 +1,464 @@
+/* Map mode should showcase the live 3D island. Keep the DOM atlas built for data/state,
+   but hide the large card while the lookdown camera and 3D markers do the work. */
+.hud--map .world-map.world-map--open {
+  justify-content: center;
+  align-items: flex-start;
+  padding: clamp(0.85rem, 2vw, 1.35rem);
+  background: transparent;
+  pointer-events: none;
+}
+
+.hud--map .world-map.world-map--open .world-map__shell {
+  display: none;
+}
+
+.hud--map .world-map.world-map--open::before {
+  content: "3D Island View";
+  position: absolute;
+  top: clamp(0.85rem, 2vw, 1.35rem);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.46rem 0.82rem 0.5rem;
+  border: 1px solid rgba(24, 83, 74, 0.34);
+  border-radius: 999px;
+  color: #143f35;
+  background: rgba(255, 253, 235, 0.82);
+  box-shadow: 0 0.6rem 1.6rem rgba(42, 74, 74, 0.14);
+  font-family: var(--ui-sans);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.hud--map .world-map.world-map--open::after {
+  content: "M / Esc close - drag / WASD pan - scroll zoom - F focus";
+  position: absolute;
+  right: clamp(0.85rem, 2vw, 1.35rem);
+  bottom: clamp(0.85rem, 2vw, 1.35rem);
+  max-width: min(28rem, calc(100vw - 1.7rem));
+  padding: 0.5rem 0.72rem;
+  border: 1px solid rgba(24, 83, 74, 0.26);
+  border-radius: 0.7rem;
+  color: rgba(20, 63, 53, 0.86);
+  background: rgba(255, 253, 235, 0.76);
+  box-shadow: 0 0.5rem 1.3rem rgba(42, 74, 74, 0.12);
+  font-family: var(--ui-sans);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+/* Whole-map atlas redesign: the in-engine island becomes the map, with a compact guide panel. */
+.world-map {
+  justify-content: center;
+  padding: clamp(0.85rem, 2vw, 1.6rem);
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.64), transparent 18%),
+    linear-gradient(180deg, rgba(183, 234, 247, 0.18), rgba(153, 217, 232, 0.12));
+}
+
+.world-map.world-map--open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.world-map__shell {
+  width: min(96rem, calc(100vw - 1.6rem));
+  max-height: min(54rem, calc(100vh - 1.6rem));
+  grid-template-columns: minmax(34rem, 1fr) minmax(19rem, 26rem);
+  align-items: center;
+  gap: clamp(1rem, 2.4vw, 2rem);
+  padding: clamp(1rem, 1.8vw, 1.6rem);
+  border: 0;
+  border-radius: 1.5rem;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.world-map__shell::before,
+.world-map__shell::after {
+  display: none;
+}
+
+.world-map__figure {
+  position: relative;
+  min-height: min(48rem, calc(100vh - 4rem));
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 1.2rem;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.42), transparent 18%),
+    radial-gradient(circle at 78% 80%, rgba(242, 222, 160, 0.3), transparent 19%),
+    linear-gradient(180deg, rgba(134, 102, 57, 0.06), rgba(70, 112, 95, 0.04));
+  box-shadow: none;
+  overflow: visible;
+}
+
+.world-map__figure::before,
+.world-map__figure::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.46);
+  filter: blur(0.3rem);
+  pointer-events: none;
+}
+
+.world-map__figure::before {
+  left: 1%;
+  top: 33%;
+  width: 11rem;
+  height: 3.8rem;
+}
+
+.world-map__figure::after {
+  right: -2%;
+  bottom: 4%;
+  width: 15rem;
+  height: 4.6rem;
+}
+
+.world-map__svg {
+  position: relative;
+  z-index: 1;
+  width: min(58rem, 64vw);
+  max-width: 100%;
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 0.42rem 0 rgba(109, 77, 45, 0.12)) drop-shadow(0 1.8rem 1.8rem rgba(72, 68, 53, 0.16));
+}
+
+.world-map__island-shadow {
+  fill: rgba(82, 70, 51, 0.18);
+}
+
+.world-map__island-shape {
+  fill: url("#world-map-island-gradient");
+  stroke: rgba(86, 72, 45, 0.54);
+  stroke-width: 9;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
+
+.world-map__upland-backdrop {
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.world-map__upland-backdrop ellipse {
+  opacity: 0.68;
+  filter: blur(0.3px);
+}
+
+.world-map__north-ridge-crest {
+  fill: none;
+  stroke: rgba(88, 124, 118, 0.55);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.7;
+  pointer-events: none;
+  filter: drop-shadow(0 -0.08rem 0.12rem rgba(40, 72, 68, 0.22));
+}
+
+.world-map__ridge-contours {
+  pointer-events: none;
+}
+
+.world-map__ridge-contour {
+  fill: none;
+  stroke: rgba(74, 80, 66, 0.48);
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.52;
+  filter: drop-shadow(0 0.08rem 0 rgba(255, 246, 211, 0.32));
+}
+
+.world-map__ridge-contour--2 {
+  stroke-width: 5;
+  opacity: 0.42;
+}
+
+.world-map__ridge-contour--3 {
+  stroke-width: 4;
+  opacity: 0.36;
+}
+
+.world-map__lake-layer {
+  pointer-events: none;
+}
+
+.world-map__lake-bloom {
+  fill: url("#world-map-lake-gradient");
+  stroke: rgba(60, 110, 122, 0.35);
+  stroke-width: 0.4;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0.08rem 0.15rem rgba(34, 80, 92, 0.22));
+}
+
+.world-map__region-patch {
+  opacity: 0.82;
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1.35;
+  paint-order: stroke fill;
+}
+
+.world-map__region-patch--forest {
+  fill: rgba(38, 95, 66, 0.58);
+}
+
+.world-map__region-patch--meadow {
+  fill: rgba(213, 211, 112, 0.38);
+}
+
+.world-map__region-patch--ridge {
+  fill: rgba(178, 181, 166, 0.54);
+}
+
+.world-map__forest-glyph-layer {
+  pointer-events: none;
+}
+
+.world-map__forest-glyph path {
+  fill: rgba(52, 102, 65, 0.74);
+  stroke: rgba(32, 73, 47, 0.8);
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+  filter: drop-shadow(0 0.08rem 0 rgba(255, 247, 199, 0.24));
+}
+
+.world-map__forest-glyph--deep path {
+  fill: rgba(32, 72, 48, 0.82);
+}
+
+.world-map__forest-glyph--grove path {
+  fill: rgba(115, 151, 75, 0.78);
+  stroke: rgba(63, 101, 48, 0.78);
+}
+
+.world-map__forest-glyph--ancient path {
+  fill: rgba(139, 132, 106, 0.72);
+  stroke: rgba(73, 86, 57, 0.82);
+}
+
+.world-map__forest-glyph--fruit path {
+  fill: rgba(126, 155, 75, 0.78);
+  stroke: rgba(104, 75, 39, 0.82);
+}
+
+.world-map__route-pocket {
+  fill: rgba(255, 239, 152, 0.36);
+  stroke: rgba(255, 255, 255, 0.42);
+  stroke-width: 2;
+}
+
+.world-map__route-pocket--shrine {
+  fill: rgba(255, 211, 101, 0.44);
+}
+
+.world-map__river {
+  fill: none;
+  stroke: url("#world-map-river-gradient");
+  stroke-width: 28;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.95;
+  filter: drop-shadow(0 0 0.18rem rgba(255, 251, 224, 0.72));
+}
+
+.world-map__river--branch {
+  stroke-width: 17;
+  opacity: 0.82;
+}
+
+.world-map__route {
+  fill: none;
+  stroke: rgba(118, 84, 45, 0.92);
+  stroke-width: 13;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 2 20;
+  filter: drop-shadow(0 0.1rem 0 rgba(255, 249, 217, 0.48)) drop-shadow(0 0.16rem 0 rgba(124, 92, 50, 0.18));
+}
+
+.world-map__atlas-marker circle,
+.world-map__marker circle:first-of-type {
+  fill: rgba(255, 253, 229, 0.9);
+  stroke: rgba(64, 107, 96, 0.32);
+  stroke-width: 2;
+}
+
+.world-map__marker--minor circle:first-of-type {
+  fill: rgba(255, 253, 245, 0.72);
+  stroke: rgba(64, 107, 96, 0.2);
+  stroke-width: 1.5;
+  opacity: 0.9;
+}
+
+.world-map__marker--minor circle:last-of-type {
+  opacity: 0.9;
+}
+
+.world-map__atlas-marker path {
+  fill: none;
+  stroke: #5d6f6a;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.world-map__atlas-marker--poi path {
+  fill: #7cad5a;
+  stroke: #4f7843;
+  stroke-width: 2.2;
+}
+
+.world-map__atlas-marker--special path {
+  fill: #e9b451;
+  stroke: #9e6a30;
+  stroke-width: 2.2;
+}
+
+.world-map__marker circle:last-of-type,
+.world-map__marker--player circle:last-of-type {
+  fill: #74dfff;
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+
+.world-map__marker--shrine circle:last-of-type,
+.world-map__marker--current circle:last-of-type {
+  fill: #ffd05c;
+}
+
+.world-map__marker-label {
+  fill: #5f4a36;
+  font-family: var(--ui-display);
+  font-size: 18px;
+  font-weight: 900;
+  paint-order: stroke;
+  stroke: rgba(255, 248, 219, 0.9);
+  stroke-width: 5;
+  stroke-linejoin: round;
+}
+
+.world-map__marker--minor .world-map__marker-label {
+  display: none;
+}
+
+.world-map__compass circle {
+  fill: rgba(255, 253, 235, 0.82);
+  stroke: rgba(75, 112, 103, 0.45);
+  stroke-width: 2;
+}
+
+.world-map__compass line,
+.world-map__compass path {
+  fill: #e45f52;
+  stroke: rgba(93, 68, 48, 0.42);
+  stroke-width: 1.5;
+}
+
+.world-map__compass text {
+  fill: #5c4735;
+  font-family: var(--ui-sans);
+  font-size: 15px;
+  font-weight: 900;
+  text-anchor: middle;
+}
+
+.world-map__panel {
+  position: relative;
+  max-height: min(48rem, calc(100vh - 3.4rem));
+  display: grid;
+  gap: 0.78rem;
+  padding: 4.1rem 1.35rem 1.1rem;
+  border: 3px solid rgba(67, 125, 137, 0.72);
+  border-radius: 1.2rem;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 242, 0.98), rgba(255, 246, 219, 0.96)),
+    radial-gradient(circle at 86% 20%, rgba(139, 205, 113, 0.2), transparent 20%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.86),
+    inset 0 0 0 7px rgba(228, 201, 142, 0.16),
+    0 0.28rem 0 rgba(53, 105, 122, 0.56),
+    0 1.35rem 2rem rgba(40, 80, 98, 0.2);
+  overflow: visible;
+}
+
+.world-map__panel::before {
+  content: "";
+  position: absolute;
+  inset: 0.72rem;
+  border: 1px solid rgba(216, 178, 110, 0.42);
+  border-radius: 0.86rem;
+  pointer-events: none;
+}
+
+.world-map__panel .world-map__badge {
+  top: -2.1rem;
+}
+
+.world-map__title {
+  font-size: clamp(2.35rem, 3.4vw, 3.45rem);
+}
+
+.world-map__body {
+  gap: 0.64rem;
+}
+
+.world-map__route-note,
+.world-map__collections {
+  margin: 0;
+  color: rgba(86, 68, 48, 0.82);
+  font-family: var(--ui-sans);
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1.38;
+}
+
+.world-map__route-steps {
+  display: grid;
+  gap: 0.3rem;
+  max-height: 9.5rem;
+  margin: 0;
+  padding: 0.1rem 0.15rem;
+  overflow: auto;
+  list-style: none;
+}
+
+.world-map__route-step {
+  min-height: 1.7rem;
+  padding: 0.32rem 0.56rem;
+  border-radius: 0.58rem;
+  color: #80684e;
+  font-size: 0.7rem;
+  font-weight: 850;
+  line-height: 1.15;
+}
+
+.world-map__route-step--complete {
+  color: #4f8a45;
+  background: rgba(136, 207, 112, 0.18);
+}
+
+.world-map__route-step--current {
+  color: #5b3e2c;
+  background: linear-gradient(90deg, rgba(255, 224, 132, 0.74), rgba(255, 244, 201, 0.42));
+  box-shadow: inset 0 0 0 1px rgba(229, 178, 70, 0.42);
+}
+
+.world-map__stamp {
+  color: #497b6a;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}

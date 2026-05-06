@@ -13,6 +13,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "art:review": "npm run build && node scripts/artReviewRoute.mjs --headed --browser=chrome",
+    "art:compare": "node scripts/artReviewCompare.mjs",
     "test:e2e": "env -u NO_COLOR FORCE_COLOR=0 playwright test",
     "test:e2e:smoke": "env -u NO_COLOR FORCE_COLOR=0 playwright test tests/e2e/smoke.spec.ts",
     "test:e2e:visual": "env -u NO_COLOR FORCE_COLOR=0 playwright test tests/e2e/visualPerf.spec.ts",

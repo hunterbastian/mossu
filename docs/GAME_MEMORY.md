@@ -74,7 +74,9 @@ Mossu should read as cute without becoming too plastic or mascot-like. Motion sh
 - Boids-style Karu follow behavior
 - Recruited Karu persistence in local save state
 - Debug route jumps for focused route inspection
+- Debug save presets for fresh start, recruited Karu, populated handbook, water route, and summit-ready QA states
 - `npm run art:review` for named real-browser route screenshots using those debug jumps
+- `npm run art:compare` for route artifact/state validation after art review captures
 - Weekly wiki sync automation that compares repo docs/progress against local Mossu wiki pages after big passes
 - Premium instanced grass wind and Mossu push interaction
 - Mossu pressed-grass/path trace stamps tuned for readable route bands and shoulders without increasing the 34-stamp budget

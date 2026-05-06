@@ -1,6 +1,6 @@
 # Known Issues And Watchlist
 
-Last updated: 2026-05-01
+Last updated: 2026-05-05
 
 This file tracks current caveats that are useful for future agents. These are not all release blockers.
 
@@ -37,5 +37,6 @@ See [Asset Parking](ASSET_PARKING.md) before restoring it.
 
 ## Resolved Or Superseded Notes
 
+- Art-review readiness timeout: `npm run art:review` now opens headed Chrome with `?e2e=1&qaDebug=1&visualProbe=1`, avoiding the older full-runtime snapshot path while preserving deterministic route screenshots and JSON captures.
 - Large production chunk warning: the core Three.js vendor chunk is intentionally isolated and Vite's warning threshold now matches the current known baseline. Revisit code splitting only if load time or memory becomes user-visible.
 - Extraneous local packages: `npm prune` removed the stale Next/React/Sharp-related packages from `node_modules`; `npm ls --depth=0` is clean after the focused tech-cleanup pass.

@@ -1,0 +1,716 @@
+/* Y2K console bevel pass: hard panel depth plus low-res texture on UI chrome only. */
+:root {
+  --ui-y2k-ink: #12391f;
+  --ui-y2k-ink-soft: rgba(18, 57, 31, 0.84);
+  --ui-y2k-label: #2d6290;
+  --ui-y2k-panel-top: #fffbe8;
+  --ui-y2k-panel-mid: #f1e4ae;
+  --ui-y2k-panel-bottom: #d7c275;
+  --ui-y2k-panel-alt: #9bd5f6;
+  --ui-y2k-panel-pink: #b8a3e0;
+  --ui-y2k-line: #245033;
+  --ui-y2k-shadow: #183724;
+  --ui-y2k-bevel-light: rgba(255, 255, 245, 0.95);
+  --ui-y2k-bevel-dark: rgba(72, 82, 33, 0.26);
+  --ui-y2k-radius: 0.34rem;
+  --ui-y2k-radius-tight: 0.24rem;
+  --ui-y2k-texture:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.12) 0 1px, rgba(255, 255, 255, 0) 1px 4px),
+    repeating-linear-gradient(90deg, rgba(8, 60, 96, 0.05) 0 1px, rgba(8, 60, 96, 0) 1px 6px);
+  --ui-y2k-panel-fill:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.72) 0 0.26rem, rgba(255, 255, 245, 0) 0.26rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, var(--ui-y2k-panel-top) 0%, var(--ui-y2k-panel-mid) 58%, var(--ui-y2k-panel-bottom) 100%);
+  --ui-y2k-panel-fill-cool:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #eaffff 0%, var(--ui-y2k-panel-alt) 56%, #208dc8 100%);
+  --ui-y2k-bevel-shadow:
+    inset 1px 1px 0 var(--ui-y2k-bevel-light), inset -2px -2px 0 var(--ui-y2k-bevel-dark),
+    2px 2px 0 var(--ui-y2k-shadow), 0 0.72rem 1.1rem rgba(5, 47, 75, 0.2);
+}
+
+.hud {
+  --ui-ink: var(--ui-y2k-ink);
+  --ui-ink-soft: var(--ui-y2k-ink-soft);
+  --ui-label: var(--ui-y2k-label);
+  --ui-line: var(--ui-y2k-line);
+  --ui-shadow: var(--ui-y2k-bevel-shadow);
+  --ui-shadow-soft: var(--ui-y2k-bevel-shadow);
+  color: var(--ui-y2k-ink);
+}
+
+.hud--summit-complete {
+  --ui-y2k-panel-top: #fffdf0;
+  --ui-y2k-panel-mid: #f0e7bd;
+  --ui-y2k-panel-bottom: #cbd68e;
+  --ui-y2k-panel-alt: #b8dff8;
+  --ui-y2k-line: #1d5835;
+}
+
+.title-screen__menu,
+.objective-chip,
+.status-metric,
+.prompt-chip,
+.controls-panel,
+.pouch-hud,
+.roll-mode-hud,
+.ability-pill,
+.quick-actions__item,
+.pickup-card,
+.pause-menu__shell,
+.pause-action,
+.pause-stat,
+.character-screen__shell,
+.character-screen__preview-card,
+.character-screen__progress,
+.character-screen__nearby,
+.character-section,
+.character-stat,
+.upgrade-card,
+.collection-list,
+.gathered-goods-list,
+.inventory-holo-card,
+.world-map__panel,
+.model-viewer__hero,
+.model-viewer__panel,
+.model-viewer__stage-card,
+.model-viewer__spec-card,
+.model-viewer__model-button,
+.model-viewer__chip,
+.model-viewer__icon-button,
+.model-viewer__back-link {
+  border: 2px solid var(--ui-y2k-line);
+  border-radius: var(--ui-y2k-radius);
+  background: var(--ui-y2k-panel-fill);
+  box-shadow: var(--ui-y2k-bevel-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.pause-menu,
+.character-screen {
+  backdrop-filter: blur(2px) saturate(1.02);
+  -webkit-backdrop-filter: blur(2px) saturate(1.02);
+}
+
+.title-screen__menu,
+.objective-chip,
+.prompt-chip,
+.controls-panel,
+.pouch-hud,
+.roll-mode-hud,
+.ability-pill,
+.quick-actions__item,
+.pickup-card,
+.pause-menu__shell,
+.pause-action,
+.pause-stat,
+.character-screen__preview-card,
+.character-screen__progress,
+.character-screen__nearby,
+.character-stat,
+.upgrade-card,
+.inventory-holo-card,
+.world-map__panel,
+.model-viewer__hero,
+.model-viewer__panel,
+.model-viewer__stage-card,
+.model-viewer__spec-card,
+.model-viewer__model-button,
+.model-viewer__chip,
+.model-viewer__icon-button,
+.model-viewer__back-link {
+  position: relative;
+}
+
+.title-screen__menu::after,
+.status-metric::after,
+.prompt-chip::after,
+.controls-panel::after,
+.pouch-hud::after,
+.roll-mode-hud::after,
+.ability-pill::after,
+.quick-actions__item::after,
+.pickup-card::after,
+.pause-menu__shell::after,
+.pause-action::after,
+.pause-stat::after,
+.character-screen__progress::after,
+.character-screen__nearby::after,
+.character-stat::after,
+.upgrade-card::after,
+.inventory-holo-card::after,
+.world-map__panel::after,
+.model-viewer__hero::after,
+.model-viewer__panel::after,
+.model-viewer__stage-card::after,
+.model-viewer__spec-card::after,
+.model-viewer__model-button::after,
+.model-viewer__chip::after,
+.model-viewer__icon-button::after,
+.model-viewer__back-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--ui-y2k-line), var(--ui-y2k-line)) left 0.3rem top 0.3rem / 0.62rem 2px no-repeat,
+    linear-gradient(var(--ui-y2k-line), var(--ui-y2k-line)) left 0.3rem top 0.3rem / 2px 0.62rem no-repeat,
+    linear-gradient(var(--ui-y2k-line), var(--ui-y2k-line)) right 0.3rem top 0.3rem / 0.62rem 2px no-repeat,
+    linear-gradient(var(--ui-y2k-line), var(--ui-y2k-line)) right 0.3rem top 0.3rem / 2px 0.62rem no-repeat,
+    linear-gradient(var(--ui-y2k-line), var(--ui-y2k-line)) left 0.3rem bottom 0.3rem / 0.62rem 2px no-repeat,
+    linear-gradient(var(--ui-y2k-line), var(--ui-y2k-line)) left 0.3rem bottom 0.3rem / 2px 0.62rem no-repeat,
+    linear-gradient(var(--ui-y2k-line), var(--ui-y2k-line)) right 0.3rem bottom 0.3rem / 0.62rem 2px no-repeat,
+    linear-gradient(var(--ui-y2k-line), var(--ui-y2k-line)) right 0.3rem bottom 0.3rem / 2px 0.62rem no-repeat,
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.12) 0 1px, rgba(255, 255, 255, 0) 1px 4px),
+    repeating-linear-gradient(90deg, rgba(6, 60, 96, 0.045) 0 1px, rgba(6, 60, 96, 0) 1px 6px),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.28) 0 0.22rem,
+      rgba(255, 255, 255, 0) 0.22rem 68%,
+      rgba(86, 50, 8, 0.12)
+    );
+  opacity: 0.5;
+  mix-blend-mode: normal;
+  animation: none;
+}
+
+.quick-actions__item,
+.pouch-hud__item,
+.pause-action,
+.model-viewer__model-button,
+.model-viewer__chip,
+.model-viewer__icon-button,
+.model-viewer__back-link {
+  border-radius: var(--ui-y2k-radius-tight);
+}
+
+.title-screen__menu {
+  border-color: #082f4c;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.78) 0 0.32rem, rgba(255, 255, 245, 0) 0.32rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #2078b7 0%, #0e4e7d 52%, #082f4c 100%);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.62),
+    inset -2px -2px 0 rgba(0, 10, 22, 0.4),
+    3px 3px 0 #041f34,
+    0 1.2rem 2.4rem rgba(0, 12, 24, 0.34);
+}
+
+.objective-chip,
+.status-metric,
+.prompt-chip,
+.controls-panel,
+.pouch-hud,
+.roll-mode-hud,
+.ability-pill,
+.pickup-card {
+  border-width: 2px;
+  border-radius: var(--ui-y2k-radius);
+}
+
+.objective-chip {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.72) 0 0.28rem, rgba(255, 255, 245, 0) 0.28rem), var(--ui-y2k-texture),
+    linear-gradient(135deg, #ffe56d 0%, #ffbd45 58%, #d47a25 100%);
+}
+
+.objective-chip::before {
+  border-color: rgba(6, 60, 96, 0.62);
+  border-radius: var(--ui-y2k-radius-tight);
+}
+
+.objective-chip::after {
+  color: #073654;
+  text-shadow: 1px 1px 0 rgba(255, 255, 245, 0.72);
+}
+
+.objective-chip__map,
+.inventory-holo-card__art,
+.inventory-holo-card__symbol,
+.world-map__route-step,
+.pouch-hud__item,
+.pouch-hud__count,
+.controls-panel__key,
+.roll-mode-hud__badge,
+.quick-actions__item kbd {
+  border-radius: var(--ui-y2k-radius-tight);
+}
+
+.status-strip {
+  filter: drop-shadow(2px 3px 0 rgba(5, 47, 75, 0.24));
+}
+
+.status-metric {
+  min-height: 2.95rem;
+  border-color: var(--ui-y2k-line);
+  background: var(--ui-y2k-panel-fill);
+  filter: none;
+}
+
+.status-metric__icon,
+.quick-actions__item kbd,
+.controls-panel__key,
+.roll-mode-hud__badge {
+  border-width: 2px;
+  border-color: var(--ui-y2k-line);
+  border-radius: var(--ui-y2k-radius-tight);
+  background: var(--ui-y2k-panel-fill-cool);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.88),
+    inset -2px -2px 0 rgba(3, 49, 82, 0.28),
+    2px 2px 0 rgba(5, 47, 75, 0.46);
+}
+
+.hud--summit-complete .status-metric--cards .status-metric__icon,
+.hud--summit-complete .pickup-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.72) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #fffbe2 0%, #bde5a1 52%, #6aa96a 100%);
+}
+
+.status-metric--area .status-metric__icon {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #dff0ae 0%, #82b85f 58%, #447b45 100%);
+}
+
+.status-metric--landmark .status-metric__icon {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #fff1bf 0%, #d9b465 58%, #9b7041 100%);
+}
+
+.status-metric--breeze .status-metric__icon {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #e5fbff 0%, #9bd5f6 58%, #4e8fb0 100%);
+}
+
+.status-metric--cards .status-metric__icon {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.7) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #fff7c9 0%, #b8a3e0 54%, #668f83 100%);
+}
+
+.status-label,
+.pouch-hud__hint,
+.pickup-card__eyebrow,
+.inventory-holo-card__index,
+.inventory-holo-card__status,
+.inventory-holo-card__rarity,
+.inventory-holo-card__binder-stamp,
+.character-stat__label,
+.upgrade-card__badge,
+.collection-entry__zone,
+.gathered-good__zone,
+.gathered-good__kind,
+.world-map__stamp,
+.model-viewer__kicker,
+.model-viewer__label,
+.model-viewer__model-button small {
+  color: var(--ui-y2k-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.status-value,
+.prompt-chip,
+.ability-pill,
+.pouch-hud__title,
+.pickup-card__title,
+.roll-mode-hud__label,
+.inventory-holo-card__symbol,
+.collection-entry__title,
+.gathered-good__title,
+.character-screen__title,
+.character-section__title,
+.model-viewer h1,
+.model-viewer h2,
+.model-viewer h3 {
+  color: var(--ui-y2k-ink);
+}
+
+.prompt-chip {
+  background:
+    linear-gradient(90deg, var(--ui-y2k-panel-alt) 0 0.42rem, rgba(255, 255, 245, 0) 0.42rem), var(--ui-y2k-panel-fill);
+}
+
+.ability-pill {
+  background:
+    linear-gradient(90deg, var(--ui-y2k-panel-pink) 0 0.46rem, rgba(255, 255, 245, 0) 0.46rem), var(--ui-y2k-panel-fill);
+}
+
+.quick-actions__item,
+.pouch-hud__item,
+.pause-action,
+.model-viewer__model-button,
+.model-viewer__chip,
+.model-viewer__icon-button,
+.model-viewer__back-link {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.2rem, rgba(255, 255, 245, 0) 0.2rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #f9fdff 0%, #7de7f0 58%, #2799cc 100%);
+}
+
+.pouch-hud__item--seed {
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fff6c2 0%, #dba455 100%);
+}
+
+.pouch-hud__item--shell {
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fff5e4 0%, #96ddeb 100%);
+}
+
+.pouch-hud__item--moss_tuft {
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #e9ffc1 0%, #5fc875 100%);
+}
+
+.pouch-hud__item--berry {
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #ffe1a7 0%, #ef7158 100%);
+}
+
+.pouch-hud__item--smooth_stone {
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #f3fbff 0%, #8fa8b4 100%);
+}
+
+.pouch-hud__item--feather {
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fff4c8 0%, #91cde8 100%);
+}
+
+.pouch-hud__item:hover,
+.pouch-hud__item:focus-visible,
+.pouch-hud__item--selected,
+.pause-action:hover,
+.pause-action:focus-visible,
+.model-viewer__model-button:hover,
+.model-viewer__chip:hover,
+.model-viewer__icon-button:hover,
+.model-viewer__back-link:hover {
+  border-color: #031f34;
+  box-shadow:
+    inset 1px 1px 0 var(--ui-y2k-bevel-light),
+    inset -2px -2px 0 var(--ui-y2k-bevel-dark),
+    2px 3px 0 #031f34,
+    0 0.82rem 1.1rem rgba(5, 47, 75, 0.24);
+}
+
+.controls-panel__status {
+  border-top-color: rgba(6, 60, 96, 0.42);
+}
+
+.stamina-hud {
+  filter: drop-shadow(2px 3px 0 rgba(5, 47, 75, 0.3));
+}
+
+.stamina-hud__ring,
+.stamina-hud__core {
+  border-radius: var(--ui-y2k-radius-tight);
+}
+
+.stamina-hud__ring {
+  border-width: 2px;
+  border-color: var(--ui-y2k-line);
+  background:
+    var(--ui-y2k-texture), conic-gradient(from -90deg, #5eeaf3 calc(var(--stamina-ratio) * 1turn), #ffe072 0turn);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 245, 0.88),
+    inset -2px -2px 0 rgba(6, 60, 96, 0.22),
+    2px 2px 0 var(--ui-y2k-shadow);
+}
+
+.stamina-hud__ring::before {
+  border-radius: var(--ui-y2k-radius-tight);
+  background: var(--ui-y2k-panel-fill);
+}
+
+.stamina-hud__core {
+  background: var(--ui-y2k-panel-fill-cool);
+}
+
+.roll-mode-hud__meter {
+  height: 0.58rem;
+  border: 2px solid var(--ui-y2k-line);
+  border-radius: var(--ui-y2k-radius-tight);
+  background: repeating-linear-gradient(90deg, rgba(6, 60, 96, 0.18) 0 1px, transparent 1px 0.42rem), #fff6a6;
+}
+
+.roll-mode-hud__meter::after {
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.22) 0 1px, transparent 1px 0.34rem),
+    linear-gradient(90deg, #3ee4ed, #ffca43);
+  box-shadow: none;
+}
+
+.pickup-card__art,
+.inventory-holo-card__art {
+  border: 2px solid var(--ui-y2k-line);
+  background:
+    radial-gradient(circle at 50% 22%, rgba(255, 255, 245, 0.65), transparent 22%), var(--ui-y2k-texture),
+    linear-gradient(135deg, #7de7f0 0%, #ffe06b 52%, #ff82bc 100%);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 245, 0.9),
+    inset -2px -2px 0 rgba(5, 47, 75, 0.18);
+}
+
+.inventory-holo-card {
+  --holo-a: rgba(58, 220, 235, 0.46);
+  --holo-b: rgba(255, 112, 189, 0.34);
+  --holo-c: rgba(255, 218, 76, 0.34);
+  --holo-d: rgba(118, 222, 115, 0.28);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #fff6a8 0%, #ffd55d 58%, #de9a31 100%);
+}
+
+.inventory-holo-card__foil {
+  opacity: 0.42;
+  background:
+    radial-gradient(circle at var(--card-glare-x) var(--card-glare-y), rgba(255, 255, 255, 0.72), transparent 13%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0 1px, rgba(255, 255, 255, 0) 1px 0.34rem),
+    conic-gradient(from 120deg at 50% 50%, var(--holo-a), var(--holo-b), var(--holo-c), var(--holo-d), var(--holo-a));
+  filter: saturate(1.05) contrast(1.08);
+}
+
+.inventory-holo-card__sheen {
+  opacity: 0.18;
+  background:
+    linear-gradient(
+      96deg,
+      transparent 33%,
+      rgba(255, 255, 255, 0.66) 45%,
+      rgba(255, 255, 255, 0.18) 50%,
+      transparent 60%
+    ),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.12) 0 1px, transparent 1px 5px);
+}
+
+.inventory-holo-card__status,
+.inventory-holo-card__rarity,
+.inventory-holo-card__binder-stamp {
+  border: 2px solid rgba(6, 60, 96, 0.55);
+  border-radius: var(--ui-y2k-radius-tight);
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fffde8, #ffd963);
+}
+
+.inventory-holo-card__symbol {
+  min-width: 3.35rem;
+  min-height: 3.35rem;
+  border: 2px solid var(--ui-y2k-line);
+  background: var(--ui-y2k-panel-fill-cool);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.88),
+    inset -2px -2px 0 rgba(5, 47, 75, 0.18),
+    2px 2px 0 rgba(5, 47, 75, 0.34);
+}
+
+.collection-entry--discovered,
+.gathered-good--collected,
+.collection-entry--highlighted {
+  border-color: var(--ui-y2k-line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.24rem, rgba(255, 255, 245, 0) 0.24rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #fff6a8 0%, #ffd55d 58%, #de9a31 100%);
+  box-shadow: var(--ui-y2k-bevel-shadow);
+}
+
+.inventory-holo-card:is(.collection-entry--locked, .gathered-good--locked) {
+  border-style: solid;
+  background:
+    repeating-linear-gradient(135deg, rgba(6, 60, 96, 0.08) 0 2px, transparent 2px 0.42rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #edf0ef 0%, #b7c3c9 100%);
+}
+
+.character-screen__shell {
+  border-radius: var(--ui-y2k-radius);
+  background:
+    linear-gradient(90deg, rgba(255, 224, 99, 0.4) 0%, rgba(255, 224, 99, 0.4) 27%, rgba(255, 255, 245, 0) 27%),
+    var(--ui-y2k-panel-fill);
+}
+
+.character-screen__binder-spine {
+  border-color: var(--ui-y2k-line);
+  border-radius: var(--ui-y2k-radius-tight);
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0 2px, transparent 2px 0.5rem),
+    linear-gradient(90deg, #0a5d89, #5eeaf3 48%, #0a5d89);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.56),
+    inset -2px -2px 0 rgba(4, 37, 61, 0.28),
+    2px 2px 0 rgba(5, 47, 75, 0.28);
+}
+
+.character-section--binder {
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fffde4 0%, #73e4ef 100%);
+}
+
+.collection-list,
+.gathered-goods-list {
+  background:
+    repeating-linear-gradient(0deg, rgba(6, 60, 96, 0.08) 0 1px, transparent 1px 0.7rem),
+    repeating-linear-gradient(90deg, rgba(6, 60, 96, 0.06) 0 1px, transparent 1px 0.7rem),
+    linear-gradient(180deg, rgba(255, 253, 218, 0.62), rgba(255, 224, 99, 0.24));
+}
+
+.world-map__panel {
+  border-color: var(--ui-y2k-line);
+  border-radius: var(--ui-y2k-radius);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 245, 0.68) 0 0.26rem, rgba(255, 255, 245, 0) 0.26rem), var(--ui-y2k-texture),
+    linear-gradient(180deg, #fff7a8 0%, #ffd85d 62%, #d99a31 100%);
+  box-shadow:
+    inset 1px 1px 0 var(--ui-y2k-bevel-light),
+    inset -2px -2px 0 var(--ui-y2k-bevel-dark),
+    3px 3px 0 var(--ui-y2k-shadow),
+    0 1.2rem 2rem rgba(5, 47, 75, 0.22);
+}
+
+.world-map__panel::before {
+  inset: 0.48rem;
+  border-color: rgba(6, 60, 96, 0.52);
+  border-radius: var(--ui-y2k-radius-tight);
+}
+
+.world-map__route-step {
+  border: 1px solid rgba(6, 60, 96, 0.28);
+}
+
+.world-map__route-step--current {
+  border-color: var(--ui-y2k-line);
+  background: linear-gradient(90deg, var(--ui-y2k-panel-alt) 0 0.32rem, transparent 0.32rem), var(--ui-y2k-panel-fill);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.72),
+    2px 2px 0 rgba(5, 47, 75, 0.26);
+}
+
+.model-viewer__stage,
+.character-preview {
+  border-radius: var(--ui-y2k-radius-tight);
+}
+
+.model-viewer__model-button.is-active,
+.model-viewer__chip.is-active,
+.model-viewer__icon-button.is-active {
+  border-color: #031f34;
+  background: var(--ui-y2k-texture), linear-gradient(180deg, #fff7a8 0%, #ffbd45 100%);
+  color: var(--ui-y2k-ink);
+}
+
+/* Cinematic motion pass: soften moment-to-moment UI without changing layout. */
+:root {
+  --motion-cinematic-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-cinematic-back: cubic-bezier(0.2, 1.18, 0.28, 1);
+  --motion-cinematic-elastic: cubic-bezier(0.2, 1.42, 0.32, 1);
+}
+
+.hud-top,
+.hud-bottom__utility,
+.prompt-chip,
+.hint-chip,
+.ability-pill,
+.pouch-hud,
+.roll-mode-hud,
+.pickup-card,
+.status-metric,
+.quick-actions__item,
+.pause-action,
+.pause-menu__button,
+.character-screen__tab,
+.inventory-holo-card,
+.collection-entry,
+.gathered-good,
+.pouch-hud__item,
+.world-map__route-step {
+  transition:
+    opacity 320ms var(--motion-cinematic-out),
+    transform 360ms var(--motion-cinematic-back),
+    filter 320ms var(--motion-cinematic-out);
+}
+
+.quick-actions__item:active,
+.pause-action:active,
+.pause-menu__button:active,
+.character-screen__tab:active,
+.pouch-hud__item:active {
+  transform: translateY(0.08rem) scale(0.965);
+  transition-duration: 110ms;
+}
+
+.inventory-holo-card:hover,
+.collection-entry:hover,
+.gathered-good:hover {
+  transition-timing-function: var(--motion-cinematic-elastic);
+}
+
+.hud--cinematic-focus .hud-top {
+  opacity: 0.42;
+  transform: translateY(-0.42rem) scale(0.985);
+  filter: saturate(0.9);
+}
+
+.hud--cinematic-focus .hud-bottom__utility {
+  opacity: 0.54;
+  transform: translateY(0.38rem) scale(0.985);
+  filter: saturate(0.92);
+}
+
+.hud--cinematic-focus .prompt-chip {
+  opacity: 0.96;
+  transform: translateY(-0.12rem) scale(1.01);
+}
+
+.hud--cinematic-focus .pouch-hud,
+.hud--cinematic-focus .roll-mode-hud,
+.hud--cinematic-focus .ability-pill {
+  opacity: 0.72;
+}
+
+.pickup-card--visible {
+  animation-timing-function: var(--motion-cinematic-elastic);
+}
+
+.world-map,
+.pause-menu,
+.character-screen {
+  transition:
+    opacity 280ms var(--motion-cinematic-out),
+    visibility 280ms step-end;
+}
+
+.world-map.world-map--open,
+.pause-menu.pause-menu--open,
+.character-screen.character-screen--open {
+  transition:
+    opacity 320ms var(--motion-cinematic-out),
+    visibility 0ms step-start;
+}
+
+.world-map__shell,
+.world-map__figure,
+.world-map__panel,
+.pause-menu__shell,
+.character-screen__shell {
+  animation-timing-function: var(--motion-cinematic-back);
+  transition:
+    opacity 280ms var(--motion-cinematic-out),
+    transform 360ms var(--motion-cinematic-back),
+    filter 320ms var(--motion-cinematic-out);
+}
+
+.pause-menu:not(.pause-menu--open) .pause-menu__shell,
+.character-screen:not(.character-screen--open) .character-screen__shell {
+  transform: translateY(0.7rem) scale(0.985);
+  filter: blur(0.2px) saturate(0.96);
+}
+
+.world-map:not(.world-map--open) .world-map__shell {
+  transform: translateY(0.55rem) scale(0.992);
+  filter: blur(0.2px) saturate(0.96);
+}
+
+.world-map.world-map--open .world-map__figure,
+.world-map.world-map--open .world-map__panel {
+  transform: translateY(0);
+}

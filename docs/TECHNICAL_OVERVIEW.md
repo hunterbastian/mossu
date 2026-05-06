@@ -1,6 +1,6 @@
 # Technical Overview
 
-Last updated: 2026-04-25
+Last updated: 2026-05-05
 
 ## Stack
 
@@ -19,18 +19,23 @@ Useful scripts:
 
 ```bash
 npm run dev
-npm run build
+npm run lint
+npm run qa
+npm run test:e2e:smoke
+npm run art:review
+npm run art:compare
 npm run preview
 ```
 
 ## Entry Points
 
-- `src/main.ts`: creates `GameApp` and exposes debug/test hooks.
+- `src/main.ts`: selects the game/model-viewer route and creates the active app.
+- `src/runtimeBridge.ts`: attaches automation/debug globals only for test/debug/perf query params, then starts the app.
 - `src/render/app/GameApp.ts`: top-level app coordinator for renderer, scene, camera, input, HUD, and view modes.
 - `src/simulation/gameState.ts`: top-level simulation coordinator.
 - `src/simulation/world.ts`: shared world data and sampling functions.
 - `src/render/world/WorldRenderer.ts`: composes the 3D scene.
-- `src/styles.css`: DOM HUD/menu styling.
+- `src/styles.css`: ordered DOM style entrypoint.
 
 ## Core Runtime Contract
 
@@ -69,21 +74,33 @@ Do not change these casually. Terrain, water, grass, collectibles, character sta
 ## Render Modules
 
 - `WorldRenderer.ts`: scene composition and per-frame orchestration.
+- `worldSetPieces.ts`: authored bridges, POIs, route landmarks, and decorative scene groups.
+- `worldForageables.ts`: forageable pickup meshes and visual state helpers.
+- `worldMapMarkers.ts`: world-space map marker meshes.
+- `worldCoopVisuals.ts`: co-op stress-test remote Mossu helpers.
 - `FollowCamera.ts`: Journey-like third-person camera and map camera mode.
 - `MossuAvatar.ts`: player character rig and animation.
 - `grassSystem.ts`: instanced grass geometry/shader.
-- `waterSystem.ts`: stylized water ribbons, starting pool surfaces, water controllers.
-- `terrainDecorations.ts`: trees, rocks, flowers, bushes, forest fill.
+- `waterSystem.ts`: water geometry, shaders, controllers, and underfill.
+- `waterProfiles.ts`: shared water color/motion profile data.
+- `terrainDecorations.ts`: high-level terrain accent orchestration, forest placement, biome thresholds, and landmark tree composition.
+- `terrainSmallProps.ts`: small prop primitives, prop batches, rocks, bushes, moss, ferns, reeds, waterfalls, and cave/ruin prop groups.
+- `terrainDecorationMath.ts`: shared deterministic terrain-decoration hash/tint helpers.
 - `ambientBlobs.ts`: Karu fauna visuals, ambient behavior, and recruited follow behavior.
 - `atmosphereSystem.ts`: sky, clouds, mountain haze.
 - `sceneHelpers.ts`: shared renderer helpers.
 
 ## UI Modules
 
-- `HudShell.ts`: HUD, pause, inventory/profile, and map DOM rendering.
+- `HudShell.ts`: HUD state orchestration and owned DOM node lifecycle.
+- `hudSurfaceBuilders.ts`: pure DOM builders for status metrics, pause/map rows, field-guide sections, and inventory/forageable cards.
 - `CharacterPreview.ts`: profile-screen Mossu preview renderer.
+- `debugSavePresets.ts`: named QA save presets used by `window.mossuDebug.applySavePreset()`.
 - `worldMap.ts`: map projection and route helper logic.
-- `styles.css`: visual language for all DOM UI.
+- `styles.css`: ordered import entrypoint.
+- `styles/base.css`, `title.css`, `hud.css`, `pause.css`, `handbook.css`, `map.css`: first-pass semantic UI chunks.
+- `styles/theme-overrides.css`: ordered theme-layer entrypoint.
+- `styles/theme/*.css`: preserved late-cascade theme layers split by ownership so future UI cleanup can fold them back deliberately.
 
 ## Current Terrain Implementation
 
@@ -107,7 +124,7 @@ This preserves gameplay consistency because the rendered mesh and physics sample
 
 ## Forest Implementation
 
-Visual forest fill lives in `terrainDecorations.ts`.
+Visual forest fill is orchestrated in `terrainDecorations.ts`, with reusable small prop primitives and batches in `terrainSmallProps.ts`.
 
 Current approach:
 
@@ -117,9 +134,21 @@ Current approach:
 - merged low-poly tree geometry
 - one `InstancedMesh` for round forest trees
 - one `InstancedMesh` for pine forest trees
+- one `SmallPropInstancer` path for repeated flowers, clover, reeds, pebbles, bushes, moss, and grass clumps
 - shader canopy wind through a custom `windWeight` vertex attribute
 
 Authored landmark trees and clusters still exist separately for composition and camera collision.
+
+## Debug And QA Hooks
+
+Normal player URLs should not expose automation globals.
+
+- `?e2e=1`: attaches `advanceTime`, `render_game_to_text`, and `__MOSSU_E2E__` for lightweight browser tests.
+- `?qaDebug=1`: exposes `window.mossuDebug` for opening skip, route jumps, teleport, reset, direct save payloads, and named save presets.
+- `window.mossuDebug.listSavePresets()`: returns preset ids/labels/summaries.
+- `window.mossuDebug.applySavePreset(id)`: applies common QA states such as fresh start, recruited Karu, populated handbook, water route, and summit-ready.
+- `npm run art:review`: builds production and captures named headed route screenshots/JSON in `output/art-review-route/`.
+- `npm run art:compare`: validates those route artifacts and optionally compares against a saved summary baseline.
 
 ## Camera
 
@@ -193,11 +222,22 @@ Keep this render-side until persistence, collision, or quest logic needs them in
 
 ## Verification
 
-Minimum verification after code changes:
+Minimum verification after shippable code changes:
 
 ```bash
-npm run build
-npm run test:contracts
+npm run lint
+npm run qa
+npm run test:e2e:smoke
+git diff --check
 ```
 
-**Canonical QA path:** use a **real browser** (Chrome, Dia, Safari) for visual and interaction checks. Contract tests cover API and sampling invariants; automated Playwright-style browser runs have been unreliable in some environments, so ship decisions should not depend on headless-only runs until that path is stabilized.
+For rendering, lighting, UI, water, terrain, camera, or interaction changes, add:
+
+```bash
+npm run test:e2e:visual
+npm run perf:guard
+npm run art:review
+npm run art:compare
+```
+
+**Canonical QA path:** use a **real browser** (Chrome, Dia, Safari) for visual and interaction checks. Automated route screenshots and state comparisons catch drift, but final art judgement still needs a human pass in a desktop browser.
