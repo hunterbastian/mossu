@@ -47,6 +47,8 @@ const PICKUP_CARD_MS = 2200;
 const KARU_RECRUIT_PROMPT_RADIUS = 11.5;
 const KARU_JOIN_FOCUS_MS = 2200;
 const KARU_JOIN_FOCUS_MIN_FRAMES = 18;
+const HUD_MOVEMENT_DISCLOSURE_SPEED = 0.35;
+const HUD_MOVEMENT_DISCLOSURE_DISTANCE = 0.35;
 type BinderSectionId = "profile" | "cards" | "pouch";
 
 export interface HudShellUpdate {
@@ -144,6 +146,9 @@ export class HudShell {
   private pickupCardKindClass: string | null = null;
   private selectedPouchKind: ForageableKind | null = null;
   private pouchSignature = "";
+  private hasSeenGameplayMovement = false;
+  private movementDisclosureOriginX: number | null = null;
+  private movementDisclosureOriginZ: number | null = null;
   private readonly handleInventoryCardPointerMove = (event: PointerEvent) => {
     if (!(event.currentTarget instanceof HTMLElement)) {
       return;
@@ -202,6 +207,7 @@ export class HudShell {
     landmark: document.createElement("p"),
     wind: document.createElement("p"),
     collections: document.createElement("p"),
+    mobileObjective: document.createElement("p"),
     ability: document.createElement("div"),
     objectiveTitle: document.createElement("h1"),
     objectiveBody: document.createElement("p"),
@@ -268,6 +274,9 @@ export class HudShell {
       this.karuJoinFocusFramesRemaining -= 1;
     }
     const shouldShowControlsPanel = pauseMenuOpen || characterScreenOpen;
+    this.updateControlsDisclosure(frame, overlayOpen);
+    const controlsIntroActive = !overlayOpen && !this.hasSeenGameplayMovement;
+    const controlsLearnedActive = !overlayOpen && this.hasSeenGameplayMovement;
     const cinematicFocus =
       !overlayOpen &&
       (frame.player.rolling ||
@@ -285,6 +294,7 @@ export class HudShell {
       characterScreenOpen ? 1 : 0,
       pointerLocked ? 1 : 0,
       cinematicFocus ? 1 : 0,
+      this.hasSeenGameplayMovement ? 1 : 0,
       frame.currentZone,
       frame.currentLandmark,
       currentLandmarkId,
@@ -332,6 +342,7 @@ export class HudShell {
     this.statusValues.landmark.textContent = frame.currentLandmark;
     this.statusValues.wind.textContent = `${Math.round(windStrength * 100)}%`;
     this.statusValues.collections.textContent = `${characterData.totals.discovered}/${characterData.totals.total}`;
+    this.statusValues.mobileObjective.textContent = frame.objective.title;
     this.updateStaminaHud(frame.player.stamina, frame.player.staminaMax, frame.player.staminaVisible);
     this.updateRollModeHud(frame.player.rollHoldSeconds, frame.player.rollModeReady, frame.player.rolling, overlayOpen);
     this.element.classList.toggle("hud--map", isMapMode);
@@ -339,6 +350,8 @@ export class HudShell {
     this.element.classList.toggle("hud--character-screen", characterScreenOpen);
     this.element.classList.toggle("hud--cinematic-focus", cinematicFocus);
     this.element.classList.toggle("hud--karu-join-focus", karuJoinFocusActive);
+    this.element.classList.toggle("hud--controls-intro", controlsIntroActive);
+    this.element.classList.toggle("hud--controls-learned", controlsLearnedActive);
     this.element.classList.toggle("hud--summit-complete", frame.save.catalogedLandmarkIds.has("peak-shrine"));
     this.element.classList.toggle("hud--predator-alert", false);
     this.statusValues.prompt.classList.toggle("prompt-chip--danger", false);
@@ -639,6 +652,36 @@ export class HudShell {
     }
   }
 
+  private updateControlsDisclosure(frame: FrameState, overlayOpen: boolean) {
+    if (this.hasSeenGameplayMovement || overlayOpen) {
+      return;
+    }
+
+    const playerX = frame.player.position.x;
+    const playerZ = frame.player.position.z;
+    if (this.movementDisclosureOriginX === null || this.movementDisclosureOriginZ === null) {
+      this.movementDisclosureOriginX = playerX;
+      this.movementDisclosureOriginZ = playerZ;
+      return;
+    }
+
+    const horizontalSpeed = Math.hypot(frame.player.velocity.x, frame.player.velocity.z);
+    const distanceFromOrigin = Math.hypot(
+      playerX - this.movementDisclosureOriginX,
+      playerZ - this.movementDisclosureOriginZ,
+    );
+
+    if (
+      horizontalSpeed > HUD_MOVEMENT_DISCLOSURE_SPEED ||
+      distanceFromOrigin > HUD_MOVEMENT_DISCLOSURE_DISTANCE ||
+      frame.player.rolling ||
+      frame.player.swimming ||
+      frame.player.floating
+    ) {
+      this.hasSeenGameplayMovement = true;
+    }
+  }
+
   private renderFaunaMoodIcon(mood: HudShellUpdate["fauna"]["dominantMood"]) {
     return `<span class="karu-mood-icon karu-mood-icon--${mood}" aria-hidden="true"></span>`;
   }
@@ -815,6 +858,7 @@ export class HudShell {
       buildStatusMetric("Landmark", this.statusValues.landmark, "landmark"),
       buildStatusMetric("Breeze", this.statusValues.wind, "breeze"),
       buildStatusMetric("Notes", this.statusValues.collections, "cards"),
+      buildStatusMetric("Now", this.statusValues.mobileObjective, "objective"),
     );
 
     const bottom = document.createElement("div");

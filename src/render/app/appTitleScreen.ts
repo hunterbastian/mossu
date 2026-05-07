@@ -43,7 +43,7 @@ export function createTitleScreen(onStart: () => void) {
         <span></span>
       </div>
       <h1 class="title-screen__logo">Mossu</h1>
-      <p class="title-screen__splash">Burrow Hollow habitat console</p>
+      <p class="title-screen__splash">Burrow Hollow</p>
       <div class="title-screen__actions">
         <button class="title-screen__button title-screen__button--play" type="button" aria-label="Begin Mossu">
           <span class="title-screen__button-icon" aria-hidden="true"></span>
@@ -87,16 +87,16 @@ export function createOpeningSequenceOverlay() {
   overlay.setAttribute("aria-hidden", "true");
   overlay.innerHTML = `
     <div class="opening-sequence__panel">
-      <p class="opening-sequence__kicker">Habitat boot</p>
-      <strong>Burrow Hollow comes online</strong>
-      <span>trail glass, route grass, and a first Karu signal near the lake path</span>
+      <p class="opening-sequence__kicker">Burrow Hollow</p>
+      <strong>A warm morning on the moss</strong>
+      <span>the meadow is awake — water down the hill, a Karu somewhere along the lake path</span>
       <div class="opening-sequence__beats" aria-hidden="true">
         <i>meadow</i>
         <i>water</i>
         <i>Karu</i>
       </div>
     </div>
-    <p class="opening-sequence__skip">Move to take over</p>
+    <p class="opening-sequence__skip">Move to begin wandering</p>
   `;
   return overlay;
 }

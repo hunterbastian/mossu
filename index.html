@@ -247,14 +247,14 @@
 
       .instant-title__island--small {
         left: 18vw;
-        top: 50vh;
+        top: 43vh;
         width: clamp(2.4rem, 5vw, 4.2rem);
         opacity: 0.9;
       }
 
       .instant-title__island--tiny {
         right: 19vw;
-        top: 57vh;
+        top: 44vh;
         width: clamp(2rem, 4vw, 3.4rem);
         opacity: 0.84;
       }
@@ -331,8 +331,8 @@
         transform: rotate(24deg);
       }
 
-      .instant-title__progress-area {
-        position: absolute;
+      .instant-title > .instant-title__progress-area {
+        position: fixed;
         top: auto;
         left: 50%;
         bottom: clamp(4.4rem, 13vh, 7.4rem);
@@ -340,7 +340,7 @@
         align-content: start;
         justify-items: center;
         width: min(48rem, calc(100vw - 2.4rem));
-        height: auto;
+        height: clamp(4rem, 7vh, 5.2rem);
         min-height: 0;
         transform: translateX(-50%);
       }
@@ -491,7 +491,7 @@
             4px 6px 0 #063d83;
         }
 
-        .instant-title__progress-area {
+        .instant-title > .instant-title__progress-area {
           bottom: clamp(3.3rem, 11vh, 5rem);
         }
       }

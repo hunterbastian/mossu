@@ -14,7 +14,10 @@ The game currently supports walking, rolling, jumping, Breeze Float, swimming, f
 
 The current look is a cute painterly/anime creature-habitat route:
 
+- first-paint loading and the main title menu now use a retro pixel ocean/floating-island shell with a gold/blue Mossu logo, tiny clouds, and silver/gold pixel controls
 - Aero creature interface UI with cool glass chrome, crisp handheld-RPG menu states, and small organism accents
+- normal desktop gameplay HUD surfaces now lean Windows 7 / Frutiger Aero: translucent aqua glass, rounded glossy edges, blue depth, gold actionable accents, and bubble-like highlights
+- mobile gameplay HUD now protects the playfield by collapsing learned controls after first movement, showing one `Now` objective chip up top, and reserving pouch/roll/stamina UI for relevant moments
 - the isolated Karu/model viewer now reads as a polished macOS Aqua workshop, with an app-window shell, traffic lights, Geist UI type, Geist Mono keys/timers, frosted panels, warm selected controls, a CSS meadow viewport, and drag-to-orbit inspection
 - default Nordic filmic render preset with lifted ACES exposure, pearl-cool fog, restrained bloom, and slightly lower render cap
 - warmer readable paths and wider clearings

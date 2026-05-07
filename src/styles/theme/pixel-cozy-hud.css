@@ -1,0 +1,386 @@
+/* Gameplay HUD skin: carries the loading/title pixel language into play without changing layout behavior. */
+.hud {
+  --hud-pixel-blue: #0a73c2;
+  --hud-pixel-blue-deep: #064f9b;
+  --hud-pixel-gold: #ffd35e;
+  --hud-pixel-gold-deep: #d9892c;
+  --hud-pixel-silver: #eef4fa;
+  --hud-pixel-silver-mid: #c9d4df;
+  --hud-pixel-steel: #64778b;
+  --hud-pixel-ink: #11395f;
+  --hud-pixel-ink-soft: #2e5574;
+  image-rendering: pixelated;
+}
+
+.status-strip,
+.prompt-chip,
+.controls-panel,
+.hint-chip,
+.ability-pill,
+.pouch-hud,
+.roll-mode-hud {
+  border: 2px solid var(--hud-pixel-blue);
+  border-radius: 0.62rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(213, 225, 236, 0.5) 43%, rgba(87, 104, 124, 0.24) 44%),
+    linear-gradient(
+      180deg,
+      var(--hud-pixel-silver) 0%,
+      #f8fbfd 38%,
+      var(--hud-pixel-silver-mid) 39%,
+      var(--hud-pixel-silver) 100%
+    );
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -3px 0 rgba(82, 99, 118, 0.28),
+    0 3px 0 rgba(6, 79, 155, 0.64),
+    0 0.62rem 1.1rem rgba(4, 68, 124, 0.14);
+  color: var(--hud-pixel-ink);
+}
+
+.status-strip::after,
+.prompt-chip::after,
+.controls-panel::after,
+.hint-chip::after,
+.ability-pill::after,
+.pouch-hud::after {
+  content: "";
+  position: absolute;
+  top: 0.28rem;
+  right: 0.42rem;
+  inset: 0.28rem 0.42rem auto auto;
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, transparent 0 42%, rgba(255, 255, 255, 0.95) 43% 57%, transparent 58%),
+    linear-gradient(0deg, transparent 0 42%, rgba(255, 255, 255, 0.95) 43% 57%, transparent 58%);
+  filter: drop-shadow(0 0 0.3rem rgba(255, 255, 255, 0.78));
+  mix-blend-mode: normal;
+  opacity: 0.82;
+  animation: hud-pixel-glint 2.8s steps(4, end) infinite;
+}
+
+.status-strip {
+  gap: 0.34rem;
+  padding: 0.3rem;
+  border-color: #eaf1f8;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(188, 203, 220, 0.28) 46%, rgba(66, 86, 108, 0.34) 47%),
+    linear-gradient(180deg, #ffffff 0%, #dce7f1 44%, #aab8c7 45%, #f8fbfd 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -3px 0 rgba(67, 82, 100, 0.3),
+    0 4px 0 rgba(6, 79, 155, 0.58),
+    0 0.86rem 1.4rem rgba(4, 68, 124, 0.12);
+}
+
+.status-metric {
+  gap: 0.4rem;
+  border: 2px solid var(--hud-pixel-blue);
+  border-radius: 0.52rem;
+  background:
+    repeating-linear-gradient(112deg, transparent 0 1.5rem, rgba(81, 95, 111, 0.1) 1.55rem 1.65rem),
+    linear-gradient(180deg, #ffffff 0%, #e8f0f8 48%, #b9c6d4 49%, #f8fbfd 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 2px 0 rgba(6, 79, 155, 0.44);
+}
+
+.status-metric__icon {
+  width: 1.42rem;
+  border: 2px solid var(--hud-pixel-blue-deep);
+  border-radius: 0.28rem;
+  background: linear-gradient(180deg, #ffffff, #dbe4ee 48%, #aab7c6 49%, #f8fbfd);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    0 2px 0 rgba(5, 62, 118, 0.3);
+}
+
+.status-metric--landmark .status-metric__icon,
+.status-metric--objective .status-metric__icon {
+  background: linear-gradient(180deg, #fff4bb, var(--hud-pixel-gold) 48%, var(--hud-pixel-gold-deep) 49%, #fff0a0);
+}
+
+.status-metric--area .status-metric__icon::before,
+.status-metric--landmark .status-metric__icon::before,
+.status-metric--objective .status-metric__icon::before {
+  left: 0.48rem;
+  top: 0.24rem;
+  width: 0.28rem;
+  height: 0.72rem;
+  border-radius: 999px;
+  background: var(--hud-pixel-blue-deep);
+}
+
+.status-metric--area .status-metric__icon::after,
+.status-metric--landmark .status-metric__icon::after,
+.status-metric--objective .status-metric__icon::after {
+  right: 0.26rem;
+  top: 0.28rem;
+  width: 0.42rem;
+  height: 0.28rem;
+  border: 2px solid var(--hud-pixel-blue-deep);
+  border-radius: 100% 0 100% 0;
+  background: linear-gradient(180deg, #baf06b, #4faf49);
+  transform: rotate(-22deg);
+}
+
+.status-metric--breeze .status-metric__icon {
+  background: linear-gradient(180deg, #eaf9ff, #8ee9ff 48%, #1689d2 49%, #dff6ff);
+}
+
+.status-metric--breeze .status-metric__icon::before {
+  left: 0.24rem;
+  top: 0.48rem;
+  width: 0.7rem;
+  height: 0.32rem;
+  border-top: 3px solid var(--hud-pixel-blue-deep);
+  border-radius: 999px;
+}
+
+.status-metric--cards .status-metric__icon::before {
+  inset: 0.26rem;
+  border: 2px solid var(--hud-pixel-blue-deep);
+  border-radius: 0.12rem;
+}
+
+.status-label,
+.pouch-hud__title,
+.pouch-hud__hint,
+.roll-mode-hud__label,
+.stamina-hud__label {
+  color: var(--hud-pixel-blue-deep);
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.status-value,
+.prompt-chip,
+.controls-panel__label,
+.controls-panel__status,
+.ability-pill,
+.pouch-hud__detail-title,
+.pouch-hud__detail-body,
+.roll-mode-hud__value,
+.stamina-hud__value {
+  color: var(--hud-pixel-ink);
+}
+
+.prompt-chip,
+.controls-panel,
+.hint-chip {
+  border-color: #eaf1f8;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.prompt-chip {
+  border-color: var(--hud-pixel-blue);
+  overflow: visible;
+}
+
+.prompt-chip--ambient {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(202, 216, 230, 0.28) 48%, rgba(89, 105, 123, 0.2) 49%),
+    linear-gradient(180deg, #f8fbfd 0%, #dde7f0 52%, #f8fbfd 100%);
+  border-color: rgba(10, 115, 194, 0.72);
+}
+
+.prompt-chip--actionable,
+.pouch-hud--nearby {
+  border-color: var(--hud-pixel-gold);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -3px 0 rgba(157, 94, 30, 0.28),
+    0 3px 0 var(--hud-pixel-blue-deep),
+    0 0.65rem 1.2rem rgba(229, 154, 47, 0.18);
+}
+
+.karu-mood-icon {
+  border: 2px solid var(--hud-pixel-blue-deep);
+  border-radius: 0.32rem;
+  background: linear-gradient(180deg, #eaf9ff, #8ee9ff 48%, #1689d2 49%, #dff6ff);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    0 2px 0 rgba(5, 62, 118, 0.3);
+}
+
+.karu-mood-icon::before {
+  left: 0.48rem;
+  top: 0.66rem;
+  width: 0.18rem;
+  height: 0.24rem;
+  border-radius: 999px;
+  background: #11395f;
+  box-shadow: 0.56rem 0 #11395f;
+}
+
+.karu-mood-icon::after {
+  border-color: var(--hud-pixel-blue-deep);
+}
+
+.quick-actions__item,
+.controls-panel__key,
+.roll-mode-hud__badge,
+.pouch-hud__item {
+  border: 2px solid var(--hud-pixel-blue);
+  border-radius: 0.42rem;
+  background:
+    repeating-linear-gradient(112deg, transparent 0 0.8rem, rgba(81, 95, 111, 0.12) 0.84rem 0.9rem),
+    linear-gradient(180deg, #ffffff 0%, #e6eef6 48%, #aebccc 49%, #f8fbfd 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 2px 0 rgba(6, 79, 155, 0.34);
+}
+
+.quick-actions__item kbd {
+  border: 2px solid var(--hud-pixel-blue-deep);
+  border-radius: 0.34rem;
+  background: linear-gradient(180deg, #fff4bb, var(--hud-pixel-gold) 48%, var(--hud-pixel-gold-deep) 49%, #fff0a0);
+  color: #083d75;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.pouch-hud__item--nearby,
+.pouch-hud__item:hover,
+.pouch-hud__item:focus-visible,
+.pouch-hud__item--selected {
+  border-color: var(--hud-pixel-gold);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 0 var(--hud-pixel-blue-deep),
+    0 0 0 2px rgba(255, 211, 94, 0.22);
+}
+
+.pouch-hud__item--nearby::before,
+.pouch-hud__item--selected::before {
+  content: "";
+  width: 0.52rem;
+  height: 0.42rem;
+  border: 2px solid var(--hud-pixel-blue-deep);
+  border-radius: 100% 0 100% 0;
+  background: linear-gradient(180deg, #baf06b, #4faf49);
+  transform: rotate(-22deg);
+}
+
+.pouch-hud__count {
+  min-width: 1.1rem;
+  border: 1px solid rgba(6, 79, 155, 0.42);
+  background: linear-gradient(180deg, #fff4bb, var(--hud-pixel-gold));
+  color: #083d75;
+}
+
+.roll-mode-hud__badge {
+  background: linear-gradient(180deg, #fff4bb, var(--hud-pixel-gold) 48%, var(--hud-pixel-gold-deep) 49%, #fff0a0);
+  color: #083d75;
+}
+
+.roll-mode-hud__meter {
+  height: 0.44rem;
+  border: 2px solid var(--hud-pixel-blue-deep);
+  border-radius: 0.28rem;
+  background: linear-gradient(180deg, #6e7e90, #4f6175);
+}
+
+.roll-mode-hud__meter::after {
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.34) 0 0.22rem, transparent 0.22rem 0.46rem),
+    linear-gradient(90deg, #f8fbff, #dbe4ee 55%, #ffffff);
+  box-shadow: none;
+}
+
+.stamina-hud__ring {
+  border: 2px solid var(--hud-pixel-blue-deep);
+  background:
+    conic-gradient(from -90deg, var(--hud-pixel-gold) calc(var(--stamina-ratio) * 1turn), #7f91a3 0turn),
+    var(--hud-pixel-silver);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.7),
+    0 3px 0 rgba(6, 79, 155, 0.42);
+}
+
+.stamina-hud__ring::before,
+.stamina-hud__core {
+  background: linear-gradient(180deg, #ffffff 0%, #e6eef6 48%, #aebccc 49%, #f8fbfd 100%);
+}
+
+.ability-pill {
+  border-color: var(--hud-pixel-blue);
+}
+
+.hud--controls-learned:not(.hud--pause):not(.hud--character-screen):not(.hud--map) .hint-chip {
+  display: none;
+}
+
+.hud-flavor-ping {
+  border: 2px solid var(--hud-pixel-blue);
+  border-radius: 0.52rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(213, 225, 236, 0.46) 48%, rgba(87, 104, 124, 0.22) 49%),
+    linear-gradient(180deg, #ffffff 0%, #dce7f1 44%, #aab8c7 45%, #f8fbfd 100%);
+  color: var(--hud-pixel-ink);
+  font-weight: 850;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -3px 0 rgba(67, 82, 100, 0.26),
+    0 3px 0 rgba(6, 79, 155, 0.42),
+    0 0.7rem 1.1rem rgba(4, 68, 124, 0.12);
+}
+
+.hud-build-meta {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .status-strip {
+    border-color: var(--hud-pixel-blue);
+  }
+
+  .status-metric--objective {
+    border-color: var(--hud-pixel-blue);
+  }
+
+  .status-metric--objective .status-metric__icon {
+    width: 1.22rem;
+    border-radius: 0.28rem;
+    background: linear-gradient(180deg, #fff4bb, var(--hud-pixel-gold) 48%, var(--hud-pixel-gold-deep) 49%, #fff0a0);
+  }
+
+  .prompt-chip,
+  .hint-chip,
+  .pouch-hud,
+  .roll-mode-hud,
+  .ability-pill {
+    border-radius: 0.54rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-strip::after,
+  .prompt-chip::after,
+  .controls-panel::after,
+  .hint-chip::after,
+  .ability-pill::after,
+  .pouch-hud::after {
+    animation: none;
+  }
+}
+
+@keyframes hud-pixel-glint {
+  0%,
+  68%,
+  100% {
+    opacity: 0;
+    transform: scale(0.78) rotate(45deg);
+  }
+
+  78% {
+    opacity: 0.9;
+    transform: scale(1) rotate(45deg);
+  }
+}

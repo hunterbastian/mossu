@@ -14,6 +14,9 @@ The game should feel:
 - cinematic like Journey in movement/camera feel
 - lush and painterly in the world, with Studio Ghibli / BotW valley atmosphere and light anime-like color separation
 - readable and charming in UI, closer to cozy life-sim / handheld RPG menus than generic debug panels
+- desktop gameplay HUD can lean Windows 7 / Frutiger Aero when kept lightweight: translucent aqua glass, rounded glossy edges, blue depth, gold actionable accents, and bubble-like highlights
+- mobile gameplay UI should stay especially low-chrome: teach controls briefly, then collapse to one objective chip plus contextual pouch/roll/stamina feedback
+- the first-paint loading and main title menu can lean into a cleaner retro pixel ocean/floating-island presentation, with the gold/blue Mossu logo carrying the brand before gameplay starts
 - mechanically simple at first, with no combat in the current slice
 
 The current goal is one polished biome route, not a giant unfinished open world.

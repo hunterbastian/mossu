@@ -27,7 +27,11 @@ export interface GatheredGoodCardOptions {
   cardSeriesLabel: (index: number, total: number) => string;
 }
 
-export function buildStatusMetric(label: string, value: HTMLElement, kind: "area" | "landmark" | "breeze" | "cards") {
+export function buildStatusMetric(
+  label: string,
+  value: HTMLElement,
+  kind: "area" | "landmark" | "breeze" | "cards" | "objective",
+) {
   const wrapper = document.createElement("div");
   wrapper.className = `status-metric status-metric--${kind}`;
   const icon = document.createElement("span");

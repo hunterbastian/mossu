@@ -1,0 +1,339 @@
+/* Desktop gameplay HUD skin: Windows 7 / Frutiger Aero glass over the existing HUD layout. */
+.hud {
+  --frutiger-aero-sky: #37b8f2;
+  --frutiger-aero-deep: #075b9f;
+  --frutiger-aero-ink: #083a63;
+  --frutiger-aero-label: #0f78b8;
+  --frutiger-aero-glass: rgba(236, 252, 255, 0.58);
+  --frutiger-aero-glass-strong: rgba(247, 255, 255, 0.74);
+  --frutiger-aero-line: rgba(168, 236, 255, 0.92);
+  --frutiger-aero-gold: #ffc85a;
+  image-rendering: auto;
+}
+
+.status-strip,
+.prompt-chip,
+.controls-panel,
+.hint-chip,
+.ability-pill,
+.pouch-hud,
+.roll-mode-hud {
+  border: 1px solid var(--frutiger-aero-line);
+  border-radius: 0.86rem;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.96), transparent 34%),
+    radial-gradient(circle at 88% 18%, rgba(139, 239, 255, 0.34), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(219, 247, 255, 0.44) 47%, rgba(35, 148, 205, 0.24) 48%),
+    var(--frutiger-aero-glass);
+  backdrop-filter: blur(10px) saturate(1.24);
+  -webkit-backdrop-filter: blur(10px) saturate(1.24);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -1px 0 rgba(19, 113, 170, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.34),
+    0 0.72rem 1.6rem rgba(8, 83, 139, 0.18);
+  color: var(--frutiger-aero-ink);
+}
+
+.status-strip::before,
+.prompt-chip::before,
+.controls-panel::before,
+.hint-chip::before,
+.ability-pill::before,
+.pouch-hud::before,
+.roll-mode-hud::before {
+  content: "";
+  position: absolute;
+  inset: 0.16rem 0.2rem auto;
+  height: 44%;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.12));
+  pointer-events: none;
+}
+
+.status-strip::after,
+.prompt-chip::after,
+.controls-panel::after,
+.hint-chip::after,
+.ability-pill::after,
+.pouch-hud::after {
+  content: "";
+  position: absolute;
+  top: 0.32rem;
+  right: 0.46rem;
+  inset: 0.32rem 0.46rem auto auto;
+  width: 0.56rem;
+  height: 0.56rem;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.96) 0 28%, transparent 29%),
+    radial-gradient(circle, rgba(118, 224, 255, 0.58), rgba(19, 136, 207, 0));
+  filter: none;
+  mix-blend-mode: screen;
+  opacity: 0.72;
+  animation: aero-glass-breathe 5.2s ease-in-out infinite;
+}
+
+.status-strip {
+  gap: 0.3rem;
+  padding: 0.26rem;
+  max-width: min(31rem, calc(100vw - 1.6rem));
+  border-color: rgba(219, 249, 255, 0.96);
+}
+
+.status-metric {
+  border: 1px solid rgba(175, 236, 255, 0.82);
+  border-radius: 0.68rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(218, 247, 255, 0.48) 48%, rgba(40, 151, 207, 0.2) 49%),
+    rgba(239, 252, 255, 0.54);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 0.22rem 0.62rem rgba(8, 82, 132, 0.12);
+}
+
+.status-metric__icon,
+.karu-mood-icon {
+  border: 1px solid rgba(4, 96, 164, 0.36);
+  border-radius: 44% 56% 49% 51% / 56% 42% 58% 44%;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.98) 0 16%, transparent 17%),
+    linear-gradient(145deg, #e7fbff, #8be8ff 48%, #1596dc);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -0.25rem 0.5rem rgba(5, 92, 160, 0.18),
+    0 0.24rem 0.52rem rgba(5, 82, 132, 0.16);
+}
+
+.status-metric--landmark .status-metric__icon,
+.status-metric--objective .status-metric__icon {
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.98) 0 16%, transparent 17%),
+    linear-gradient(145deg, #fff7bd, var(--frutiger-aero-gold) 50%, #d7802d);
+}
+
+.status-metric--area .status-metric__icon::before,
+.status-metric--landmark .status-metric__icon::before,
+.status-metric--objective .status-metric__icon::before {
+  left: 0.5rem;
+  top: 0.3rem;
+  width: 0.42rem;
+  height: 0.78rem;
+  border-radius: 999px;
+  background: rgba(27, 112, 96, 0.82);
+}
+
+.status-metric--area .status-metric__icon::after,
+.status-metric--landmark .status-metric__icon::after,
+.status-metric--objective .status-metric__icon::after {
+  right: 0.25rem;
+  top: 0.28rem;
+  width: 0.54rem;
+  height: 0.34rem;
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  border-radius: 100% 0 100% 0;
+  background: linear-gradient(180deg, #baf06b, #4faf49);
+  transform: rotate(-22deg);
+}
+
+.status-label,
+.pouch-hud__title,
+.pouch-hud__hint,
+.roll-mode-hud__label,
+.stamina-hud__label,
+.controls-panel__eyebrow {
+  color: var(--frutiger-aero-label);
+  letter-spacing: 0.1em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.status-value,
+.prompt-chip,
+.controls-panel__label,
+.controls-panel__status,
+.ability-pill,
+.pouch-hud__detail-title,
+.pouch-hud__detail-body,
+.roll-mode-hud__value,
+.stamina-hud__value {
+  color: var(--frutiger-aero-ink);
+}
+
+.prompt-chip {
+  max-width: min(22rem, calc(100vw - 1.6rem));
+  border-color: rgba(174, 241, 255, 0.98);
+  overflow: hidden;
+  font-weight: 790;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
+.prompt-chip--ambient {
+  border-color: rgba(188, 235, 255, 0.7);
+  background:
+    radial-gradient(circle at 22% 0%, rgba(255, 255, 255, 0.82), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(225, 248, 255, 0.34) 50%, rgba(35, 148, 205, 0.14) 51%),
+    rgba(231, 249, 255, 0.38);
+}
+
+.prompt-chip--actionable,
+.pouch-hud--nearby {
+  border-color: rgba(255, 214, 106, 0.96);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.92), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 244, 188, 0.36) 48%, rgba(237, 164, 58, 0.24) 49%),
+    rgba(255, 247, 222, 0.54);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    0 0 0 1px rgba(255, 255, 255, 0.34),
+    0 0 1rem rgba(255, 202, 82, 0.3),
+    0 0.72rem 1.6rem rgba(8, 83, 139, 0.14);
+}
+
+.karu-mood-icon::before {
+  left: 0.48rem;
+  top: 0.7rem;
+  width: 0.2rem;
+  height: 0.28rem;
+  border-radius: 999px;
+  background: #0c355d;
+  box-shadow: 0.58rem 0 #0c355d;
+}
+
+.quick-actions__item,
+.controls-panel__key,
+.roll-mode-hud__badge,
+.pouch-hud__item {
+  border: 1px solid rgba(5, 83, 142, 0.38);
+  border-radius: 0.62rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(223, 243, 255, 0.7) 48%, rgba(150, 206, 232, 0.78) 49%),
+    #eefbff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 0.18rem 0.42rem rgba(5, 58, 94, 0.14);
+  color: var(--frutiger-aero-deep);
+}
+
+.quick-actions__item kbd {
+  border: 1px solid rgba(4, 83, 142, 0.46);
+  border-radius: 0.52rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 238, 166, 0.7) 48%, rgba(222, 151, 51, 0.72) 49%),
+    #fff6cf;
+  color: #075384;
+}
+
+.hud--controls-learned:not(.hud--pause):not(.hud--character-screen):not(.hud--map) .hint-chip {
+  display: none;
+}
+
+.pouch-hud__item--nearby,
+.pouch-hud__item:hover,
+.pouch-hud__item:focus-visible,
+.pouch-hud__item--selected {
+  border-color: rgba(255, 211, 94, 0.96);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 0 0 1px rgba(255, 211, 94, 0.28),
+    0 0.5rem 1rem rgba(8, 82, 132, 0.12);
+}
+
+.pouch-hud__item--nearby::before,
+.pouch-hud__item--selected::before {
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  border-radius: 100% 0 100% 0;
+  background: linear-gradient(180deg, #baf06b, #4faf49);
+}
+
+.roll-mode-hud__meter {
+  height: 0.38rem;
+  border: 1px solid rgba(5, 83, 142, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.roll-mode-hud__meter::after {
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2ea9e6, #8ee9ff 58%, #66c878);
+  box-shadow: 0 0 0.5rem rgba(75, 206, 255, 0.42);
+}
+
+.roll-mode-hud--active .roll-mode-hud__badge {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(203, 242, 208, 0.64) 48%, rgba(85, 190, 111, 0.72) 49%),
+    #eaffed;
+  color: #185f34;
+}
+
+.stamina-hud__ring {
+  border: 1px solid rgba(5, 83, 142, 0.32);
+  background:
+    conic-gradient(from -90deg, #4fc3ff calc(var(--stamina-ratio) * 1turn), rgba(255, 255, 255, 0.42) 0),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(176, 226, 243, 0.5));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    0 0.48rem 1rem rgba(8, 82, 132, 0.18);
+}
+
+.stamina-hud__ring::before,
+.stamina-hud__core {
+  background:
+    radial-gradient(circle at 34% 20%, rgba(255, 255, 255, 0.9), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(220, 244, 255, 0.72));
+}
+
+.hud-flavor-ping {
+  border: 1px solid rgba(218, 249, 255, 0.94);
+  border-radius: 0.72rem;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.92), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(227, 248, 255, 0.46) 50%, rgba(34, 139, 196, 0.18) 51%),
+    rgba(239, 252, 255, 0.74);
+  color: var(--frutiger-aero-ink);
+  font-weight: 790;
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    0 0.58rem 1.25rem rgba(8, 83, 139, 0.16);
+}
+
+.hud-build-meta {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .status-strip,
+  .prompt-chip,
+  .hint-chip,
+  .pouch-hud,
+  .roll-mode-hud,
+  .ability-pill {
+    border-radius: 0.72rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-strip::after,
+  .prompt-chip::after,
+  .controls-panel::after,
+  .hint-chip::after,
+  .ability-pill::after,
+  .pouch-hud::after {
+    animation: none;
+  }
+}
+
+@keyframes aero-glass-breathe {
+  0%,
+  100% {
+    opacity: 0.52;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 0.86;
+    transform: scale(1.08);
+  }
+}
