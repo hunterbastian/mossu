@@ -227,6 +227,65 @@
   display: none;
 }
 
+@media (min-width: 721px) {
+  .hud-top {
+    justify-content: center;
+  }
+
+  .status-strip {
+    display: grid;
+    grid-template-columns: minmax(13.5rem, 1.25fr) repeat(3, minmax(5.9rem, 0.72fr));
+    width: min(41rem, calc(100vw - 3rem));
+    max-width: none;
+    gap: 0.24rem;
+    padding: 0.22rem;
+  }
+
+  .status-metric {
+    min-width: 0;
+    padding: 0.26rem 0.46rem 0.28rem 0.3rem;
+  }
+
+  .status-metric--objective {
+    order: -1;
+    border-color: rgba(255, 222, 116, 0.98);
+    background:
+      radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.92), transparent 34%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 245, 191, 0.48) 48%, rgba(238, 172, 58, 0.24) 49%),
+      rgba(255, 250, 224, 0.66);
+  }
+
+  .status-metric--breeze {
+    display: none;
+  }
+
+  .status-metric__icon {
+    width: 1.34rem;
+  }
+
+  .status-label {
+    font-size: 0.42rem;
+    letter-spacing: 0.08em;
+  }
+
+  .status-value {
+    max-width: 100%;
+    font-size: 0.68rem;
+  }
+
+  .status-metric--objective .status-value {
+    font-size: 0.78rem;
+  }
+
+  .prompt-chip {
+    max-width: min(28rem, calc(100vw - 3rem));
+  }
+
+  .hud-bottom__stack {
+    gap: 0.42rem;
+  }
+}
+
 .pouch-hud__item--nearby,
 .pouch-hud__item:hover,
 .pouch-hud__item:focus-visible,

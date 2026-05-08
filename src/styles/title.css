@@ -87,7 +87,8 @@
     linear-gradient(180deg, rgba(255, 250, 219, 0.94), rgba(238, 209, 137, 0.82));
   box-shadow: var(--ui-shadow-soft);
   color: var(--ui-ink);
-  transform: translateY(calc((1 - var(--opening-progress)) * 0.6rem));
+  opacity: clamp(0, calc(1.18 - var(--opening-progress) * 1.42), 1);
+  transform: translateY(calc((1 - var(--opening-progress)) * 0.48rem));
 }
 
 .opening-sequence__panel::after {
@@ -165,7 +166,7 @@
   font-size: 0.74rem;
   font-weight: 900;
   text-shadow: 0 0.12rem 0.38rem rgba(80, 52, 28, 0.34);
-  opacity: clamp(0, calc((var(--opening-progress) - 0.24) * 4), 1);
+  opacity: clamp(0, calc((var(--opening-progress) - 0.18) * 5), 1);
 }
 
 .title-screen__sky,

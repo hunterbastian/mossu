@@ -1,6 +1,6 @@
 # Playtest Checklist
 
-Last updated: 2026-05-05
+Last updated: 2026-05-08
 
 Use this after major game changes. Start with `npm run qa`, then run the game in Chrome or another real browser.
 
@@ -95,7 +95,7 @@ Use this after major game changes. Start with `npm run qa`, then run the game in
 ## Full Route
 
 - Start at Burrow Hollow and reach Moss Crown Shrine in Chrome without teleporting.
-- `npm run art:review` captures named real-browser route screenshots under `output/art-review-route/`; check the Karu join, Fir Gate, Highland Basin, Ridge Saddle, and Moss Crown frames before final art calls.
+- `npm run art:review` captures named real-browser route screenshots under `output/art-review-route/`; run `npm run art:compare` so incomplete, stale, blank, or sky-only screenshots fail, then manually check the Karu join, Fir Gate, Highland Basin, Ridge Saddle, and Moss Crown frames before final art calls.
 - Automated guard workflow for every visual pass: run `npm run perf:guard:baseline` before changing the scene, then run `npm run perf:guard:candidate` after the pass. Both commands build the production bundle, open headed Chromium, replay the Burrow-to-Moss-Crown route through many small QA positions, capture per-checkpoint screenshots, and write comparable JSON under `output/perf-guard/`.
 - Route guard must pass the full budget: all route checkpoints reached, all route landmark stamps logged, average FPS >= 60, p95 frame time <= 18ms, every checkpoint average FPS >= 60, every checkpoint p95 <= 20ms, and nonblank/contrast/chroma screenshot checks must stay above the fixture thresholds.
 - Candidate guard also compares against `output/perf-guard/baseline.json` and fails on regressions larger than the fixture tolerance: average FPS drop > 3, p95 frame increase > 3ms, checkpoint FPS drop > 5, or checkpoint p95 increase > 5ms. Inspect `output/perf-guard/baseline/` vs `output/perf-guard/candidate/` screenshots before replacing the baseline.
@@ -131,13 +131,14 @@ Use this after major game changes. Start with `npm run qa`, then run the game in
 - At **short viewports** (window not maximized, laptop 13″, or browser chrome visible), the shell fits within the viewport: no content is permanently clipped; columns and card grids **scroll** inside the panel.
 - Keepsake and Pouch card grids scroll independently when many cards are populated; preview panel does not steal the entire height.
 - Tabs remain visible and tappable/clickable when the panel is narrow (stacked layout).
+- After recruiting Karu, the Karu friends section appears near the top of the main guide column and shows the saved companion card without needing to hunt for it.
 
 ## Fauna
 
 - Karu are visible near intended pockets.
 - Idle/wander motion is soft, not jittery.
 - Tap `E` does not recruit Karu; holding `E` near one Karu recruits only that individual.
-- On join, exactly one small prompt says `Karu joined Mossu's trail`, the rest of the HUD softens briefly, and the recruited Karu gives a small hop/glow pulse.
+- On join, exactly one small prompt says `Karu joined Mossu's trail`, the rest of the HUD softens briefly, the recruited Karu gives a small hop/glow pulse, and a cute companion profile card appears.
 - Followers use separation, alignment, cohesion, and leader follow.
 - Followers do not crowd, clip badly, or vanish.
 - Followers remain readable across slopes, banks, narrow clearings, and shallow water edges.

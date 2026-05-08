@@ -124,29 +124,30 @@ const DEBUG_ROUTE_JUMPS: Record<DebugRouteJumpId, DebugRouteJump> = {
   "fir-gate": {
     label: "Fir Gate",
     landmarkId: "fir-gate",
+    position: { x: 24, z: 88 },
     heading: -0.18,
-    cameraOptions: { distance: 30, focusHeight: 4.2, lift: 9 },
+    cameraOptions: { distance: 12, focusHeight: 6, lift: 14 },
   },
   "highland-basin": {
     label: "Highland Basin",
     landmarkId: "highland-basin",
-    position: { x: 52, z: 140 },
-    heading: -1.12,
-    cameraOptions: { distance: 32, focusHeight: 4.6, lift: 8.2 },
+    position: { x: 42, z: 134 },
+    heading: 3.14,
+    cameraOptions: { distance: 18, focusHeight: 8, lift: 20 },
   },
   "ridge-saddle": {
     label: "Ridge Saddle",
     landmarkId: "ridge-saddle-landmark",
-    position: { x: 20, z: 198 },
-    heading: -0.35,
-    cameraOptions: { distance: 30, focusHeight: 5, lift: 8.8 },
+    position: { x: 16, z: 186 },
+    heading: 0,
+    cameraOptions: { distance: 18, focusHeight: 8, lift: 20 },
   },
   shrine: {
     label: "Moss Crown Shrine",
     landmarkId: "peak-shrine",
-    position: { x: 10, z: 218 },
-    heading: 3.1,
-    cameraOptions: { distance: 28, focusHeight: 4.4, lift: 6.2 },
+    position: { x: 2, z: 214 },
+    heading: 3.14,
+    cameraOptions: { distance: 18, focusHeight: 8, lift: 20 },
   },
 };
 
@@ -972,6 +973,7 @@ export class GameApp {
     if (faunaStats.recruitedThisFrame > 0) {
       this.state.markSaveDirty();
       this.gameplayFeedback.playKaruChirp("join");
+      this.syncHud();
     }
     if (
       faunaStats.firstEncounterActive &&

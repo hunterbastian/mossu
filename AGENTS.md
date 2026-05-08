@@ -17,6 +17,8 @@
 - **`?e2e=1`** on the game URL uses a small `render_game_to_text` payload and keeps **Playwright / headless** reliable; **`window.__MOSSU_E2E__`** exposes `{ ready, mode }` after the first frame post-`start()`. Prefer `npm run test:e2e:smoke` for the browser smoke tests.
 - Visual, shader, and interaction validation should be checked in a **real desktop browser**, not only headless or embedded automation.
 - `npm run art:review` builds the production bundle, opens headed Chrome, uses `mossuDebug.jumpTo()` for named route checkpoints, and writes screenshots/JSON to `output/art-review-route/`; use it for visual passes that need fast real-browser judgement.
+- If a Codex sandbox run of browser tooling fails with **`listen EPERM`**, treat that as a local preview binding restriction and rerun the same important verification with approval instead of changing the app or test.
+- If `npm run art:review` is flaky in the desktop wrapper, keep `npm run art:compare` as the artifact gate and use the underlying route script only as a narrow fallback; record the fallback clearly in `progress.md`.
 - Focused playtesting can follow `docs/PLAYTEST_CHECKLIST.md` (e.g. a walk from Burrow to Moss Crown).
 - `Mossu weekly wiki sync` is a local weekly cron automation that compares repo docs/progress with `/Users/hunterbastian/wiki` Mossu pages after larger passes.
 - Project-level Three.js skill files from `cloudai-x/threejs-skills` are installed under `.claude/skills/`. For Three.js rendering, lighting, materials, shaders, postprocessing, loaders, animation, geometry, textures, or interaction work, consult the matching skill before changing code. Mossu's current TypeScript setup resolves Three.js add-ons through `three/examples/jsm/...`; do not switch those imports to `three/addons/...` unless the module resolution/types are updated and `tsc --noEmit` passes.
@@ -34,6 +36,7 @@
 
 - Treat `progress.md` as the chronological implementation log, not the current spec.
 - Start with `docs/CURRENT_STATE.md` for the short present-tense project snapshot and `docs/NEXT_PASSES.md` for the prioritized queue.
+- For broad context scans, also read `docs/GAME_MEMORY.md`, `docs/KNOWN_ISSUES.md`, `docs/TECHNICAL_OVERVIEW.md`, `docs/SYSTEMS_AUDIT.md`, `docs/PLAYTEST_CHECKLIST.md`, `package.json`, and the main owners: `GameApp.ts`, `WorldRenderer.ts`, `FollowCamera.ts`, `simulation/world.ts`, `simulation/gameState.ts`, `waterSystem.ts`, `ambientBlobs.ts`, `HudShell.ts`, and the smoke tests.
 - After meaningful implementation or verification work, update `progress.md` with scope, files, verification, artifacts, and the next risk.
 - If current mechanics, art direction, or product priorities changed, update `docs/GAME_MEMORY.md`.
 - If the short current-state snapshot changed, update `docs/CURRENT_STATE.md`.

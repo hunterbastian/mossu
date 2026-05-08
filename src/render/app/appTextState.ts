@@ -222,6 +222,11 @@ export function serializeGameTextState({
         focusedEntry: focusedCollection?.keepsakeTitle ?? null,
       },
       progression: characterData.progression,
+      karuCompanions: characterData.karuCompanions.map((profile) => ({
+        label: profile.label,
+        mood: profile.mood,
+        trait: profile.trait,
+      })),
       gatheredGoods: {
         gathered: characterData.gatheredTotals.gathered,
         total: characterData.gatheredTotals.total,

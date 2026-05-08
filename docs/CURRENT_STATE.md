@@ -1,6 +1,6 @@
 # Mossu Current State
 
-Last updated: 2026-05-06
+Last updated: 2026-05-08
 
 This is the short current-state brief for future agents. Use it before opening the longer chronological `progress.md` log.
 
@@ -8,7 +8,7 @@ This is the short current-state brief for future agents. Use it before opening t
 
 Mossu is a cozy third-person exploration game prototype built with TypeScript, Vite, and Three.js. The playable slice runs from Burrow Hollow to Moss Crown Shrine and is focused on one polished route, not a broad unfinished open world.
 
-The game currently supports walking, rolling, jumping, Breeze Float, swimming, forageable gathering, landmark cataloging, held one-at-a-time Karu recruitment/following with a quiet join beat and route catch-up guard, a route map, a profile/field-guide screen, local save persistence, fresh-start reset, quality settings, and QA/debug route jumps.
+The game currently supports walking, rolling, jumping, Breeze Float, swimming, forageable gathering, landmark cataloging, held one-at-a-time Karu recruitment/following with a cute profile-card celebration and route catch-up guard, a route map, a profile/field-guide screen, local save persistence, fresh-start reset, quality settings, and QA/debug route jumps.
 
 ## Visual Direction
 
@@ -16,14 +16,16 @@ The current look is a cute painterly/anime creature-habitat route:
 
 - first-paint loading and the main title menu now use a retro pixel ocean/floating-island shell with a gold/blue Mossu logo, tiny clouds, and silver/gold pixel controls
 - Aero creature interface UI with cool glass chrome, crisp handheld-RPG menu states, and small organism accents
-- normal desktop gameplay HUD surfaces now lean Windows 7 / Frutiger Aero: translucent aqua glass, rounded glossy edges, blue depth, gold actionable accents, and bubble-like highlights
+- normal desktop gameplay HUD surfaces now lean Windows 7 / Frutiger Aero: translucent aqua glass, rounded glossy edges, blue depth, gold actionable accents, bubble-like highlights, and a tighter centered status hierarchy
 - mobile gameplay HUD now protects the playfield by collapsing learned controls after first movement, showing one `Now` objective chip up top, and reserving pouch/roll/stamina UI for relevant moments
 - the isolated Karu/model viewer now reads as a polished macOS Aqua workshop, with an app-window shell, traffic lights, Geist UI type, Geist Mono keys/timers, frosted panels, warm selected controls, a CSS meadow viewport, and drag-to-orbit inspection
+- recruited Karu now get a small companion-card celebration and stay visible at the top of the field guide's Karu friends section
+- the opening camera now uses a 4.8s aerial valley reveal with a wider FOV, earlier smooth handoff, and concise Karu-first prompt copy
 - default Nordic filmic render preset with lifted ACES exposure, pearl-cool fog, restrained bloom, and slightly lower render cap
 - warmer readable paths and wider clearings
 - sharper storybook tree silhouettes
-- hand-painted grass clumps and reactive grass motion
-- cooler blue-green water with shoreline milk, foam strokes, restrained sparkles, and readable depth bands
+- hand-painted grass clumps, reactive grass motion, and small leaf/water glints around authored route pockets
+- cooler blue-green water with shoreline milk, foam strokes, restrained sparkles, readable depth bands, downstream current threads, lens-current ribbons, bend eddies, bank laps, traveling caustics, and longer Mossu/Karu ripple rings
 - soft pearl far-range fog and controlled warm sun haze
 - a small world-space 3D sun that drives scene lighting and subtle sky ray bands
 - a taller Moss Crown shrine/crown silhouette plus destination peak layers that read from earlier climb checkpoints
@@ -39,8 +41,8 @@ Keep the look charming and readable. Do not push blur, bloom, fog, or glow so fa
 - CSS: `src/styles.css` imports semantic chunks under `src/styles/`; `src/styles/theme-overrides.css` now imports named late-cascade theme layers under `src/styles/theme/`.
 - Water: `src/render/world/waterSystem.ts` plus `src/render/world/waterProfiles.ts`; underfill must keep the same vertex wave displacement as the main water surface.
 - Debug hooks: `?qaDebug=1` exposes `window.mossuDebug`, including route jumps and named save presets; `?e2e=1` keeps browser tests lightweight. Normal player URLs do not expose `advanceTime`, `render_game_to_text`, or `__MOSSU_E2E__`.
-- Performance: `npm run perf:guard` runs the route guard with screenshots and frame metrics; the far ocean Gerstner plane keeps a reduced vertex grid for the default filmic pass.
-- Art review: `npm run art:review` builds production, opens headed Chrome with `?e2e=1&qaDebug=1&visualProbe=1`, uses debug route jumps, and captures named screenshots/JSON in `output/art-review-route/`; `npm run art:compare` validates those artifacts and can compare them to a saved summary baseline.
+- Performance: `npm run perf:guard` runs the route guard with screenshots and frame metrics; the far ocean Gerstner plane keeps a reduced vertex grid for the default filmic pass, grassland ambient points animate in a GPU shader, and distant tree leaf-wind meshes are culled around the camera/player route.
+- Art review: `npm run art:review` builds production, opens headed Chrome with `?qaDebug=1`, enters gameplay through debug hooks, uses the normal browser render loop for visual settling, captures named screenshots/JSON in `output/art-review-route/`, and records whether each frame came from canvas or page capture; `npm run art:compare` rejects incomplete/stale artifacts and validates PNG contrast/chroma/detail before optional baseline comparison.
 - Karu route guard: `npm run karu:route` builds production, runs a state-first recruited-Karu route probe from Burrow toward Moss Crown, and fails if followers go missing or drift beyond the route threshold.
 - Agent review: `npm run agent:review` creates a dependency-free local review report plus a Swarms-ready prompt pack for art, perf, Karu, docs/wiki, and next-pass planning under `output/agent-review/`. Swarms is an optional workflow layer only, not a Mossu runtime dependency.
 
@@ -77,6 +79,7 @@ Final art judgement still needs a real desktop browser. Headless WebGL screensho
 - `CLAUDE.md` is a thin local pointer into `AGENTS.md`, `docs/CURRENT_STATE.md`, and `docs/NEXT_PASSES.md` so direct Claude Code sessions start with the same Mossu routing.
 - `Mossu weekly wiki sync` is active as a local weekly automation so wiki pages can be checked against repo docs after larger passes.
 - `npm run agent:review` can summarize existing route/perf/Karu/doc evidence, but fresh visual or performance calls still need the underlying capture commands first.
+- The latest graphics/perf guard passed at `136.4fps` average with `9.4ms` p95 frame time on the headed route, but Fir Gate's automated art-review frame is still more useful as a regression capture than a beauty shot.
 
 ## Parked Work
 

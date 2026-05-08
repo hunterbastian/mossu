@@ -126,6 +126,9 @@ export const MOSSU_TRACE_STAMP_COUNT = 34;
 export const WORLD_CLOUD_SHADOW_PATCH_COUNT = 6;
 const DEFERRED_WORLD_SLICES_PER_COVERED_FRAME = 3;
 const TREE_LEAF_WIND_UPDATE_INTERVAL = 1 / 30;
+const TREE_LEAF_WIND_CULL_DISTANCE = 178;
+const TREE_LEAF_WIND_HIGHLAND_CULL_DISTANCE = 116;
+const TREE_LEAF_WIND_CAMERA_OCCLUDER_HIDE_DISTANCE = 20;
 const SMALL_PROP_CULL_DISTANCE = 210;
 const FAR_DECOR_CULL_DISTANCE = 280;
 const WORLD_CULLING_UPDATE_INTERVAL = 10;
@@ -291,6 +294,7 @@ export interface WorldPerfStats {
   grasslandLifeSignals: number;
   grasslandDistantBirds: number;
   forestMeshes: number;
+  treeLeafWindVisibleMeshes: number;
   forestInstances: number;
   forestEstimatedTriangles: number;
   smallPropMeshes: number;
@@ -371,6 +375,7 @@ export class WorldRenderer {
   private worldCullingFrame = 0;
   private lastMapLookdown = false;
   private treeLeafWindUpdateCarry = 0;
+  private readonly treeLeafWindCullCenter = new Vector3();
   private heroGrassPulse = 0;
   private environmentPulse = 0;
   private readonly debugHiddenLayers = new Set<string>();
@@ -1063,7 +1068,7 @@ export class WorldRenderer {
       mesh.visible = gameplayVisible && mesh.count > 0;
     });
     this.treeLeafWindMeshes.forEach((mesh) => {
-      mesh.visible = gameplayVisible;
+      mesh.visible = gameplayVisible && ((mesh.userData.treeLeafWindCullVisible as boolean | undefined) ?? true);
     });
     this.smallPropMeshes.forEach((mesh) => {
       if (mapLookdown) {
@@ -1217,6 +1222,7 @@ export class WorldRenderer {
     const grassLodStats = this.windMeshes.map((mesh) => getGrassMeshLodStats(mesh));
     const grassImpostorInstances = this.grassImpostorMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
     const forestInstances = this.treeWindMeshes.reduce((sum, mesh) => sum + mesh.count, 0);
+    const treeLeafWindVisibleMeshes = this.treeLeafWindMeshes.reduce((sum, mesh) => sum + (mesh.visible ? 1 : 0), 0);
     const staticTreeWindTriangles = this.treeLeafWindMeshes.reduce(
       (sum, mesh) => sum + countGeometryTriangles(mesh.geometry),
       0,
@@ -1243,6 +1249,7 @@ export class WorldRenderer {
       grasslandLifeSignals: GRASSLAND_LIFE_SIGNAL_COUNT,
       grasslandDistantBirds: DISTANT_BIRD_COUNT,
       forestMeshes: this.treeWindMeshes.length + this.treeLeafWindMeshes.length,
+      treeLeafWindVisibleMeshes,
       forestInstances,
       forestEstimatedTriangles: countInstancedTriangles(this.treeWindMeshes) + staticTreeWindTriangles,
       smallPropMeshes: this.smallPropMeshes.length,
@@ -1347,6 +1354,39 @@ export class WorldRenderer {
       const cameraDistance = Math.hypot(centerX - camera.x, centerZ - camera.z);
       const cullDistance = mesh.count > 80 ? SMALL_PROP_CULL_DISTANCE : FAR_DECOR_CULL_DISTANCE;
       mesh.visible = playerDistance <= radius + cullDistance || cameraDistance <= radius + cullDistance * 0.82;
+    });
+    this.updateTreeLeafWindCulling(player, camera);
+  }
+
+  private updateTreeLeafWindCulling(player: Vector3, camera: Vector3) {
+    const cullDistance = this.suppressHighlandVistaGrass
+      ? TREE_LEAF_WIND_HIGHLAND_CULL_DISTANCE
+      : TREE_LEAF_WIND_CULL_DISTANCE;
+    this.treeLeafWindMeshes.forEach((mesh) => {
+      if (!mesh.geometry.boundingSphere) {
+        mesh.geometry.computeBoundingSphere();
+      }
+      const sphere = mesh.geometry.boundingSphere;
+      if (!sphere) {
+        mesh.userData.treeLeafWindCullVisible = true;
+        mesh.visible = true;
+        return;
+      }
+
+      const center = this.treeLeafWindCullCenter.copy(sphere.center).applyMatrix4(mesh.matrixWorld);
+      const radius = sphere.radius * mesh.matrixWorld.getMaxScaleOnAxis();
+      const playerDistance = Math.hypot(center.x - player.x, center.z - player.z);
+      const cameraDistance = Math.hypot(center.x - camera.x, center.z - camera.z);
+      const cameraOccluderDistance = Math.min(
+        TREE_LEAF_WIND_CAMERA_OCCLUDER_HIDE_DISTANCE,
+        Math.max(7, radius * 0.42),
+      );
+      const cameraInsideOccluder = cameraDistance <= cameraOccluderDistance && playerDistance > cameraDistance + 2;
+      const visible =
+        !cameraInsideOccluder &&
+        (playerDistance <= radius + cullDistance || cameraDistance <= radius + cullDistance * 0.86);
+      mesh.userData.treeLeafWindCullVisible = visible;
+      mesh.visible = visible;
     });
   }
 

@@ -239,6 +239,13 @@ test.describe("Mossu smoke", () => {
     await holdInteract();
     state = await readState();
     expect(state.save?.recruitedKaruIds ?? []).toHaveLength(1);
+    await expect(page.locator(".karu-profile-card--visible")).toContainText("profile unlocked");
+    await page.keyboard.press("Tab");
+    await step(180);
+    await expect(page.locator(".karu-companion-card").filter({ hasText: "Friend 1/1" })).toBeVisible();
+    await expect(page.locator(".karu-companion-card").filter({ hasText: "mood" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await step(180);
     const firstRecruit = state.save?.recruitedKaruIds ?? [];
 
     await holdInteract();
@@ -293,18 +300,18 @@ test.describe("Mossu smoke", () => {
 
     let state = await jumpTo("highland-basin");
     expect(state.viewMode).toBe("third_person");
-    expect(Math.round(state.player?.x ?? 0)).toBe(52);
-    expect(Math.round(state.player?.z ?? 0)).toBe(140);
+    expect(Math.round(state.player?.x ?? 0)).toBe(42);
+    expect(Math.round(state.player?.z ?? 0)).toBe(134);
     expect(state.save?.catalogedLandmarkIds ?? []).toContain("highland-basin");
 
     state = await jumpTo("ridge-saddle");
-    expect(Math.round(state.player?.x ?? 0)).toBe(20);
-    expect(Math.round(state.player?.z ?? 0)).toBe(198);
+    expect(Math.round(state.player?.x ?? 0)).toBe(16);
+    expect(Math.round(state.player?.z ?? 0)).toBe(186);
     expect(state.save?.catalogedLandmarkIds ?? []).toContain("ridge-saddle-landmark");
 
     state = await jumpTo("shrine");
-    expect(Math.round(state.player?.x ?? 0)).toBe(10);
-    expect(Math.round(state.player?.z ?? 0)).toBe(218);
+    expect(Math.round(state.player?.x ?? 0)).toBe(2);
+    expect(Math.round(state.player?.z ?? 0)).toBe(214);
     expect(state.save?.catalogedLandmarkIds ?? []).toContain("peak-shrine");
   });
 

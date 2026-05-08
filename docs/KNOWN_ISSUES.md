@@ -1,6 +1,6 @@
 # Known Issues And Watchlist
 
-Last updated: 2026-05-05
+Last updated: 2026-05-07
 
 This file tracks current caveats that are useful for future agents. These are not all release blockers.
 
@@ -14,11 +14,13 @@ Keep the explicit WebGL fallback behavior. Do not treat true WebGPU as shippable
 
 ### Browser WebGL Screenshots Can Be Flaky
 
-Some Playwright/headless screenshot probes have timed out or closed during heavy WebGL startup even when smoke tests, visual canvas probes, and perf guards pass. Headed Chrome art-review captures can also close or time out in Codex desktop sessions even after the production build succeeds. Prefer:
+Some Playwright/headless screenshot probes have timed out or closed during heavy WebGL startup even when smoke tests, visual canvas probes, and perf guards pass. Prefer:
 
 - `npm run test:e2e:visual` for deterministic canvas metrics.
 - `npm run karu:route` for state-first Karu follower route checks; pass `--screenshots` only when screenshot artifacts are explicitly needed.
 - `npm run perf:guard:headless` or the headed perf guard for route health.
+- `npm run art:review` plus `npm run art:compare` for the maintained headed Chrome route captures; this path now uses `?qaDebug=1`, clears stale artifacts, captures canvas-first with page fallback, writes incomplete summaries on failure, and rejects mixed partial or visually blank outputs.
+- Desktop Chrome or Computer Use for title/opening watch passes; throwaway Playwright opening-capture scripts can hang during browser close even when the real game plays correctly.
 - A real desktop browser for final art, lighting, camera, and interaction judgement.
 
 Playwright and perf-guard temp files now default to `.codex-tmp/playwright-tmp` inside the workspace, which should reduce failures caused by system temp pressure.
@@ -38,6 +40,7 @@ See [Asset Parking](ASSET_PARKING.md) before restoring it.
 
 ## Resolved Or Superseded Notes
 
-- Art-review readiness timeout: `npm run art:review` now opens headed Chrome with `?e2e=1&qaDebug=1&visualProbe=1`, avoiding the older full-runtime snapshot path while preserving deterministic route screenshots and JSON captures.
+- Art-review partial/stall artifacts: `npm run art:review` no longer mixes fresh route screenshots with old summaries, and headed Chrome route capture now avoids the uncancelled `advanceTime(..., true)` stall by using real-time visual waits plus bounded debug-bridge calls.
+- Art-review readiness timeout: `npm run art:review` now opens headed Chrome with `?qaDebug=1`, avoiding the old e2e-minimal screenshot path while preserving named route screenshots and JSON captures from the real browser render loop.
 - Large production chunk warning: the core Three.js vendor chunk is intentionally isolated and Vite's warning threshold now matches the current known baseline. Revisit code splitting only if load time or memory becomes user-visible.
 - Extraneous local packages: `npm prune` removed the stale Next/React/Sharp-related packages from `node_modules`; `npm ls --depth=0` is clean after the focused tech-cleanup pass.

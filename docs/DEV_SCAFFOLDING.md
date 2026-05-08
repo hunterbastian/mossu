@@ -14,8 +14,8 @@
 | **Automation bridge**      | `advanceTime`, `render_game_to_text`, and `__MOSSU_E2E__` attach only for `?e2e`, `?qaDebug`, `?perfDebug`, `?perfHud`, `?visualProbe`, or `?deterministicPerf`.                         |
 | **`window.__MOSSU_E2E__`** | `{ version: 1, ready, mode }` — wait for `ready` before driving `advanceTime` or snapshot.                                                                                               |
 | **`window.mossuDebug`**    | Only with **`?qaDebug`** — teleport, opening skip, route jumps, save payloads, and named save presets (see `runtimeBridge.ts` and `debugSavePresets.ts`).                                |
-| **`npm run art:review`**   | Uses `?e2e=1&qaDebug=1&visualProbe=1` so headed route screenshots avoid the full debug snapshot path while still rendering deterministic frames.                                         |
-| **`npm run art:compare`**  | Validates the latest route screenshots/JSON summary and can compare state against a saved art-review baseline.                                                                           |
+| **`npm run art:review`**   | Uses `?qaDebug=1` in headed Chrome, drives the real browser render loop through debug route anchors, and saves canvas-first/page-fallback route screenshots plus JSON.                    |
+| **`npm run art:compare`**  | Validates the latest route screenshots/JSON summary, rejects incomplete or stale captures, checks PNG contrast/chroma/detail, and can compare state against a saved art-review baseline. |
 | **`npm run agent:review`** | Builds a dependency-free local report and Swarms-ready prompt pack from current art, perf, Karu, repo-doc, and wiki evidence.                                                            |
 
 ## Commands

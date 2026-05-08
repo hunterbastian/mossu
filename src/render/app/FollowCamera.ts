@@ -35,7 +35,7 @@ const START_DISTANCE = 56;
 const START_FOCUS_HEIGHT = 5.1;
 const START_CAMERA_LIFT = 13.6;
 const START_SHOULDER = -2.8;
-const OPENING_HANDOFF_START = 0.72;
+const OPENING_HANDOFF_START = 0.62;
 const MIN_POLAR_ANGLE = 0.58;
 const MAX_POLAR_ANGLE = 2.28;
 const MANUAL_LOOK_COOLDOWN_SECONDS = 3.4;
@@ -618,20 +618,25 @@ export class FollowCamera {
 
     if (this.openingSequenceProgress !== null && this.viewMode === "third_person") {
       const introT = MathUtils.clamp(this.openingSequenceProgress, 0, 1);
-      const vistaT = easeOutCubic(MathUtils.smoothstep(introT, 0, 1));
+      const vistaT = easeOutCubic(MathUtils.smoothstep(introT, 0.02, 0.86));
+      const revealT = easeInOutSine(MathUtils.smoothstep(introT, 0.12, 0.72));
+      const aerialT = easeOutCubic(MathUtils.smoothstep(introT, 0, 0.48));
       const handoffT = easeInOutSine(MathUtils.smoothstep(introT, OPENING_HANDOFF_START, 1));
+      const crestT = Math.sin(MathUtils.clamp(introT, 0, 1) * Math.PI);
+      const driftT = Math.sin(introT * Math.PI * 1.75) * (1 - handoffT);
       this.openingSequenceTarget
         .copy(startingPosition)
-        .addScaledVector(START_DIRECTION, MathUtils.lerp(10, 72, vistaT))
-        .addScaledVector(START_RIGHT, MathUtils.lerp(-5.5, 10.5, vistaT))
-        .add(this.focusOffset.set(0, MathUtils.lerp(4.8, 10.8, vistaT), 0));
+        .addScaledVector(START_DIRECTION, MathUtils.lerp(24, 96, vistaT))
+        .addScaledVector(START_RIGHT, MathUtils.lerp(-4, 6, revealT) + driftT * 1.25)
+        .add(this.focusOffset.set(0, MathUtils.lerp(8.6, 12.2, revealT) + crestT * 1.45, 0));
       this.openingSequencePosition
         .copy(startingPosition)
-        .addScaledVector(START_DIRECTION, MathUtils.lerp(-30, -58, vistaT))
-        .addScaledVector(START_RIGHT, MathUtils.lerp(-16, 18, vistaT))
-        .add(this.focusOffset.set(0, MathUtils.lerp(12, 25, vistaT), 0));
+        .addScaledVector(START_DIRECTION, MathUtils.lerp(-104, -42, revealT))
+        .addScaledVector(START_RIGHT, MathUtils.lerp(-8, 6, aerialT) + driftT * 2.2)
+        .add(this.focusOffset.set(0, MathUtils.lerp(46, 22, revealT) + crestT * 3.4, 0));
       this.gameplayPosition.lerpVectors(this.openingSequencePosition, this.gameplayPosition, handoffT);
       this.gameplayTarget.lerpVectors(this.openingSequenceTarget, this.gameplayTarget, handoffT);
+      this.currentFov = MathUtils.lerp(MathUtils.lerp(62, GAMEPLAY_FOV + 0.8, revealT), this.currentFov, handoffT);
     }
 
     const targetBlend = this.viewMode === "map_lookdown" ? 1 : 0;

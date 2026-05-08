@@ -1,4 +1,5 @@
 import {
+  AdditiveBlending,
   BufferGeometry,
   CircleGeometry,
   Color,
@@ -14,7 +15,7 @@ import {
   MeshLambertMaterial,
   Object3D,
   Points,
-  PointsMaterial,
+  ShaderMaterial,
   SphereGeometry,
   Vector3,
 } from "three";
@@ -24,6 +25,7 @@ import { OOT_PS2_GRASSLANDS_PALETTE } from "../visualPalette";
 const immersionArt = OOT_PS2_GRASSLANDS_PALETTE.scene;
 export const GRASSLAND_LIFE_SIGNAL_COUNT = 96;
 export const DISTANT_BIRD_COUNT = 12;
+const LEAF_GLINT_COUNT = 72;
 
 export interface GrasslandImmersionSystem {
   group: Group;
@@ -31,6 +33,7 @@ export interface GrasslandImmersionSystem {
   dynamicLayer: Group;
   pollen: Points;
   lifeSignals: Points;
+  leafGlints: Points;
   distantBirds: InstancedMesh;
   cloudShadows: Mesh[];
 }
@@ -46,6 +49,14 @@ interface LifeSignalData {
   kind: Float32Array;
 }
 
+interface LeafGlintData {
+  base: Float32Array;
+  phase: Float32Array;
+  warmth: Float32Array;
+}
+
+type ImmersionPointLayer = "pollen" | "life" | "glint";
+
 interface DistantBirdData {
   base: Float32Array;
   phase: Float32Array;
@@ -55,6 +66,12 @@ interface DistantBirdData {
 }
 
 const distantBirdUpdateRig = new Object3D();
+
+const IMMERSION_POINT_LAYER_ID: Record<ImmersionPointLayer, number> = {
+  pollen: 0,
+  life: 1,
+  glint: 2,
+};
 
 function seededUnit(seed: number) {
   return MathUtils.euclideanModulo(Math.sin(seed * 127.1 + 37.7) * 43758.5453123, 1);
@@ -67,6 +84,182 @@ function canPlaceGroundAccent(x: number, z: number, maxSlope = 0.42) {
 
   const slope = 1 - sampleTerrainNormal(x, z).y;
   return slope <= maxSlope;
+}
+
+function buildImmersionPointMaterial({
+  layer,
+  size,
+  opacity,
+  additive = false,
+}: {
+  layer: ImmersionPointLayer;
+  size: number;
+  opacity: number;
+  additive?: boolean;
+}) {
+  return new ShaderMaterial({
+    name: `mossu-${layer}-gpu-point-material`,
+    transparent: true,
+    depthWrite: false,
+    vertexColors: true,
+    ...(additive ? { blending: AdditiveBlending } : {}),
+    uniforms: {
+      uTime: { value: 0 },
+      uOpacity: { value: opacity },
+      uSize: { value: size },
+      uLayer: { value: IMMERSION_POINT_LAYER_ID[layer] },
+      uLifeWake: { value: 0 },
+      uHasPlayer: { value: 0 },
+      uPlayerPosition: { value: new Vector3() },
+    },
+    vertexShader: `
+      attribute vec3 aBase;
+      attribute float aPhase;
+      attribute float aKind;
+      attribute float aWarmth;
+
+      uniform float uTime;
+      uniform float uOpacity;
+      uniform float uSize;
+      uniform float uLayer;
+      uniform float uLifeWake;
+      uniform float uHasPlayer;
+      uniform vec3 uPlayerPosition;
+
+      varying vec3 vColor;
+      varying float vAlpha;
+      varying float vLayer;
+      varying float vSpark;
+
+      float saturate(float value) {
+        return clamp(value, 0.0, 1.0);
+      }
+
+      void main() {
+        vec3 pos = aBase;
+        float alphaPulse = 1.0;
+        float sizePulse = 1.0;
+        float spark = 0.0;
+
+        if (uLayer < 0.5) {
+          pos.x += sin(uTime * 0.2 + aPhase) * 1.8 + sin(uTime * 0.053 + aPhase * 1.7) * 0.8;
+          pos.y += sin(uTime * 0.36 + aPhase * 1.4) * 0.42;
+          pos.z += cos(uTime * 0.15 + aPhase) * 1.4;
+          alphaPulse = 0.82 + sin(uTime * 0.13 + aPhase * 0.4) * 0.1;
+          sizePulse = 0.9 + sin(uTime * 0.28 + aPhase) * 0.08;
+        } else if (uLayer < 1.5) {
+          float hoverSpeed = mix(0.58, 0.48, step(0.5, aKind));
+          hoverSpeed = mix(hoverSpeed, 0.28, step(1.5, aKind));
+          float flutter = mix(0.72, 0.18, step(0.5, aKind));
+          flutter = mix(flutter, 0.45, step(1.5, aKind));
+          pos.x += sin(uTime * hoverSpeed + aPhase) * mix(1.15, 0.36, step(0.5, aKind));
+          pos.x += sin(uTime * 1.8 + aPhase * 1.3) * flutter * 0.18;
+          pos.y += sin(uTime * mix(1.05, 1.4, step(0.5, aKind)) + aPhase * 0.8) * mix(0.32, 0.06, step(0.5, aKind));
+          pos.z += cos(uTime * hoverSpeed * 0.76 + aPhase) * mix(0.82, 0.26, step(0.5, aKind));
+
+          if (uHasPlayer > 0.5) {
+            vec2 away = aBase.xz - uPlayerPosition.xz;
+            float distanceToPlayer = length(away);
+            float proximity = 1.0 - smoothstep(8.0, 28.0, distanceToPlayer);
+            if (proximity > 0.001 && distanceToPlayer > 0.001) {
+              float wake = proximity * (0.55 + uLifeWake * 0.55);
+              vec2 direction = away / distanceToPlayer;
+              pos.x += direction.x * wake * mix(1.6, 0.18, step(0.5, aKind));
+              pos.z += direction.y * wake * mix(1.1, 0.12, step(0.5, aKind));
+              pos.y += wake * mix(0.72, 0.08, step(0.5, aKind));
+            }
+          }
+
+          alphaPulse = 0.86 + sin(uTime * 0.2 + aPhase * 0.6) * 0.12 + uLifeWake * 0.18;
+          sizePulse = 0.92 + sin(uTime * 1.1 + aPhase) * 0.12;
+        } else {
+          float flicker = max(0.0, sin(uTime * (0.72 + aWarmth * 0.42) + aPhase));
+          pos.x += sin(uTime * 0.22 + aPhase) * 0.54;
+          pos.y += flicker * 0.16 + sin(uTime * 0.44 + aPhase * 1.3) * 0.1;
+          pos.z += cos(uTime * 0.18 + aPhase) * 0.42;
+          spark = flicker;
+          alphaPulse = 0.5 + flicker * 0.85 + uLifeWake * 0.2;
+          sizePulse = 0.72 + flicker * 0.58;
+        }
+
+        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        gl_PointSize = uSize * sizePulse * (320.0 / max(18.0, -mvPosition.z));
+
+        float cameraFade = 1.0 - smoothstep(210.0, 360.0, -mvPosition.z);
+        float playerFade = 1.0;
+        if (uHasPlayer > 0.5 && uLayer > 1.5) {
+          playerFade = 1.0 - smoothstep(128.0, 230.0, length(aBase.xz - uPlayerPosition.xz));
+        }
+
+        vColor = color * (1.0 + spark * 0.24);
+        vAlpha = uOpacity * alphaPulse * cameraFade * playerFade;
+        vLayer = uLayer;
+        vSpark = spark;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vAlpha;
+      varying float vLayer;
+      varying float vSpark;
+
+      void main() {
+        vec2 centered = gl_PointCoord - vec2(0.5);
+        float radius = length(centered) * 2.0;
+        float disc = smoothstep(1.0, 0.18, radius);
+        float core = smoothstep(0.42, 0.0, radius);
+        float cross = max(
+          smoothstep(0.12, 0.0, abs(centered.x)) * smoothstep(0.52, 0.0, abs(centered.y)),
+          smoothstep(0.12, 0.0, abs(centered.y)) * smoothstep(0.52, 0.0, abs(centered.x))
+        );
+        float shape = vLayer > 1.5 ? max(core, cross * (0.42 + vSpark * 0.58)) : disc;
+        float alpha = vAlpha * shape;
+        if (alpha < 0.01) {
+          discard;
+        }
+
+        gl_FragColor = vec4(vColor * (1.0 + core * 0.2 + vSpark * 0.18), alpha);
+      }
+    `,
+  });
+}
+
+function addGpuPointAttributes(
+  geometry: BufferGeometry,
+  base: Float32Array,
+  phase: Float32Array,
+  kind?: Float32Array,
+  warmth?: Float32Array,
+) {
+  const count = phase.length;
+  geometry.setAttribute("aBase", new Float32BufferAttribute(base, 3));
+  geometry.setAttribute("aPhase", new Float32BufferAttribute(phase, 1));
+  geometry.setAttribute("aKind", new Float32BufferAttribute(kind ?? new Float32Array(count), 1));
+  geometry.setAttribute("aWarmth", new Float32BufferAttribute(warmth ?? new Float32Array(count), 1));
+}
+
+function updateImmersionPointMaterial(
+  points: Points,
+  elapsed: number,
+  opacity: number,
+  lifeWake = 0,
+  playerPosition?: Vector3,
+) {
+  const material = points.material;
+  if (!(material instanceof ShaderMaterial)) {
+    return;
+  }
+
+  material.uniforms.uTime.value = elapsed;
+  material.uniforms.uOpacity.value = opacity;
+  material.uniforms.uLifeWake.value = lifeWake;
+  if (playerPosition) {
+    material.uniforms.uHasPlayer.value = 1;
+    (material.uniforms.uPlayerPosition.value as Vector3).copy(playerPosition);
+  } else {
+    material.uniforms.uHasPlayer.value = 0;
+  }
 }
 
 function makeDistantTree(scale: number, leafColor: string, trunkColor: string) {
@@ -232,15 +425,9 @@ function buildPollenMotes() {
   const pointGeometry = new BufferGeometry();
   pointGeometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   pointGeometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+  addGpuPointAttributes(pointGeometry, base, phase);
 
-  const material = new PointsMaterial({
-    size: 0.7,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.46,
-    depthWrite: false,
-    sizeAttenuation: true,
-  });
+  const material = buildImmersionPointMaterial({ layer: "pollen", size: 0.72, opacity: 0.34 });
 
   const pollen = new Points(pointGeometry, material);
   pollen.name = "grassland-drifting-pollen";
@@ -306,20 +493,71 @@ function buildLifeSignals() {
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+  addGpuPointAttributes(geometry, base, phase, kind);
 
-  const material = new PointsMaterial({
-    size: 0.42,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.38,
-    depthWrite: false,
-    sizeAttenuation: true,
-  });
+  const material = buildImmersionPointMaterial({ layer: "life", size: 0.48, opacity: 0.32, additive: true });
 
   const signals = new Points(geometry, material);
   signals.name = "grassland-living-habitat-signals";
   signals.userData.lifeSignalData = { base, phase, kind } satisfies LifeSignalData;
   return signals;
+}
+
+function buildLeafGlints() {
+  const count = LEAF_GLINT_COUNT;
+  const positions = new Float32Array(count * 3);
+  const base = new Float32Array(count * 3);
+  const phase = new Float32Array(count);
+  const warmth = new Float32Array(count);
+  const colors = new Float32Array(count * 3);
+  const color = new Color();
+  const sunGold = new Color("#fff4a8");
+  const skySilver = new Color("#d8fbff");
+  const leafGreen = new Color("#c5ef7a");
+  const anchors = [
+    [-118, -144, 3.8, 22],
+    [-42, -138, 3.2, 24],
+    [18, -146, 3.3, 18],
+    [-44, 30, 3.6, 20],
+    [54, 28, 3.2, 18],
+    [-28, 86, 4.2, 18],
+    [36, 118, 4.8, 16],
+    [4, 196, 5.2, 14],
+  ] as const;
+
+  for (let i = 0; i < count; i += 1) {
+    const anchor = anchors[i % anchors.length];
+    const spread = anchor[3];
+    const x = anchor[0] + (seededUnit(i * 3.4 + 9) - 0.5) * spread + Math.sin(i * 1.31) * 2.4;
+    const z = anchor[1] + (seededUnit(i * 4.1 + 5) - 0.5) * spread * 0.62 + Math.cos(i * 1.77) * 1.6;
+    const y = sampleTerrainHeight(x, z) + anchor[2] + seededUnit(i * 2.3 + 7) * 3.4;
+    const p = i * 3;
+    base[p] = x;
+    base[p + 1] = y;
+    base[p + 2] = z;
+    positions[p] = x;
+    positions[p + 1] = y;
+    positions[p + 2] = z;
+    phase[i] = seededUnit(i * 5.6 + 2) * Math.PI * 2;
+    warmth[i] = seededUnit(i * 7.1 + 4);
+
+    color.copy(skySilver).lerp(sunGold, warmth[i] * 0.66).lerp(leafGreen, seededUnit(i * 2.7 + 13) * 0.2);
+    colors[p] = color.r;
+    colors[p + 1] = color.g;
+    colors[p + 2] = color.b;
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+  addGpuPointAttributes(geometry, base, phase, undefined, warmth);
+
+  const material = buildImmersionPointMaterial({ layer: "glint", size: 0.92, opacity: 0.2, additive: true });
+
+  const glints = new Points(geometry, material);
+  glints.name = "grassland-leaf-and-water-glints";
+  glints.userData.leafGlintData = { base, phase, warmth } satisfies LeafGlintData;
+  return glints;
 }
 
 function buildDistantBirdGeometry() {
@@ -394,13 +632,14 @@ export function buildGrasslandImmersionSystem(): GrasslandImmersionSystem {
   const cloudShadows = buildCloudShadowPatches();
   const pollen = buildPollenMotes();
   const lifeSignals = buildLifeSignals();
+  const leafGlints = buildLeafGlints();
   const distantBirds = buildDistantBirds();
 
   staticLayer.add(buildDistantTreeBelts());
-  dynamicLayer.add(...cloudShadows, pollen, lifeSignals, distantBirds);
+  dynamicLayer.add(...cloudShadows, pollen, lifeSignals, leafGlints, distantBirds);
   group.add(staticLayer, dynamicLayer);
 
-  return { group, staticLayer, dynamicLayer, pollen, lifeSignals, distantBirds, cloudShadows };
+  return { group, staticLayer, dynamicLayer, pollen, lifeSignals, leafGlints, distantBirds, cloudShadows };
 }
 
 export function updateGrasslandImmersionSystem(
@@ -415,63 +654,21 @@ export function updateGrasslandImmersionSystem(
     return;
   }
 
-  const pollenData = system.pollen.userData.pollenData as PollenData | undefined;
-  const positionAttr = system.pollen.geometry.getAttribute("position") as Float32BufferAttribute;
-  if (pollenData) {
-    for (let i = 0; i < pollenData.phase.length; i += 1) {
-      const p = i * 3;
-      const phase = pollenData.phase[i];
-      positionAttr.setXYZ(
-        i,
-        pollenData.base[p] + Math.sin(elapsed * 0.2 + phase) * 1.8 + Math.sin(elapsed * 0.053 + i) * 0.8,
-        pollenData.base[p + 1] + Math.sin(elapsed * 0.36 + phase * 1.4) * 0.42,
-        pollenData.base[p + 2] + Math.cos(elapsed * 0.15 + phase) * 1.4,
-      );
-    }
-    positionAttr.needsUpdate = true;
-  }
-
-  const pollenMaterial = system.pollen.material as PointsMaterial;
-  pollenMaterial.opacity = 0.34 + Math.sin(elapsed * 0.13) * 0.04;
-
-  const lifeData = system.lifeSignals.userData.lifeSignalData as LifeSignalData | undefined;
-  const lifePositionAttr = system.lifeSignals.geometry.getAttribute("position") as Float32BufferAttribute;
-  if (lifeData) {
-    for (let i = 0; i < lifeData.phase.length; i += 1) {
-      const p = i * 3;
-      const phase = lifeData.phase[i];
-      const signalKind = lifeData.kind[i];
-      const hoverSpeed = signalKind === 1 ? 0.48 : signalKind === 2 ? 0.28 : 0.58;
-      const flutter = signalKind === 1 ? 0.18 : signalKind === 2 ? 0.45 : 0.72;
-      let x =
-        lifeData.base[p] +
-        Math.sin(elapsed * hoverSpeed + phase) * (signalKind === 1 ? 0.36 : 1.15) +
-        Math.sin(elapsed * 1.8 + phase * 1.3) * flutter * 0.18;
-      let y =
-        lifeData.base[p + 1] +
-        Math.sin(elapsed * (signalKind === 1 ? 1.4 : 1.05) + phase * 0.8) * (signalKind === 1 ? 0.06 : 0.32);
-      let z = lifeData.base[p + 2] + Math.cos(elapsed * (hoverSpeed * 0.76) + phase) * (signalKind === 1 ? 0.26 : 0.82);
-
-      if (playerPosition) {
-        const dx = lifeData.base[p] - playerPosition.x;
-        const dz = lifeData.base[p + 2] - playerPosition.z;
-        const distance = Math.hypot(dx, dz);
-        const proximity = 1 - MathUtils.smoothstep(distance, 8, 28);
-        if (proximity > 0.001 && distance > 0.001) {
-          const wake = proximity * (0.55 + lifeWake * 0.55);
-          x += (dx / distance) * wake * (signalKind === 1 ? 0.18 : 1.6);
-          z += (dz / distance) * wake * (signalKind === 1 ? 0.12 : 1.1);
-          y += wake * (signalKind === 1 ? 0.08 : 0.72);
-        }
-      }
-
-      lifePositionAttr.setXYZ(i, x, y, z);
-    }
-    lifePositionAttr.needsUpdate = true;
-  }
-
-  const lifeMaterial = system.lifeSignals.material as PointsMaterial;
-  lifeMaterial.opacity = MathUtils.clamp(0.3 + Math.sin(elapsed * 0.2) * 0.04 + lifeWake * 0.08, 0.22, 0.48);
+  updateImmersionPointMaterial(system.pollen, elapsed, 0.34 + Math.sin(elapsed * 0.13) * 0.04, lifeWake, playerPosition);
+  updateImmersionPointMaterial(
+    system.lifeSignals,
+    elapsed,
+    MathUtils.clamp(0.3 + Math.sin(elapsed * 0.2) * 0.04 + lifeWake * 0.08, 0.22, 0.48),
+    lifeWake,
+    playerPosition,
+  );
+  updateImmersionPointMaterial(
+    system.leafGlints,
+    elapsed,
+    MathUtils.clamp(0.16 + Math.max(0, Math.sin(elapsed * 0.38)) * 0.08 + lifeWake * 0.05, 0.12, 0.34),
+    lifeWake,
+    playerPosition,
+  );
 
   const birdData = system.distantBirds.userData.distantBirdData as DistantBirdData | undefined;
   if (birdData) {

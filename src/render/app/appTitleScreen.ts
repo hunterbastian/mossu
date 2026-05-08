@@ -88,15 +88,15 @@ export function createOpeningSequenceOverlay() {
   overlay.innerHTML = `
     <div class="opening-sequence__panel">
       <p class="opening-sequence__kicker">Burrow Hollow</p>
-      <strong>A warm morning on the moss</strong>
-      <span>the meadow is awake — water down the hill, a Karu somewhere along the lake path</span>
+      <strong>Morning lifts over the valley</strong>
+      <span>water threads below; a Karu waits along the lake path</span>
       <div class="opening-sequence__beats" aria-hidden="true">
-        <i>meadow</i>
+        <i>wake</i>
         <i>water</i>
         <i>Karu</i>
       </div>
     </div>
-    <p class="opening-sequence__skip">Move to begin wandering</p>
+    <p class="opening-sequence__skip">Move to take the trail</p>
   `;
   return overlay;
 }

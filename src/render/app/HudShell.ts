@@ -1,5 +1,9 @@
 import { MathUtils } from "three";
-import type { CharacterScreenView } from "../../simulation/characterScreenData";
+import type {
+  CharacterScreenView,
+  KaruCompanionProfileView,
+  KaruProfileMood,
+} from "../../simulation/characterScreenData";
 import { MOVEMENT_CONTROL_LABELS, MOVEMENT_CONTROL_SUMMARY } from "../../simulation/controlScheme";
 import type { FrameState } from "../../simulation/gameState";
 import { ROLL_MODE_INDICATOR_DELAY } from "../../simulation/playerSimulationConstants";
@@ -47,9 +51,18 @@ const PICKUP_CARD_MS = 2200;
 const KARU_RECRUIT_PROMPT_RADIUS = 11.5;
 const KARU_JOIN_FOCUS_MS = 2200;
 const KARU_JOIN_FOCUS_MIN_FRAMES = 18;
+const KARU_PROFILE_CARD_MS = 5200;
 const HUD_MOVEMENT_DISCLOSURE_SPEED = 0.35;
 const HUD_MOVEMENT_DISCLOSURE_DISTANCE = 0.35;
 type BinderSectionId = "profile" | "cards" | "pouch";
+type HudKaruFollower = {
+  id: string;
+  mood: KaruProfileMood;
+  reaction: string;
+  distanceToPlayer: number;
+  targetDistance: number;
+  speed: number;
+};
 
 export interface HudShellUpdate {
   frame: FrameState;
@@ -68,9 +81,10 @@ export interface HudShellUpdate {
     firstEncounterActive: boolean;
     rollingCount: number;
     mossuCollisionCount: number;
-    dominantMood: "curious" | "shy" | "brave" | "sleepy";
+    dominantMood: KaruProfileMood;
     regroupActive: boolean;
     callHeardActive: boolean;
+    followers: HudKaruFollower[];
   };
   windStrength: number;
 }
@@ -108,6 +122,12 @@ export class HudShell {
   private readonly pickupCardKind = document.createElement("p");
   private readonly pickupCardMeta = document.createElement("p");
   private readonly pickupCardSummary = document.createElement("p");
+  private readonly karuProfileCard = document.createElement("section");
+  private readonly karuProfileIcon = document.createElement("span");
+  private readonly karuProfileTitle = document.createElement("p");
+  private readonly karuProfileMood = document.createElement("p");
+  private readonly karuProfileMeta = document.createElement("p");
+  private readonly karuProfileSummary = document.createElement("p");
   private readonly pauseMenu = document.createElement("aside");
   private readonly pauseSummary = document.createElement("p");
   private readonly pauseStatusValues = {
@@ -130,6 +150,8 @@ export class HudShell {
   private readonly goodsProgressLabel = document.createElement("strong");
   private readonly statsGrid = document.createElement("div");
   private readonly upgradesGrid = document.createElement("div");
+  private readonly karuCompanionBadge = document.createElement("span");
+  private readonly karuCompanionList = document.createElement("div");
   private readonly collectionsList = document.createElement("div");
   private readonly gatheredGoodsList = document.createElement("div");
   private readonly collectionsSectionBadge = document.createElement("span");
@@ -146,6 +168,9 @@ export class HudShell {
   private pickupCardKindClass: string | null = null;
   private selectedPouchKind: ForageableKind | null = null;
   private pouchSignature = "";
+  private karuProfileCardHideAt = 0;
+  private karuProfileCardSignature = "";
+  private karuCompanionSignature = "";
   private hasSeenGameplayMovement = false;
   private movementDisclosureOriginX: number | null = null;
   private movementDisclosureOriginZ: number | null = null;
@@ -267,6 +292,7 @@ export class HudShell {
     if (!overlayOpen && fauna.recruitedThisFrame > 0) {
       this.karuJoinFocusUntil = now + KARU_JOIN_FOCUS_MS;
       this.karuJoinFocusFramesRemaining = KARU_JOIN_FOCUS_MIN_FRAMES;
+      this.karuProfileCardHideAt = now + KARU_PROFILE_CARD_MS;
     }
     const karuJoinFocusActive =
       !overlayOpen && (now < this.karuJoinFocusUntil || this.karuJoinFocusFramesRemaining > 0);
@@ -321,6 +347,9 @@ export class HudShell {
       fauna.firstEncounterActive ? 1 : 0,
       fauna.callHeardActive ? 1 : 0,
       fauna.regroupActive ? 1 : 0,
+      now < this.karuProfileCardHideAt ? 1 : 0,
+      ...fauna.followers.map((follower) => `${follower.id}:${follower.mood}:${follower.reaction}`),
+      ...characterData.karuCompanions.map((profile) => `${profile.id}:${profile.mood}`),
       characterData.totals.discovered,
       characterData.totals.total,
       characterData.gatheredTotals.gathered,
@@ -360,7 +389,7 @@ export class HudShell {
     this.controlsPanel.classList.toggle("controls-panel--visible", shouldShowControlsPanel);
     this.updateMapOverlay(frame, characterData, viewMode);
     this.updatePauseMenu(frame, characterData, windStrength, savePersistenceEnabled);
-    this.updateCharacterScreen(characterData, focusedCollectionId, characterScreenOpen);
+    this.updateCharacterScreen(characterData, focusedCollectionId, characterScreenOpen, fauna);
     this.updatePouchHud(
       characterData,
       nearbyForageable?.kind ?? null,
@@ -368,6 +397,7 @@ export class HudShell {
       overlayOpen,
     );
     this.updatePickupCard(latestGatheredGood ?? null, overlayOpen);
+    this.updateKaruProfileCard(characterData, fauna, overlayOpen, now);
 
     if (pauseMenuOpen) {
       this.statusValues.objectiveTitle.textContent = "Care paused";
@@ -462,7 +492,7 @@ export class HudShell {
     } else if (karuJoinFocusActive) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName} joined Mossu's trail</strong></span>`;
     } else if (fauna.firstEncounterActive) {
-      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>Karu nearby</strong> Ease closer, then hold E to invite one.</span>`;
+      this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>Karu nearby</strong> Ease closer, then hold E to invite the Karu.</span>`;
     } else if (fauna.rollingCount > 0) {
       this.statusValues.prompt.innerHTML = `${faunaMoodIcon}<span><strong>${faunaName}</strong> ${fauna.rollingCount} rolling with Mossu.</span>`;
     } else if (fauna.callHeardActive && fauna.recruitedCount > 0) {
@@ -547,6 +577,104 @@ export class HudShell {
 
     const visible = !overlayOpen && now < this.pickupCardHideAt;
     this.pickupCard.classList.toggle("pickup-card--visible", visible);
+  }
+
+  private updateKaruProfileCard(
+    characterData: CharacterScreenView,
+    fauna: HudShellUpdate["fauna"],
+    overlayOpen: boolean,
+    now: number,
+  ) {
+    const latestProfile = characterData.karuCompanions[characterData.karuCompanions.length - 1] ?? null;
+    const visible = !overlayOpen && latestProfile !== null && now < this.karuProfileCardHideAt;
+    this.karuProfileCard.classList.toggle("karu-profile-card--visible", visible);
+    if (!visible || !latestProfile) {
+      this.karuProfileCardSignature = "";
+      return;
+    }
+
+    const liveFollower = fauna.followers.find((follower) => follower.id === latestProfile.id);
+    const mood = liveFollower?.mood ?? latestProfile.mood;
+    const signature = `${latestProfile.id}:${mood}:${characterData.karuCompanions.length}`;
+    if (signature === this.karuProfileCardSignature) {
+      return;
+    }
+    this.karuProfileCardSignature = signature;
+
+    this.karuProfileIcon.className = `karu-profile-card__icon karu-mood-icon karu-mood-icon--${mood}`;
+    this.karuProfileTitle.textContent = `${latestProfile.label} profile unlocked`;
+    this.karuProfileMood.textContent = `${this.formatKaruMood(mood)} mood`;
+    this.karuProfileMeta.textContent = `Trail friend ${latestProfile.cardIndex}/${latestProfile.total}`;
+    this.karuProfileSummary.textContent = `${latestProfile.trait}. Saved to the field guide; press Tab to see the card.`;
+    this.karuProfileCard.setAttribute("aria-label", `${latestProfile.label} profile unlocked`);
+  }
+
+  private updateKaruCompanionList(
+    profiles: readonly KaruCompanionProfileView[],
+    fauna: HudShellUpdate["fauna"],
+  ) {
+    this.karuCompanionBadge.textContent = `${profiles.length}`;
+    const signature = profiles
+      .map((profile) => {
+        const liveFollower = fauna.followers.find((follower) => follower.id === profile.id);
+        return `${profile.id}:${liveFollower?.mood ?? profile.mood}:${liveFollower?.reaction ?? "trail"}`;
+      })
+      .join("|");
+    if (signature === this.karuCompanionSignature) {
+      return;
+    }
+    this.karuCompanionSignature = signature;
+
+    if (profiles.length === 0) {
+      const empty = document.createElement("article");
+      empty.className = "karu-companion-card karu-companion-card--empty";
+      const eyebrow = document.createElement("p");
+      eyebrow.className = "karu-companion-card__eyebrow";
+      eyebrow.textContent = "Waiting";
+      const title = document.createElement("h3");
+      title.className = "karu-companion-card__title";
+      title.textContent = "No Karu cards yet";
+      const body = document.createElement("p");
+      body.className = "karu-companion-card__body";
+      body.textContent = "Invite a nearby Karu, then this sleeve becomes a saved companion profile.";
+      empty.append(eyebrow, title, body);
+      this.karuCompanionList.replaceChildren(empty);
+      return;
+    }
+
+    this.karuCompanionList.replaceChildren(
+      ...profiles.map((profile) => {
+        const liveFollower = fauna.followers.find((follower) => follower.id === profile.id);
+        const mood = liveFollower?.mood ?? profile.mood;
+        const card = document.createElement("article");
+        card.className = `karu-companion-card karu-companion-card--${mood}`;
+
+        const icon = document.createElement("span");
+        icon.className = `karu-companion-card__icon karu-mood-icon karu-mood-icon--${mood}`;
+        icon.setAttribute("aria-hidden", "true");
+
+        const text = document.createElement("div");
+        text.className = "karu-companion-card__text";
+        const eyebrow = document.createElement("p");
+        eyebrow.className = "karu-companion-card__eyebrow";
+        eyebrow.textContent = `Friend ${profile.cardIndex}/${profile.total}`;
+        const title = document.createElement("h3");
+        title.className = "karu-companion-card__title";
+        title.textContent = profile.label;
+        const meta = document.createElement("p");
+        meta.className = "karu-companion-card__meta";
+        meta.textContent = `${this.formatKaruMood(mood)} mood · ${profile.trait}`;
+        const body = document.createElement("p");
+        body.className = "karu-companion-card__body";
+        body.textContent =
+          liveFollower && liveFollower.distanceToPlayer > 0
+            ? `${profile.detail} Currently ${Math.round(liveFollower.distanceToPlayer)}m from Mossu.`
+            : profile.detail;
+        text.append(eyebrow, title, meta, body);
+        card.append(icon, text);
+        return card;
+      }),
+    );
   }
 
   private updatePouchHud(
@@ -686,6 +814,10 @@ export class HudShell {
     return `<span class="karu-mood-icon karu-mood-icon--${mood}" aria-hidden="true"></span>`;
   }
 
+  private formatKaruMood(mood: KaruProfileMood) {
+    return `${mood.charAt(0).toUpperCase()}${mood.slice(1)}`;
+  }
+
   private updatePauseMenu(
     frame: FrameState,
     characterData: CharacterScreenView,
@@ -706,9 +838,11 @@ export class HudShell {
     characterData: CharacterScreenView,
     focusedCollectionId: string | null,
     isOpen: boolean,
+    fauna: HudShellUpdate["fauna"],
   ) {
     if (!isOpen) {
       this.characterScreenSignature = "";
+      this.karuCompanionSignature = "";
       return;
     }
 
@@ -721,6 +855,11 @@ export class HudShell {
       highlightedCollectionId ?? "",
       characterData.totals.discovered,
       characterData.gatheredTotals.gathered,
+      characterData.karuCompanions.length,
+      ...characterData.karuCompanions.map((profile) => {
+        const liveFollower = fauna.followers.find((follower) => follower.id === profile.id);
+        return `${profile.id}:${liveFollower?.mood ?? profile.mood}:${liveFollower?.reaction ?? "trail"}`;
+      }),
       ...characterData.stats.map((stat) => stat.value),
     ].join("|");
     if (signature === this.characterScreenSignature) {
@@ -792,6 +931,7 @@ export class HudShell {
         return article;
       }),
     );
+    this.updateKaruCompanionList(characterData.karuCompanions, fauna);
 
     this.upgradesGrid.replaceChildren(
       ...[...characterData.upgrades.unlocked, ...characterData.upgrades.locked].map((upgrade) => {
@@ -897,6 +1037,7 @@ export class HudShell {
       bottom,
       buildMeta,
       this.buildPickupCard(),
+      this.buildKaruProfileCard(),
       this.buildMapOverlay(),
       this.buildPauseMenu(),
       this.buildCharacterScreen(previewElement),
@@ -939,6 +1080,33 @@ export class HudShell {
     content.append(this.pickupCardArt, text);
     this.pickupCard.append(foil, sheen, content);
     return this.pickupCard;
+  }
+
+  private buildKaruProfileCard() {
+    this.karuProfileCard.className = "karu-profile-card";
+    this.karuProfileCard.setAttribute("aria-live", "polite");
+    this.karuProfileCard.setAttribute("aria-label", "Karu profile unlocked");
+
+    const glint = document.createElement("div");
+    glint.className = "karu-profile-card__glint";
+    glint.setAttribute("aria-hidden", "true");
+
+    this.karuProfileIcon.className = "karu-profile-card__icon karu-mood-icon karu-mood-icon--curious";
+    this.karuProfileIcon.setAttribute("aria-hidden", "true");
+
+    const text = document.createElement("div");
+    text.className = "karu-profile-card__text";
+    const eyebrow = document.createElement("p");
+    eyebrow.className = "karu-profile-card__eyebrow";
+    eyebrow.textContent = "Companion card";
+    this.karuProfileTitle.className = "karu-profile-card__title";
+    this.karuProfileMood.className = "karu-profile-card__mood";
+    this.karuProfileMeta.className = "karu-profile-card__meta";
+    this.karuProfileSummary.className = "karu-profile-card__summary";
+    text.append(eyebrow, this.karuProfileTitle, this.karuProfileMood, this.karuProfileMeta, this.karuProfileSummary);
+
+    this.karuProfileCard.append(glint, this.karuProfileIcon, text);
+    return this.karuProfileCard;
   }
 
   private buildControlsPanel() {
@@ -1115,6 +1283,11 @@ export class HudShell {
     this.statsGrid.className = "character-stat-grid";
     statsSection.append(this.statsGrid);
 
+    const karuSection = buildCharacterSection("Karu friends", "Trail companions", this.karuCompanionBadge);
+    karuSection.classList.add("character-section--karu");
+    this.karuCompanionList.className = "karu-companion-grid";
+    karuSection.append(this.karuCompanionList);
+
     const upgradesSection = buildCharacterSection("Traits", "Known techniques");
     upgradesSection.classList.add("character-section--abilities");
     this.upgradesGrid.className = "upgrade-grid";
@@ -1140,7 +1313,7 @@ export class HudShell {
     this.gatheredGoodsList.className = "gathered-goods-list";
     gatheredGoodsSection.append(this.gatheredGoodsList);
 
-    primaryColumn.append(statsSection, upgradesSection);
+    primaryColumn.append(karuSection, statsSection, upgradesSection);
     collectionsColumn.append(collectionsSection, gatheredGoodsSection);
     content.append(this.buildBinderTabs(), primaryColumn, collectionsColumn);
     shell.append(binderSpine, aside, content);

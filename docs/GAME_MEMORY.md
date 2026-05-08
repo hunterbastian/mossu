@@ -1,6 +1,6 @@
 # Mossu Game Memory
 
-Last updated: 2026-05-06
+Last updated: 2026-05-08
 
 This file is the durable project memory for Mossu. It captures the game we are making, the current design direction, and the decisions that should guide future implementation.
 
@@ -15,8 +15,10 @@ The game should feel:
 - lush and painterly in the world, with Studio Ghibli / BotW valley atmosphere and light anime-like color separation
 - readable and charming in UI, closer to cozy life-sim / handheld RPG menus than generic debug panels
 - desktop gameplay HUD can lean Windows 7 / Frutiger Aero when kept lightweight: translucent aqua glass, rounded glossy edges, blue depth, gold actionable accents, and bubble-like highlights
+- desktop HUD hierarchy should stay compact and centered: the current objective is the main chip, while secondary stats should not compete with the playfield
 - mobile gameplay UI should stay especially low-chrome: teach controls briefly, then collapse to one objective chip plus contextual pouch/roll/stamina feedback
 - the first-paint loading and main title menu can lean into a cleaner retro pixel ocean/floating-island presentation, with the gold/blue Mossu logo carrying the brand before gameplay starts
+- opening presentation should be shareable: start with a calm aerial route reveal, keep water/valley readable, use only a concise Karu-first prompt, then hand off smoothly to playable camera without feeling like a debug teleport
 - mechanically simple at first, with no combat in the current slice
 
 The current goal is one polished biome route, not a giant unfinished open world.
@@ -73,19 +75,20 @@ Mossu should read as cute without becoming too plastic or mascot-like. Motion sh
 - Route/progression summary used by the handbook and pause menu
 - Karu fauna wandering around the world
 - Held-`E` individual recruitment for nearby Karu
-- Karu join feedback: one small `Karu joined Mossu's trail` prompt, briefly softened HUD, and a lightweight hop/glow pulse on the recruited Karu
+- Karu join feedback: one small `Karu joined Mossu's trail` prompt, briefly softened HUD, a lightweight hop/glow pulse on the recruited Karu, and a companion profile card that points back to the field guide
 - Boids-style Karu follow behavior
 - Karu route follow stabilizers: damped per-follower heading, short-lived water-bank hold targets, lost-follower catch-up placement, and debug follower snapshots for route probes
-- Recruited Karu persistence in local save state
+- Recruited Karu persistence in local save state, plus saved Karu friend cards in the field guide
 - Debug route jumps for focused route inspection
 - Debug save presets for fresh start, recruited Karu, populated handbook, water route, and summit-ready QA states
 - Isolated `?modelViewer=karu` Aqua workshop route for Karu/Mossu rig inspection, with macOS-style window chrome, Geist typography, playful creature controls, pose/lighting previews, timeline playback, and drag-to-orbit camera inspection
-- `npm run art:review` for named real-browser route screenshots using those debug jumps
-- `npm run art:compare` for route artifact/state validation after art review captures
+- `npm run art:review` for named real-browser route screenshots using debug startup, real-time visual stepping, debug route jumps, and stale-artifact protection
+- `npm run art:compare` for route artifact/state validation after art review captures, including screenshot byte-size, contrast, chroma, detail, and distinct-frame checks so stale sky-only captures cannot pass as route review
 - `npm run karu:route` for a recruited-Karu route regression check from Burrow-side terrain through water banks, highland slopes, narrow ridge turns, and Moss Crown
 - `npm run agent:review` for an optional Swarms-ready five-lane review packet across art, performance, Karu follow quality, docs/wiki drift, and next-pass planning
 - Weekly wiki sync automation that compares repo docs/progress against local Mossu wiki pages after big passes
 - Premium instanced grass wind and Mossu push interaction
+- Shader-driven grassland pollen, life-signal points, and tiny leaf/water glints should stay GPU-uniform based rather than rewriting point positions on the CPU every frame.
 - Mossu pressed-grass/path trace stamps tuned for readable route bands and shoulders without increasing the 34-stamp budget
 - 3D world-space orbiting sun with a real scene-lighting envelope and subtle god-ray/haze read
 - `?perfDebug=1` performance panel
@@ -97,7 +100,7 @@ Herd AI:
 - Recruited Karu should remain cute and blob-like, not robotic.
 - Followers now have route-level lost-follow protection; future companion work should preserve cute motion while improving celebration, visibility, and personality.
 - Recruitment is now individual and held, so each Karu should feel like a small deliberate invitation rather than a cluster pickup.
-- Karu recruitment now persists in save state; next work should make the saved companion state more visible and rewarding.
+- Karu recruitment now persists in save state; the saved companion state is visible through the join profile card and the field guide's Karu friends sleeve.
 
 Inventory:
 
@@ -145,12 +148,13 @@ Forest:
 - Render repeated trees with `InstancedMesh`.
 - Canopy wind should be subtle and shader-driven.
 - Tree silhouettes should read crisply from gameplay distance, with broadleaf cap highlights/shadows and pine tips that feel storybook-sharp rather than blurry.
-- Skip LOD for the current bounded prototype unless performance demands it.
+- Tree leaf-wind visuals can be distance/camera culled for route performance, but avoid obvious pop on the critical path.
 
 Water:
 
 - Stylized/cartoon water with soft edges, depth tint, bank foam/milkiness, sparkles, and flow.
 - Anime/cel-shaded water now leans on simplified blue-green depth ramps, hand-drawn foam strokes, tiny restrained sparkle strokes, and soft shoreline milk. Close camera views should show readable bank milk and depth bands without making swimming or route guidance less clear.
+- Water movement should read as downstream travel, not just surface shimmer: use moving current threads, lens-current ribbons, bend eddies, soft bank laps, traveling caustics, and longer Mossu/Karu ripple rings while keeping the shared surface/underfill displacement aligned.
 
 Atmosphere:
 
@@ -195,10 +199,10 @@ Avoid visible tutorial prose that explains implementation. Keep copy in-world an
 
 ## Current Next Priorities
 
-1. Tighten the opening minute: title transition, nest exit, first camera composition, first Karu read, and first route prompt.
-2. Do a real desktop-browser manual Karu route spot-check after any companion-feel change; keep `npm run karu:route` as the automated drift/lost-follow guard.
-3. Review `npm run art:review` screenshots after destination-silhouette or terrain changes, then tune only the viewpoints that still look hazy, cluttered, or hard to read.
-4. Playtest the populated handbook: landmarks, forageables, and Karu notes should feel like a compact collectible field guide.
-5. Add shrine arrival reward flavor and Karu profile celebration without turning the slice into a checklist-heavy game.
-6. Continue terrain/forest composition around route overlooks, snow/rock/grass transitions, and biome-specific forest density.
+1. Do a real desktop-browser manual Karu route spot-check after any companion-feel change; keep `npm run karu:route` as the automated drift/lost-follow guard.
+2. Walk close water banks in desktop Chrome after water shader changes so prettier motion still agrees with swim and exit readability.
+3. Revisit the opening cinematic only after a share clip or manual playtest shows a specific issue with first-frame occlusion, timing, or the Karu prompt.
+4. Review `npm run art:review` screenshots after destination-silhouette, water, or terrain changes, then tune only the viewpoints that still look hazy, cluttered, or hard to read.
+5. Playtest the populated handbook: landmarks, forageables, and Karu friend cards should feel like a compact collectible field guide.
+6. Add shrine arrival reward flavor and only deepen Karu personality if it makes recruited companions feel more alive without turning the slice into a checklist-heavy game.
 7. Keep route performance healthy with `npm run perf:guard:baseline` before and candidate route guards after visual-density changes.

@@ -5,6 +5,20 @@ import { JUMP_VELOCITY, ROLL_BOOST_MULTIPLIER, ROLL_SPEED, WALK_SPEED } from "./
 import { canUseBreezeFloat } from "./staminaAbilities";
 
 const FORAGE_GOAL_TARGET = 3;
+const KARU_PROFILE_NAMES = ["Dewcap", "Sprig", "Pebble", "Luma", "Fenn", "Mallow", "Pip", "Thistle"];
+const KARU_PROFILE_MOODS = ["curious", "shy", "brave", "sleepy"] as const;
+
+export type KaruProfileMood = (typeof KARU_PROFILE_MOODS)[number];
+
+export interface KaruCompanionProfileView {
+  id: string;
+  label: string;
+  mood: KaruProfileMood;
+  trait: string;
+  detail: string;
+  cardIndex: number;
+  total: number;
+}
 
 export interface CharacterStatView {
   id: string;
@@ -35,6 +49,7 @@ export interface CharacterScreenView {
   };
   collections: InventoryEntryState[];
   gatheredGoods: ForageableEntryState[];
+  karuCompanions: KaruCompanionProfileView[];
   totals: {
     discovered: number;
     total: number;
@@ -60,6 +75,10 @@ export function buildCharacterScreenData(save: SaveState, frame: FrameState): Ch
   const forageGoalTarget = Math.min(FORAGE_GOAL_TARGET, gatheredGoods.length);
   const forageGoalCount = Math.min(gatheredCount, forageGoalTarget);
   const shrineRewardClaimed = save.catalogedLandmarkIds.has("peak-shrine");
+  const recruitedKaruIds = [...save.recruitedKaruIds].sort();
+  const karuCompanions = recruitedKaruIds.map((id, index) =>
+    buildKaruCompanionProfile(id, index, recruitedKaruIds.length),
+  );
 
   return {
     progression,
@@ -159,6 +178,7 @@ export function buildCharacterScreenData(save: SaveState, frame: FrameState): Ch
     },
     collections,
     gatheredGoods,
+    karuCompanions,
     totals: {
       discovered: discoveredCount,
       total: collections.length,
@@ -171,6 +191,67 @@ export function buildCharacterScreenData(save: SaveState, frame: FrameState): Ch
     latestCollectionId: frame.lastCatalogedLandmarkId,
     latestGatheredGoodId: frame.lastGatheredForageableId,
   };
+}
+
+function buildKaruCompanionProfile(id: string, index: number, total: number): KaruCompanionProfileView {
+  const hash = stableHash(id);
+  const mood = karuMoodForId(id, hash);
+  const name = KARU_PROFILE_NAMES[hash % KARU_PROFILE_NAMES.length] ?? "Trail";
+  return {
+    id,
+    label: `${name} Karu`,
+    mood,
+    trait: karuMoodTrait(mood),
+    detail: karuMoodDetail(mood),
+    cardIndex: index + 1,
+    total,
+  };
+}
+
+function karuMoodForId(id: string, fallbackHash: number): KaruProfileMood {
+  const match = /^karu-(\d+)-(\d+)$/.exec(id);
+  if (!match) {
+    return KARU_PROFILE_MOODS[fallbackHash % KARU_PROFILE_MOODS.length] ?? "curious";
+  }
+  const pocketIndex = Number(match[1] ?? 0);
+  const karuIndex = Number(match[2] ?? 0);
+  return KARU_PROFILE_MOODS[(pocketIndex * 2 + karuIndex) % KARU_PROFILE_MOODS.length] ?? "curious";
+}
+
+function stableHash(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
+function karuMoodTrait(mood: KaruProfileMood) {
+  switch (mood) {
+    case "brave":
+      return "bank scout";
+    case "shy":
+      return "soft-step";
+    case "sleepy":
+      return "moss napper";
+    case "curious":
+    default:
+      return "ripple watcher";
+  }
+}
+
+function karuMoodDetail(mood: KaruProfileMood) {
+  switch (mood) {
+    case "brave":
+      return "Pads closest to the banks and keeps the trail line brave.";
+    case "shy":
+      return "Hangs near Mossu's wake and settles when the grass gets quiet.";
+    case "sleepy":
+      return "Follows in soft little hops, then dozes whenever Mossu pauses.";
+    case "curious":
+    default:
+      return "Perks up at tiny ripples, leaf glints, and Mossu's call.";
+  }
 }
 
 function getTrailProgression(save: SaveState, collected: number, total: number): CharacterScreenView["progression"] {
