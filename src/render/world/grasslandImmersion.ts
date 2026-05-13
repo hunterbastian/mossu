@@ -355,11 +355,12 @@ function buildDistantTreeBelts() {
 function buildCloudShadowPatches() {
   const shadows: Mesh[] = [];
   const placements = [
-    [-62, -128, 34, 16, 0.055, -0.22],
-    [20, -78, 42, 18, 0.048, 0.18],
-    [-28, -20, 46, 20, 0.052, -0.08],
-    [42, 42, 38, 16, 0.044, 0.34],
-    [-44, 92, 44, 18, 0.04, -0.3],
+    [-72, -132, 42, 17, 0.052, -0.22],
+    [20, -84, 50, 19, 0.045, 0.18],
+    [-34, -24, 54, 21, 0.049, -0.08],
+    [44, 42, 46, 17, 0.04, 0.34],
+    [-52, 96, 52, 19, 0.037, -0.3],
+    [38, 128, 48, 17, 0.034, 0.16],
   ] as const;
 
   placements.forEach(([x, z, radiusX, radiusZ, opacity, rotation], index) => {
@@ -384,9 +385,9 @@ function buildCloudShadowPatches() {
     shadow.userData.baseX = x;
     shadow.userData.baseZ = z;
     shadow.userData.baseOpacity = opacity;
-    shadow.userData.driftX = 8 + index * 2.4;
-    shadow.userData.driftZ = 4 + index * 1.3;
-    shadow.userData.driftSpeed = 0.018 + index * 0.002;
+    shadow.userData.driftX = 13 + index * 2.2;
+    shadow.userData.driftZ = 6 + index * 1.2;
+    shadow.userData.driftSpeed = 0.007 + index * 0.0012;
     shadows.push(shadow);
   });
 

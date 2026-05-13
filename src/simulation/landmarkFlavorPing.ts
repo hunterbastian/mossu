@@ -1,4 +1,4 @@
-import type { WorldLandmark } from "./world";
+import type { WorldLandmark } from "./worldTypes";
 import { worldLandmarks } from "./world";
 
 const DEFAULT_PING_RADIUS = 40;

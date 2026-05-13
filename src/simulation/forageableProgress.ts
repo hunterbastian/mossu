@@ -1,6 +1,7 @@
 import { Vector2, Vector3 } from "three";
-import { sampleBiomeZone, WorldForageable, worldForageables } from "./world";
+import { sampleBiomeZone, worldForageables } from "./world";
 import type { ForageableEntryState, ForageableTargetState } from "./gameState";
+import type { WorldForageable } from "./worldTypes";
 
 const DEFAULT_FORAGEABLE_RADIUS = 7;
 const forageableScratch = new Vector2();

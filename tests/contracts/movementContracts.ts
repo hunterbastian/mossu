@@ -17,13 +17,13 @@ import {
   COYOTE_TIME,
   AIR_SPEED,
   AIR_MOMENTUM_GRACE_TIME,
+  BREEZE_FLOAT_MAX_UPWARD_VELOCITY,
   JUMP_BUFFER_TIME,
   JUMP_RELEASE_CUT_MULTIPLIER,
   JUMP_VELOCITY,
   LANDING_MOMENTUM_GRACE_TIME,
   FLOAT_EXIT_GRAVITY_GRACE_TIME,
   FLOAT_EXIT_GRAVITY_SCALE,
-  ROLL_AIR_SPEED_BONUS,
   ROLL_AIR_MOMENTUM_GRACE_TIME,
   ROLL_BOOST_DELAY,
   ROLL_BOOST_MULTIPLIER,
@@ -31,6 +31,7 @@ import {
   ROLL_EXIT_CARRY_TIME,
   ROLL_GRAVITY_FULL_SLOPE,
   ROLL_GRAVITY_MIN_SLOPE,
+  ROLL_JUMP_FORWARD_BONUS,
   ROLL_MODE_INDICATOR_DELAY,
   ROLL_SPEED,
   SURFACE_TRACTION,
@@ -47,7 +48,7 @@ import {
   resolveWaterContact,
   wantsUnderwaterDive,
 } from "../../src/simulation/waterTraversal";
-import type { WaterState } from "../../src/simulation/world";
+import type { WaterState } from "../../src/simulation/worldTypes";
 import { sampleTerrainHeight } from "../../src/simulation/world";
 import { assert } from "./testHarness";
 
@@ -156,6 +157,29 @@ export function runMovementContracts() {
     `roll start has an immediate readable speed lift over walking: walk=${planarSpeed(quickWalkPlayer).toFixed(2)} roll=${planarSpeed(quickRollPlayer).toFixed(2)}`,
   );
 
+  const responsiveWalkPlayer = makePlayer();
+  const responsiveWalkRuntime = createPlayerSimulationRuntime();
+  const responsiveWalkScratch = createMovementScratch();
+  for (let i = 0; i < 8; i += 1) {
+    const dt = 1 / 60;
+    const walkInput = { ...baseInput, moveY: 1 };
+    tickMovementTimers(responsiveWalkPlayer, walkInput, dt, responsiveWalkRuntime);
+    applyMovementPhysics(responsiveWalkPlayer, save, walkInput, 0, dt, responsiveWalkRuntime, responsiveWalkScratch);
+  }
+  assert(
+    planarSpeed(responsiveWalkPlayer) > WALK_SPEED * 0.34,
+    `walk startup reaches a readable jog within the first eighth-second: speed=${planarSpeed(responsiveWalkPlayer).toFixed(2)}`,
+  );
+  for (let i = 0; i < 18; i += 1) {
+    const dt = 1 / 60;
+    tickMovementTimers(responsiveWalkPlayer, baseInput, dt, responsiveWalkRuntime);
+    applyMovementPhysics(responsiveWalkPlayer, save, baseInput, 0, dt, responsiveWalkRuntime, responsiveWalkScratch);
+  }
+  assert(
+    planarSpeed(responsiveWalkPlayer) < WALK_SPEED * 0.28,
+    `walk release brakes quickly enough to feel intentional: speed=${planarSpeed(responsiveWalkPlayer).toFixed(2)}`,
+  );
+
   const driftPlayer = makePlayer();
   const driftRuntime = createPlayerSimulationRuntime();
   const driftScratch = createMovementScratch();
@@ -222,6 +246,16 @@ export function runMovementContracts() {
   assert(
     planarSpeed(rollReleasePlayer) > WALK_SPEED + 3,
     `roll release eases down into walk instead of snapping to walk cap: before=${rollReleaseSpeedBefore.toFixed(2)} after=${planarSpeed(rollReleasePlayer).toFixed(2)}`,
+  );
+  for (let i = 0; i < 12; i += 1) {
+    const dt = 1 / 60;
+    const walkInput = { ...baseInput, moveY: 1 };
+    tickMovementTimers(rollReleasePlayer, walkInput, dt, rollReleaseRuntime);
+    applyMovementPhysics(rollReleasePlayer, save, walkInput, 0, dt, rollReleaseRuntime, rollReleaseScratch);
+  }
+  assert(
+    planarSpeed(rollReleasePlayer) > WALK_SPEED,
+    "roll release carry lasts long enough to feel like a handoff, not a hard speed cliff",
   );
 
   const airborneRollReleasePlayer = makePlayer();
@@ -321,7 +355,10 @@ export function runMovementContracts() {
     "roll jump starts a generous air momentum grace",
   );
   assert(planarSpeed(jumpPlayer) > speedBeforeJump + 2, "roll jump carries extra forward momentum");
-  assert(planarSpeed(jumpPlayer) <= ROLL_SPEED + ROLL_AIR_SPEED_BONUS + 8, "roll jump momentum stays bounded");
+  assert(
+    planarSpeed(jumpPlayer) <= ROLL_SPEED * ROLL_BOOST_MULTIPLIER + ROLL_JUMP_FORWARD_BONUS + 2,
+    "roll jump momentum stays bounded around boosted roll speed plus the authored jump impulse",
+  );
 
   const floatPlayer = makePlayer();
   const floatRuntime = createPlayerSimulationRuntime();
@@ -402,6 +439,26 @@ export function runMovementContracts() {
     bufferedFloatScratch,
   );
   assert(bufferedResult.isFloating, "a tapped Q buffers Breeze Float briefly after release");
+
+  const upwardFloatPlayer = makePlayer();
+  const upwardFloatRuntime = createPlayerSimulationRuntime();
+  const upwardFloatScratch = createMovementScratch();
+  upwardFloatPlayer.grounded = false;
+  upwardFloatPlayer.velocity.y = BREEZE_FLOAT_MAX_UPWARD_VELOCITY - 0.7;
+  tickMovementTimers(upwardFloatPlayer, { ...baseInput, abilityPressed: true, abilityHeld: true }, 1 / 60, upwardFloatRuntime);
+  const upwardFloatResult = applyMovementPhysics(
+    upwardFloatPlayer,
+    save,
+    { ...baseInput, abilityPressed: true, abilityHeld: true },
+    0,
+    1 / 60,
+    upwardFloatRuntime,
+    upwardFloatScratch,
+  );
+  assert(
+    upwardFloatResult.isFloating,
+    "Breeze Float can catch a late upward arc instead of waiting until Mossu is already falling",
+  );
 
   const coyotePlayer = makePlayer();
   const coyoteRuntime = createPlayerSimulationRuntime();

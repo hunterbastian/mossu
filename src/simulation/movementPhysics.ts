@@ -108,13 +108,13 @@ export function createMovementScratch(): MovementScratch {
   };
 }
 
-const INPUT_RISE_DAMPING = 9.6;
-const INPUT_RELEASE_DAMPING = 13.2;
-const INPUT_DEADZONE = 0.015;
-const WADE_SPEED_MIN_MULTIPLIER = 0.72;
-const WADE_ACCELERATION_MULTIPLIER = 0.82;
-const WADE_ENTRY_DAMPING = 7.5;
-const WADE_EXIT_DAMPING = 10.5;
+const INPUT_RISE_DAMPING = 12.8;
+const INPUT_RELEASE_DAMPING = 16;
+const INPUT_DEADZONE = 0.02;
+const WADE_SPEED_MIN_MULTIPLIER = 0.78;
+const WADE_ACCELERATION_MULTIPLIER = 0.88;
+const WADE_ENTRY_DAMPING = 6.2;
+const WADE_EXIT_DAMPING = 12.5;
 
 export function tickMovementTimers(
   player: PlayerState,

@@ -628,14 +628,331 @@
   }
 }
 
+/* Meadow title screen: Ghibli-inspired landscape language without external assets. */
+.title-screen {
+  --title-cream: #fff1bc;
+  --title-meadow: #90ce58;
+  --title-meadow-light: #d5ed83;
+  --title-meadow-deep: #3f7d4e;
+  --title-ink: #244d48;
+  color: #fff7d7;
+  background:
+    radial-gradient(ellipse at 17% 16%, rgba(255, 245, 191, 0.88) 0 5.5rem, rgba(255, 221, 137, 0.26) 5.6rem 20rem, transparent 28rem),
+    linear-gradient(180deg, #4baee3 0%, #78c8e8 30%, #bdebf0 54%, #fff0c4 68%, #b8df83 100%) !important;
+  image-rendering: auto;
+}
+
+.title-screen::before {
+  inset: auto -7% -6%;
+  height: 58%;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse at 24% 70%, rgba(255, 241, 184, 0.36) 0 15rem, transparent 27rem),
+    radial-gradient(ellipse at 78% 76%, rgba(29, 96, 71, 0.34) 0 20rem, transparent 34rem),
+    linear-gradient(173deg, transparent 0 29%, rgba(198, 234, 124, 0.94) 29.2% 50%, transparent 50.4%),
+    linear-gradient(187deg, transparent 0 42%, rgba(99, 175, 83, 0.98) 42.2% 67%, transparent 67.3%),
+    linear-gradient(180deg, rgba(178, 222, 112, 0.96), rgba(71, 132, 74, 0.98));
+  box-shadow: inset 0 0.18rem 0 rgba(255, 244, 184, 0.58);
+  animation: title-meadow-light 6.4s ease-in-out infinite;
+}
+
+.title-screen::after {
+  z-index: 7;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 213, 0.2), transparent 35%),
+    radial-gradient(ellipse at 50% 74%, rgba(30, 94, 68, 0.14), transparent 44rem);
+  mix-blend-mode: soft-light;
+  opacity: 1;
+}
+
+.title-screen__sky {
+  z-index: 1;
+  background:
+    linear-gradient(180deg, transparent 0 34%, rgba(255, 241, 193, 0.18) 54%, transparent 72%),
+    linear-gradient(174deg, transparent 0 50%, rgba(85, 154, 76, 0.34) 50.2% 60%, transparent 60.2%);
+}
+
+.title-screen__sky::before {
+  left: clamp(4rem, 16vw, 15rem);
+  top: clamp(3rem, 10vh, 6.4rem);
+  width: clamp(12rem, 24vw, 22rem);
+  background: radial-gradient(circle, rgba(255, 252, 222, 0.74) 0 10%, rgba(255, 224, 145, 0.28) 32%, transparent 70%);
+  box-shadow: none;
+  animation: title-meadow-haze 7.4s ease-in-out infinite;
+}
+
+.title-screen__sky::after {
+  height: clamp(1.6rem, 3vw, 2.6rem);
+  border-radius: 999px;
+  background:
+    radial-gradient(ellipse at 17% 68%, rgba(255, 255, 242, 0.92) 0 36%, transparent 38%),
+    radial-gradient(ellipse at 42% 44%, rgba(255, 249, 220, 0.96) 0 42%, transparent 44%),
+    radial-gradient(ellipse at 68% 62%, rgba(255, 252, 232, 0.9) 0 38%, transparent 40%),
+    linear-gradient(180deg, rgba(255, 247, 216, 0.78), rgba(187, 216, 214, 0.26));
+  animation: title-meadow-cloud 22s ease-in-out infinite;
+}
+
+.title-screen__shade {
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, rgba(21, 74, 58, 0.2), transparent 18% 82%, rgba(21, 74, 58, 0.2)),
+    linear-gradient(180deg, rgba(255, 249, 214, 0.1), transparent 56%, rgba(26, 75, 54, 0.18));
+  box-shadow: none;
+}
+
+.title-screen__bokeh {
+  z-index: 2;
+}
+
+.title-screen__bokeh::before,
+.title-screen__bokeh::after {
+  content: "";
+  position: absolute;
+  left: -8%;
+  right: -8%;
+  pointer-events: none;
+}
+
+.title-screen__bokeh::before {
+  top: 50%;
+  height: 18%;
+  background:
+    linear-gradient(174deg, transparent 0 42%, rgba(72, 145, 77, 0.72) 42.2% 57%, transparent 57.2%),
+    linear-gradient(186deg, transparent 0 50%, rgba(119, 187, 95, 0.68) 50.2% 66%, transparent 66.2%);
+}
+
+.title-screen__bokeh::after {
+  bottom: 8%;
+  height: 27%;
+  background:
+    repeating-linear-gradient(102deg, rgba(255, 244, 182, 0.16) 0 0.18rem, transparent 0.2rem 1.8rem),
+    radial-gradient(ellipse at 42% 82%, rgba(255, 239, 176, 0.24) 0 12rem, transparent 22rem),
+    linear-gradient(168deg, transparent 0 44%, rgba(168, 215, 102, 0.9) 44.2% 66%, transparent 66.2%);
+  animation: title-meadow-grass 6.8s ease-in-out infinite;
+}
+
+.title-screen__bokeh span:nth-child(-n + 3) {
+  opacity: 0.82;
+  filter: drop-shadow(0 0.7rem 0.9rem rgba(32, 86, 77, 0.18));
+}
+
+.title-screen__bokeh span:nth-child(-n + 3)::before {
+  background:
+    radial-gradient(ellipse at 24% 18%, rgba(255, 241, 156, 0.72) 0 14%, transparent 15%),
+    linear-gradient(180deg, #c7ea7f 0 34%, #77bd66 35% 100%);
+}
+
+.title-screen__bokeh span:nth-child(-n + 3)::after {
+  background:
+    linear-gradient(90deg, transparent 28%, rgba(219, 245, 255, 0.82) 29% 34%, transparent 35%),
+    linear-gradient(180deg, #a47f57 0%, #756654 48%, #48605a 100%);
+}
+
+.title-screen__bokeh span:nth-child(4),
+.title-screen__bokeh span:nth-child(5) {
+  height: clamp(1.4rem, 2.4vw, 2.2rem);
+  background:
+    radial-gradient(ellipse at 20% 66%, rgba(255, 255, 242, 0.88) 0 34%, transparent 36%),
+    radial-gradient(ellipse at 48% 42%, rgba(255, 249, 220, 0.92) 0 42%, transparent 44%),
+    radial-gradient(ellipse at 74% 64%, rgba(255, 252, 232, 0.84) 0 36%, transparent 38%);
+  animation: title-meadow-cloud 24s ease-in-out infinite;
+}
+
+.title-screen__menu {
+  width: min(42rem, calc(100vw - 2rem));
+  gap: clamp(0.62rem, 1.7vh, 1.05rem);
+  transform: translateY(-1.4vh);
+  background: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.title-screen__logo {
+  color: var(--title-cream);
+  text-shadow:
+    0 0.08em 0 rgba(89, 118, 50, 0.96),
+    0.04em 0.04em 0 rgba(44, 94, 70, 0.9),
+    0 0.18em 0.42em rgba(22, 76, 62, 0.34);
+}
+
+.title-screen__logo::before {
+  background: #3e7c4a;
+}
+
+.title-screen__logo::after {
+  background:
+    radial-gradient(ellipse at 30% 66%, #d8f284 0 33%, #62ad59 34% 56%, transparent 57%),
+    radial-gradient(ellipse at 70% 66%, #d8f284 0 33%, #62ad59 34% 56%, transparent 57%);
+  filter: drop-shadow(0.04em 0.04em 0 #3e7c4a);
+}
+
+.title-screen__splash {
+  padding: 0.34rem 0.82rem 0.4rem;
+  border: 1px solid rgba(255, 249, 214, 0.72);
+  background:
+    linear-gradient(180deg, rgba(255, 249, 214, 0.62), rgba(255, 249, 214, 0.16)),
+    rgba(37, 95, 66, 0.28);
+  color: rgba(255, 250, 220, 0.96);
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+  text-shadow: 0 0.16rem 0.48rem rgba(27, 76, 56, 0.46);
+  box-shadow: 0 0.72rem 1.7rem rgba(23, 82, 67, 0.14);
+}
+
+.title-screen__actions {
+  width: min(30rem, calc(100vw - 2rem));
+  gap: 0.62rem;
+}
+
+.title-screen__button {
+  min-height: 2.95rem;
+  border: 1px solid rgba(255, 249, 214, 0.72);
+  border-radius: 0.82rem;
+  background:
+    linear-gradient(180deg, rgba(255, 249, 214, 0.9), rgba(231, 239, 174, 0.54)),
+    rgba(73, 125, 73, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 0.2rem 0 rgba(43, 103, 67, 0.42),
+    0 0.8rem 1.6rem rgba(29, 89, 70, 0.18);
+  color: var(--title-ink);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.title-screen__button--play {
+  background:
+    linear-gradient(180deg, rgba(255, 246, 191, 0.98), rgba(218, 232, 126, 0.72)),
+    linear-gradient(180deg, #f6df78, #8ecf56);
+  color: #214c3d;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.74),
+    0 0.2rem 0 rgba(57, 116, 62, 0.52),
+    0 0.9rem 1.8rem rgba(29, 89, 70, 0.2);
+}
+
+.title-screen__button::before {
+  inset: 0.32rem;
+  border-radius: 0.58rem;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 248, 196, 0.24), transparent),
+    repeating-linear-gradient(104deg, transparent 0 0.92rem, rgba(64, 122, 73, 0.08) 0.94rem 1.12rem);
+}
+
+.title-screen__button-icon {
+  border: 1px solid rgba(52, 111, 73, 0.58);
+  border-radius: 0.42rem;
+  background: linear-gradient(180deg, rgba(255, 248, 213, 0.94), rgba(166, 212, 111, 0.72));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 0.14rem 0 rgba(55, 105, 63, 0.32);
+}
+
+.title-screen__button--play .title-screen__button-icon {
+  background: linear-gradient(180deg, #fff2b5, #94cf59);
+}
+
+.title-screen__button--play .title-screen__button-icon::before,
+.title-screen__button--karu-viewer .title-screen__button-icon::before,
+.title-screen__button--karu-viewer .title-screen__button-icon::after {
+  border-color: #346f49;
+}
+
+.title-screen__button--play .title-screen__button-icon::before {
+  border-left-color: #346f49;
+}
+
+.title-screen__button--karu-viewer .title-screen__button-icon::before,
+.title-screen__button--karu-viewer .title-screen__button-icon::after {
+  background: linear-gradient(180deg, #d8f284, #62ad59);
+}
+
+.title-screen__button--settings .title-screen__button-icon {
+  background:
+    linear-gradient(90deg, transparent 0 38%, #346f49 39% 61%, transparent 62%),
+    linear-gradient(0deg, transparent 0 38%, #346f49 39% 61%, transparent 62%),
+    linear-gradient(180deg, rgba(255, 248, 213, 0.94), rgba(166, 212, 111, 0.72));
+}
+
+.title-screen__settings-back,
+.title-screen.title-screen--settings-open .title-screen__settings {
+  border-color: rgba(255, 249, 214, 0.78);
+}
+
+.title-screen.title-screen--settings-open .title-screen__settings {
+  background:
+    linear-gradient(180deg, rgba(255, 249, 218, 0.94), rgba(226, 239, 183, 0.74)),
+    rgba(85, 137, 78, 0.28);
+  color: var(--title-ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 0.85rem 2rem rgba(28, 87, 69, 0.2);
+}
+
+.title-screen__settings-back,
+.title-screen__setting-row {
+  background: linear-gradient(180deg, rgba(255, 250, 226, 0.94), rgba(220, 236, 180, 0.7));
+  color: var(--title-ink);
+}
+
+.title-screen__settings-header p,
+.title-screen__setting-row em,
+.title-screen__setting-row small,
+.title-screen__setting-row strong {
+  color: var(--title-ink);
+}
+
+@keyframes title-meadow-haze {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.78;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.96;
+  }
+}
+
+@keyframes title-meadow-light {
+  0%,
+  100% {
+    filter: saturate(1) brightness(1);
+  }
+  50% {
+    filter: saturate(1.05) brightness(1.04);
+  }
+}
+
+@keyframes title-meadow-cloud {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(1.15rem, -0.18rem, 0);
+  }
+}
+
+@keyframes title-meadow-grass {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(0.55rem);
+  }
+}
+
 @media (max-width: 720px) {
   .title-screen {
     padding: 1rem;
   }
 
   .title-screen__sky::before {
-    left: 12vw;
-    top: 10vh;
+    left: -2.5rem;
+    top: 2.4rem;
+    width: clamp(8rem, 42vw, 12rem);
   }
 
   .title-screen__sky::after {
@@ -669,13 +986,9 @@
   .title-screen__logo {
     font-size: clamp(4rem, 22vw, 7rem);
     text-shadow:
-      0 2px 0 #fff4bb,
-      2px 0 0 #075cb2,
-      0 -2px 0 #075cb2,
-      -2px 0 0 #075cb2,
-      2px 2px 0 #064f9b,
-      -2px 2px 0 #064f9b,
-      4px 6px 0 #063d83;
+      0 0.08em 0 rgba(89, 118, 50, 0.96),
+      0.04em 0.04em 0 rgba(44, 94, 70, 0.9),
+      0 0.18em 0.42em rgba(22, 76, 62, 0.34);
   }
 
   .title-screen__actions {
@@ -700,8 +1013,13 @@
 
 @media (max-width: 420px) {
   .title-screen__shade {
-    inset: 0.65rem;
-    border-radius: 0.9rem;
+    inset: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  .title-screen__bokeh span:nth-child(1) {
+    display: none;
   }
 
   .title-screen__bokeh span:nth-child(4) {

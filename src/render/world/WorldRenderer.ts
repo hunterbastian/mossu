@@ -1767,8 +1767,9 @@ export class WorldRenderer {
       patch.position.z = baseZ + driftZ * phase;
       patch.position.y = sampleTerrainHeight(patch.position.x, patch.position.z) + 0.09;
       patch.rotation.z = baseRotation + sunYaw * 0.18 + Math.sin(elapsed * 0.01 + index) * 0.025;
-      material.opacity = baseOpacity * MathUtils.lerp(0.42, 1.12, shadowStrength);
-      patch.visible = shadowStrength > 0.035;
+      const readableShadowStrength = Math.max(0.18, shadowStrength);
+      material.opacity = baseOpacity * MathUtils.lerp(0.34, 1.04, readableShadowStrength);
+      patch.visible = true;
     });
   }
 

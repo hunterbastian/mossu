@@ -1,5 +1,5 @@
 import { MathUtils } from "three";
-import type { WaterAmbienceSample } from "../../simulation/world";
+import type { WaterAmbienceSample } from "../../simulation/worldTypes";
 
 const WATER_LOOP_URL = "/audio/water-river-loop.mp3";
 const WATER_BASE_VOLUME = 0.014;

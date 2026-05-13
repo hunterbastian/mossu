@@ -8,17 +8,17 @@ const SUN_ORBIT_BASE_LIFT = 190;
 const SUN_ORBIT_ARC_LIFT = 120;
 const SUN_ORBIT_SECONDS = 540;
 const SUN_ORBIT_INITIAL_PHASE = 0.846;
-const LOW_SUN_WARM = new Color("#ffd18b");
-const LOW_SUN_FOG = new Color("#fff2d2");
-const LOW_SUN_BACKGROUND = new Color("#ffe9bb");
-const HORIZON_TINT_LOW = new Color("#fff1cf");
-const HORIZON_TINT_HIGH = new Color("#def3ff");
-const HORIZON_HAZE_LOW = new Color("#fff7e4");
-const HORIZON_HAZE_HIGH = new Color("#e1f3ff");
-const CLOUD_BRIGHT_LOW = new Color("#fffdf2");
-const CLOUD_BRIGHT_HIGH = new Color("#f2fbff");
-const CLOUD_SHADOW_LOW = new Color("#d9eadf");
-const CLOUD_SHADOW_HIGH = new Color("#c9dfef");
+const LOW_SUN_WARM = new Color("#ffd59a");
+const LOW_SUN_FOG = new Color("#fff1cf");
+const LOW_SUN_BACKGROUND = new Color("#ffeac0");
+const HORIZON_TINT_LOW = new Color("#fff3d7");
+const HORIZON_TINT_HIGH = new Color("#d9f5ff");
+const HORIZON_HAZE_LOW = new Color("#fff8e6");
+const HORIZON_HAZE_HIGH = new Color("#dff6ff");
+const CLOUD_BRIGHT_LOW = new Color("#fffef8");
+const CLOUD_BRIGHT_HIGH = new Color("#f4fcff");
+const CLOUD_SHADOW_LOW = new Color("#d8eee2");
+const CLOUD_SHADOW_HIGH = new Color("#c8e4f0");
 const PHASE_MEADOW_SUN = new Color("#fff0bf");
 const PHASE_MEADOW_FOG = new Color("#fff6dc");
 const PHASE_MEADOW_SKY = new Color("#e7fbf1");
@@ -35,16 +35,16 @@ const PHASE_SHRINE_SUN = new Color("#fff3bf");
 const PHASE_SHRINE_FOG = new Color("#fff2df");
 const PHASE_SHRINE_SKY = new Color("#f3f7ff");
 const PHASE_SHRINE_GROUND = new Color("#d8e0c9");
-const NORDIC_FILM_SUN = new Color("#fff7df");
-const NORDIC_FILM_SKY = new Color("#e8f2f4");
-const NORDIC_FILM_GROUND = new Color("#c6d2c4");
-const NORDIC_FILM_FOG = new Color("#eceee9");
-const NORDIC_FILM_BACKGROUND_LOW = new Color("#d9eef0");
-const NORDIC_FILM_BACKGROUND_HIGH = new Color("#e8f0f2");
-const NORDIC_FILM_HORIZON = new Color("#edf3f1");
-const NORDIC_FILM_HAZE = new Color("#edece7");
+const NORDIC_FILM_SUN = new Color("#fff0c8");
+const NORDIC_FILM_SKY = new Color("#d7f1fb");
+const NORDIC_FILM_GROUND = new Color("#cee3bd");
+const NORDIC_FILM_FOG = new Color("#fff3de");
+const NORDIC_FILM_BACKGROUND_LOW = new Color("#d6f4f4");
+const NORDIC_FILM_BACKGROUND_HIGH = new Color("#e5f6ff");
+const NORDIC_FILM_HORIZON = new Color("#fff1d6");
+const NORDIC_FILM_HAZE = new Color("#fff3df");
 const NORDIC_FILM_CLOUD_BRIGHT = new Color("#fffdf5");
-const NORDIC_FILM_CLOUD_SHADOW = new Color("#c8d6d4");
+const NORDIC_FILM_CLOUD_SHADOW = new Color("#d4e7df");
 const _nordicBackgroundScratch = new Color();
 
 export type WorldLightingPhase = "meadow-day" | "highland-haze" | "ridge-silhouette" | "shrine-glow";
@@ -157,27 +157,27 @@ export function writeWorldLightingMood(target: WorldLightingMoodState, input: Wo
   target.basinInfluence = basinInfluence;
   target.decisionClarity = decisionClarity;
   target.landmarkGlow = MathUtils.clamp(shrineInfluence * 0.88 + basinInfluence * 0.16, 0, 1);
-  target.sunHaze = MathUtils.clamp(lowAngleWarmth * 0.58 + shrineInfluence * 0.28 + basinInfluence * 0.12, 0, 1);
-  target.warmHaze = MathUtils.clamp(lowAngleWarmth * 0.55 + (1 - elevationMood) * 0.18 + shrineInfluence * 0.18, 0, 1);
+  target.sunHaze = MathUtils.clamp(lowAngleWarmth * 0.68 + shrineInfluence * 0.3 + basinInfluence * 0.14, 0, 1);
+  target.warmHaze = MathUtils.clamp(lowAngleWarmth * 0.62 + (1 - elevationMood) * 0.24 + shrineInfluence * 0.2, 0, 1);
   target.watercolorFog = MathUtils.clamp(
-    0.18 +
-      elevationMood * 0.18 +
-      basinInfluence * 0.2 +
-      lowAngleWarmth * 0.16 +
+    0.22 +
+      elevationMood * 0.17 +
+      basinInfluence * 0.22 +
+      lowAngleWarmth * 0.2 +
       shrineInfluence * 0.1 -
       decisionClarity * 0.16,
     0,
     1,
   );
   target.cloudShadow = MathUtils.clamp(
-    0.16 + ridgeInfluence * 0.17 + basinInfluence * 0.12 + (1 - orbitHeight) * 0.08 - shrineInfluence * 0.05,
+    0.18 + ridgeInfluence * 0.18 + basinInfluence * 0.13 + (1 - orbitHeight) * 0.09 - shrineInfluence * 0.05,
     0,
-    0.48,
+    0.52,
   );
   target.waterSparkle = MathUtils.clamp(
-    0.18 + lowAngleWarmth * 0.26 + basinInfluence * 0.18 + shrineInfluence * 0.16 + (1 - elevationMood) * 0.08,
+    0.24 + lowAngleWarmth * 0.32 + basinInfluence * 0.2 + shrineInfluence * 0.18 + (1 - elevationMood) * 0.1,
     0,
-    0.72,
+    0.84,
   );
   target.silhouetteContrast = MathUtils.clamp(
     ridgeInfluence * 0.24 + shrineInfluence * 0.12 - decisionClarity * 0.08,
@@ -266,24 +266,25 @@ export function applySceneLightingMood(
     cinematicLift * 0.034 +
     landmarkGlow * 0.025;
   lights.hemi.intensity =
-    MathUtils.lerp(1.16, 1.04, m) - lowAngleWarmth * 0.02 + cinematicLift * 0.05 + warmHaze * 0.035;
+    MathUtils.lerp(1.16, 1.05, m) - lowAngleWarmth * 0.01 + cinematicLift * 0.05 + warmHaze * 0.052;
   lights.bounce.intensity =
-    MathUtils.lerp(0.68, 0.58, m) + lowAngleWarmth * 0.07 + cinematicLift * 0.052 + landmarkGlow * 0.04;
-  lights.meadowGlow.intensity = MathUtils.lerp(0.54, 0.25, m) + lowAngleWarmth * 0.075 + cinematicLift * 0.11;
+    MathUtils.lerp(0.68, 0.6, m) + lowAngleWarmth * 0.09 + cinematicLift * 0.052 + landmarkGlow * 0.04;
+  lights.meadowGlow.intensity =
+    MathUtils.lerp(0.54, 0.27, m) + lowAngleWarmth * 0.085 + warmHaze * 0.035 + cinematicLift * 0.11;
   lights.alpineGlow.intensity = MathUtils.lerp(0.46, 0.72, m) + cinematicLift * 0.1 + landmarkGlow * 0.34;
   lights.fog.density =
     (MathUtils.lerp(0.0004, 0.00054, m) - cinematicLift * 0.000025) *
-    MathUtils.lerp(1, 1.08, watercolorFog) *
+    MathUtils.lerp(1, 1.12, watercolorFog) *
     MathUtils.lerp(1, 0.88, worldMood?.decisionClarity ?? 0) *
     MathUtils.lerp(1, 1.06, nordicFilm);
 
   if (nordicFilm > 0) {
-    lights.sun.intensity *= MathUtils.lerp(1, 0.9, nordicFilm);
-    lights.ambient.intensity *= MathUtils.lerp(1, 0.96, nordicFilm);
-    lights.hemi.intensity *= MathUtils.lerp(1, 1.02, nordicFilm);
-    lights.bounce.intensity *= MathUtils.lerp(1, 0.9, nordicFilm);
-    lights.meadowGlow.intensity *= MathUtils.lerp(1, 0.82, nordicFilm);
-    lights.alpineGlow.intensity *= MathUtils.lerp(1, 0.88, nordicFilm);
+    lights.sun.intensity *= MathUtils.lerp(1, 0.96, nordicFilm);
+    lights.ambient.intensity *= MathUtils.lerp(1, 0.98, nordicFilm);
+    lights.hemi.intensity *= MathUtils.lerp(1, 1.04, nordicFilm);
+    lights.bounce.intensity *= MathUtils.lerp(1, 0.94, nordicFilm);
+    lights.meadowGlow.intensity *= MathUtils.lerp(1, 0.92, nordicFilm);
+    lights.alpineGlow.intensity *= MathUtils.lerp(1, 0.94, nordicFilm);
   }
 }
 
@@ -332,7 +333,7 @@ export function applySceneLightingColors(
     0.44,
   );
   targets.sun.color.copy(pairs.sun.lowland).lerp(pairs.sun.highland, m);
-  targets.sun.color.lerp(LOW_SUN_WARM, lowAngleWarmth * 0.42);
+  targets.sun.color.lerp(LOW_SUN_WARM, lowAngleWarmth * 0.5);
   targets.sun.color.lerp(tints.sun, phaseStrength);
   targets.sun.color.lerp(NORDIC_FILM_SUN, nordicFilm * 0.52);
   targets.hemi.color.copy(pairs.skyFill.lowland).lerp(pairs.skyFill.highland, m);
@@ -342,12 +343,12 @@ export function applySceneLightingColors(
   targets.hemi.groundColor.lerp(tints.ground, phaseStrength * 0.46);
   targets.hemi.groundColor.lerp(NORDIC_FILM_GROUND, nordicFilm * 0.44);
   targets.fog.color.copy(pairs.fog.lowland).lerp(pairs.fog.highland, m);
-  targets.fog.color.lerp(LOW_SUN_FOG, lowAngleWarmth * 0.15 * (1 - m * 0.42));
+  targets.fog.color.lerp(LOW_SUN_FOG, lowAngleWarmth * 0.22 * (1 - m * 0.42));
   targets.fog.color.lerp(tints.fog, phaseStrength * 0.72);
   targets.fog.color.lerp(NORDIC_FILM_FOG, nordicFilm * 0.64);
   if (targets.background) {
     targets.background.copy(pairs.background.lowland).lerp(pairs.background.highland, m);
-    targets.background.lerp(LOW_SUN_BACKGROUND, lowAngleWarmth * 0.065 * (1 - m * 0.35));
+    targets.background.lerp(LOW_SUN_BACKGROUND, lowAngleWarmth * 0.09 * (1 - m * 0.35));
     targets.background.lerp(tints.sky, phaseStrength * 0.32);
     _nordicBackgroundScratch.copy(NORDIC_FILM_BACKGROUND_LOW).lerp(NORDIC_FILM_BACKGROUND_HIGH, m);
     targets.background.lerp(_nordicBackgroundScratch, nordicFilm * 0.66);

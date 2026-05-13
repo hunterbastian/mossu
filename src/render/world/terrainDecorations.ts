@@ -33,8 +33,8 @@ import {
   sampleTerrainNormal,
   sampleWaterBankShape,
   scenicPockets,
-  type RiverChannelId,
 } from "../../simulation/world";
+import type { RiverChannelId } from "../../simulation/worldTypes";
 import { markCameraCollider, scatterAroundPocket } from "./sceneHelpers";
 import { ART_DIRECTION_IDS, OOT_PS2_GRASSLANDS_PALETTE } from "../visualPalette";
 import { sampleOpeningMeadowMask } from "./worldMasks";
@@ -68,7 +68,7 @@ export const TREE_SCALE_LOCK = 4;
 const TREE_SIZE_MULTIPLIER = 2.45 * TREE_SCALE_LOCK;
 const LANDMARK_TREE_SIZE_MULTIPLIER = 4 * TREE_SCALE_LOCK;
 const INSTANCED_TREE_SCALE_MULTIPLIER = TREE_SCALE_LOCK;
-const TREE_LEAF_WIND_CACHE_KEY = "mossu-static-tree-leaf-wind";
+const TREE_LEAF_WIND_CACHE_KEY = "mossu-static-tree-leaf-wind-ghibli-v2";
 const FOREST_MIN_X = -182;
 const FOREST_MAX_X = 174;
 const FOREST_MIN_Z = -158;
@@ -167,6 +167,12 @@ function enableTreeLeafWindMaterial(material: Material, profile: TreeWindProfile
   const flutterAmpX = profile.flutterAmpX.toFixed(4);
   const flutterAmpZ = profile.flutterAmpZ.toFixed(4);
   const flutterLift = profile.flutterLift.toFixed(4);
+  const leafFloor =
+    profile.id === "pine"
+      ? "vec3(0.014, 0.038, 0.016)"
+      : profile.id === "birch"
+        ? "vec3(0.018, 0.046, 0.017)"
+        : "vec3(0.016, 0.044, 0.018)";
   material.onBeforeCompile = (shader: MaterialCompileShader, renderer: MaterialCompileRenderer) => {
     originalCompile(shader, renderer);
     shader.uniforms.uTime = { value: 0 };
@@ -211,9 +217,11 @@ vMossuLeafTint = vec3(
 varying vec3 vMossuLeafTint;`,
       )
       .replace(
-        "#include <output_fragment>",
-        `#include <output_fragment>
-gl_FragColor.rgb *= vMossuLeafTint;`,
+        "#include <opaque_fragment>",
+        `outgoingLight *= vMossuLeafTint;
+vec3 mossuLeafInkFloor = ${leafFloor};
+outgoingLight = max(outgoingLight, mossuLeafInkFloor * mix(0.94, 1.08, vMossuLeafTint.g));
+#include <opaque_fragment>`,
       );
     material.userData.windShader = shader;
   };
@@ -970,7 +978,9 @@ outgoingLight = mix( outgoingLight, uSceneHorizon * length(outgoingLight), uScen
 outgoingLight += vec3(0.04,0.05,0.02) * ff;
 outgoingLight = mix( outgoingLight, ( outgoingLight * 0.88 + uSceneHorizon * 0.22 * length(outgoingLight) ) * 1.12, 0.1 * ff );
 // Per-tree hue jitter — only modulates foliage so trunks stay consistent across instances.
-outgoingLight *= mix( vec3(1.0), vTreeTint, ff );`,
+outgoingLight *= mix( vec3(1.0), vTreeTint, ff );
+vec3 canopyInkFloor = mix( vec3(0.035, 0.085, 0.034), vec3(0.052, 0.11, 0.048), lowWarm );
+outgoingLight = mix( outgoingLight, max( outgoingLight, canopyInkFloor ), ff * 0.9 );`,
       );
     shader.uniforms.uSceneSunColor = { value: new Color("#fff8e8") };
     shader.uniforms.uSceneAmbient = { value: new Color("#b8c8e0") };
@@ -1148,8 +1158,22 @@ function makePineTree(scale: number, tone = "#5b7d4d") {
   const scaledSize = scale * TREE_SIZE_MULTIPLIER;
   const group = new Group();
   const segs = 24;
-  const wood = new MeshLambertMaterial({ color: "#5c4736" });
-  const stubMat = new MeshLambertMaterial({ color: makeTint("#5c4736", "#6f5a43", 0.34) });
+  const makeNeedleMaterial = (color: string) =>
+    new MeshLambertMaterial({
+      color,
+      emissive: makeTint(color, "#123a20", 0.6),
+      emissiveIntensity: 0.58,
+    });
+  const wood = new MeshLambertMaterial({
+    color: "#5c4736",
+    emissive: "#1f140b",
+    emissiveIntensity: 0.24,
+  });
+  const stubMat = new MeshLambertMaterial({
+    color: makeTint("#5c4736", "#6f5a43", 0.34),
+    emissive: "#1f140b",
+    emissiveIntensity: 0.18,
+  });
   const trunk = markCameraCollider(
     new Mesh(new CylinderGeometry(0.16 * scaledSize, 0.3 * scaledSize, 4.6 * scaledSize, 18), wood),
     { fadeWhenOccluding: true },
@@ -1182,7 +1206,7 @@ function makePineTree(scale: number, tone = "#5b7d4d") {
       geom.scale(layer.sx, 1, layer.sz ?? 1);
     }
     const mesh = markTreeLeafWind(
-      new Mesh(geom, new MeshLambertMaterial({ color: layer.color })),
+      new Mesh(geom, makeNeedleMaterial(layer.color)),
       TREE_WIND_PINE,
       0.82,
     );
@@ -1191,7 +1215,7 @@ function makePineTree(scale: number, tone = "#5b7d4d") {
   }
 
   const hip = markTreeLeafWind(
-    new Mesh(new SphereGeometry(0.17 * scaledSize, 14, 9), new MeshLambertMaterial({ color: tTop })),
+    new Mesh(new SphereGeometry(0.17 * scaledSize, 14, 9), makeNeedleMaterial(tTop)),
     TREE_WIND_PINE,
     0.7,
   );
@@ -1989,6 +2013,75 @@ export function buildTreeClusters() {
   ] as const;
   forestEdgeAnchors.forEach(([x, z, scale, tone], index) => {
     addForestUnderstoryPatch(group, x, z, scale, 520 + index, tone, props);
+  });
+
+  const softStoneGeometry = new SphereGeometry(1, 8, 5);
+  const softStoneMaterials = [
+    new MeshLambertMaterial({ color: "#d9cfad" }),
+    new MeshLambertMaterial({ color: "#c8c0a8" }),
+    new MeshLambertMaterial({ color: "#ebe0bd" }),
+  ] as const;
+  const softStoneRuns = [
+    [
+      [-92, -144, 0.86, -0.34],
+      [-74, -128, 0.78, 0.12],
+      [-56, -110, 0.92, -0.22],
+      [-38, -88, 0.72, 0.36],
+      [-18, -62, 0.84, -0.12],
+      [4, -34, 0.76, 0.28],
+      [24, -8, 0.9, -0.2],
+    ],
+    [
+      [46, 22, 0.72, 0.24],
+      [32, 50, 0.84, -0.18],
+      [10, 78, 0.74, 0.34],
+      [-12, 104, 0.9, -0.28],
+      [-30, 132, 0.78, 0.18],
+    ],
+    [
+      [-12, 154, 0.66, -0.16],
+      [8, 172, 0.76, 0.32],
+      [26, 190, 0.68, -0.2],
+      [40, 212, 0.82, 0.18],
+    ],
+  ] as const;
+
+  softStoneRuns.forEach((run, runIndex) => {
+    run.forEach(([x, z, scale, yaw], index) => {
+      if (!isInsideIslandPlayableBounds(x, z)) {
+        return;
+      }
+      const y = sampleTerrainHeight(x, z);
+      const habitat = sampleHabitatLayer(x, z, y);
+      const slope = 1 - sampleTerrainNormal(x, z).y;
+      const wetness = Math.max(sampleRiverWetness(x, z), sampleStartingWaterWetness(x, z));
+      if (habitat.shore > 0.58 || slope > 0.38 || wetness > 0.66) {
+        return;
+      }
+
+      const routeSoftness = Math.max(sampleRouteDirtPathMask(x, z), sampleRouteReadabilityClearing(x, z) * 0.28);
+      const bury = MathUtils.lerp(0.025, 0.055, MathUtils.clamp(routeSoftness, 0, 1));
+      const material = softStoneMaterials[(runIndex + index) % softStoneMaterials.length];
+      const stone = new Mesh(softStoneGeometry, material);
+      const squash = scale * (0.82 + forestHash(x, z, 1900 + index) * 0.26);
+      stone.name = `soft-half-buried-stepping-stone-${runIndex}-${index}`;
+      stone.position.set(x, y + bury, z);
+      stone.rotation.y = yaw + forestHash(x, z, 1910 + index) * 0.38;
+      stone.scale.set(2.05 * squash, 0.11 * squash, (1.12 + forestHash(x, z, 1920 + index) * 0.34) * squash);
+      group.add(stone);
+
+      if ((index + runIndex) % 2 === 0) {
+        const grassYaw = yaw + Math.PI * 0.42;
+        props.addGrassClump(
+          x + Math.cos(grassYaw) * 1.4 * scale,
+          y + 0.02,
+          z + Math.sin(grassYaw) * 1.1 * scale,
+          grassYaw,
+          0.58 * scale,
+          runIndex === 2 ? "#6f8757" : "#8bbf66",
+        );
+      }
+    });
   });
 
   group.add(props.buildGroup());

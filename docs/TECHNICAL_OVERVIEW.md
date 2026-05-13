@@ -1,6 +1,6 @@
 # Technical Overview
 
-Last updated: 2026-05-05
+Last updated: 2026-05-09
 
 ## Stack
 
@@ -29,17 +29,20 @@ npm run preview
 
 ## Entry Points
 
-- `src/main.ts`: selects the game/model-viewer route and creates the active app.
+- `src/main.ts`: selects the game/model-viewer/island-viewer route and creates the active app.
 - `src/runtimeBridge.ts`: attaches automation/debug globals only for test/debug/perf query params, then starts the app.
 - `src/render/app/GameApp.ts`: top-level app coordinator for renderer, scene, camera, input, HUD, and view modes.
+- `src/render/app/IslandViewerApp.ts`: debug-only full-island terrain atlas for orbit/top/profile inspection, route lines, landmark pins, water ribbons, shell cliffs, and ocean-below composition checks.
 - `src/simulation/gameState.ts`: top-level simulation coordinator.
-- `src/simulation/world.ts`: shared world data and sampling functions.
+- `src/simulation/world.ts`: public terrain/water/world sampler contract.
+- `src/simulation/worldTypes.ts`: public world/domain type definitions re-exported by `world.ts`.
+- `src/simulation/worldContent.ts`: stable world catalog builders for landmarks, map markers, forageables, scenic pockets, shadow pockets, and biome thresholds.
 - `src/render/world/WorldRenderer.ts`: composes the 3D scene.
 - `src/styles.css`: ordered DOM style entrypoint.
 
 ## Core Runtime Contract
 
-`src/simulation/world.ts` is the central world contract. Many systems depend on:
+`src/simulation/world.ts` is the central runtime world contract. Keep stable data and type ownership in neighboring modules when possible, but preserve the public sampler/value exports because many systems depend on:
 
 - `sampleTerrainHeight(x, z)`
 - `sampleBaseTerrainHeight(x, z)`
@@ -61,6 +64,9 @@ Do not change these casually. Terrain, water, grass, collectibles, character sta
 
 - `gameState.ts`: frame state, save state, update order, character screen data access.
 - `input.ts`: keyboard input mapping.
+- `worldTypes.ts`: shared domain types for biome zones, water samples, landmarks, forageables, map markers, scenic pockets, and world regions.
+- `worldContent.ts`: static world catalog construction around the samplers from `world.ts`.
+- `progressionObjectives.ts`: objective copy and trail-progression summaries used by gameplay HUD and character/profile screens.
 - `movementPhysics.ts`: walk/roll/jump/float movement.
 - `waterTraversal.ts`: swim state and water contact resolution.
 - `staminaAbilities.ts`: stamina and ability timing.
@@ -97,6 +103,7 @@ Do not change these casually. Terrain, water, grass, collectibles, character sta
 - `CharacterPreview.ts`: profile-screen Mossu preview renderer.
 - `debugSavePresets.ts`: named QA save presets used by `window.mossuDebug.applySavePreset()`.
 - `worldMap.ts`: map projection and route helper logic.
+- `IslandViewerApp.ts`: debug atlas route for full floating-island composition and terrain planning.
 - `styles.css`: ordered import entrypoint.
 - `styles/base.css`, `title.css`, `hud.css`, `pause.css`, `handbook.css`, `map.css`: first-pass semantic UI chunks.
 - `styles/theme-overrides.css`: ordered theme-layer entrypoint.
@@ -147,7 +154,7 @@ Normal player URLs should not expose automation globals.
 - `?qaDebug=1`: exposes `window.mossuDebug` for opening skip, route jumps, teleport, reset, direct save payloads, and named save presets.
 - `window.mossuDebug.listSavePresets()`: returns preset ids/labels/summaries.
 - `window.mossuDebug.applySavePreset(id)`: applies common QA states such as fresh start, recruited Karu, populated handbook, water route, and summit-ready.
-- `npm run art:review`: builds production and captures named headed route screenshots/JSON in `output/art-review-route/`.
+- `npm run art:review`: builds production and captures named headed route screenshots/JSON in `output/art-review-route/` through `?qaDebug=1&visualProbe=1`; use `node scripts/artReviewRoute.mjs --headless --browser=chromium --deterministic-step` as the artifact fallback when local Chrome screenshot capture stalls.
 - `npm run art:compare`: validates those route artifacts and optionally compares against a saved summary baseline.
 
 ## Camera

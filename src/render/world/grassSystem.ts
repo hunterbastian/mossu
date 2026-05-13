@@ -15,7 +15,6 @@ import {
   Vector3,
 } from "three";
 import {
-  BiomeZone,
   MOSSU_PLAYFIELD_EXTENT,
   sampleBiomeZone,
   sampleGrassDensity,
@@ -27,6 +26,7 @@ import {
   sampleTerrainHeight,
   sampleTerrainNormal,
 } from "../../simulation/world";
+import type { BiomeZone } from "../../simulation/worldTypes";
 import { OOT_PS2_GRASSLANDS_PALETTE } from "../visualPalette";
 import { sampleOpeningMeadowMask } from "./worldMasks";
 
@@ -587,9 +587,9 @@ export function createGrassMesh(
         float sunStripe = smoothstep(0.32, 0.98, vBladeMix) * smoothstep(1.0, 0.14, vSoftEdge) * (0.44 + stroke * 0.56) * (0.62 + vHeroField * 0.38);
         float warmTip = smoothstep(0.46, 1.0, vBladeMix) * (0.28 + vPatchLight * 0.72);
         float rootFill = smoothstep(0.42, 0.0, vBladeMix) * (0.1 + uRootFillBoost + vDistanceBlend * 0.28 + vHeroField * 0.08);
-        vec3 rooted = vTint * vec3(0.36, 0.64, 0.32);
-        vec3 midBlade = mix(rooted, vTint * vec3(0.78, 1.03, 0.54), pow(vBladeMix, 0.58));
-        vec3 sunlit = vTint * vec3(1.05, 1.24, 0.58) + vec3(0.16, 0.21, 0.025) * vPatchLight;
+        vec3 rooted = vTint * vec3(0.3, 0.58, 0.31);
+        vec3 midBlade = mix(rooted, vTint * vec3(0.8, 1.08, 0.5), pow(vBladeMix, 0.58));
+        vec3 sunlit = vTint * vec3(1.1, 1.3, 0.58) + vec3(0.2, 0.18, 0.025) * vPatchLight;
         vec3 meadowColor = mix(midBlade, sunlit, sunStripe * (0.6 + nearDetail * 0.14) + warmTip * 0.18);
         float tipGlow = smoothstep(0.62, 1.0, vBladeMix) * smoothstep(1.0, 0.12, vSoftEdge) * (0.04 + vHeroField * 0.08 + vPatchLight * 0.04);
         meadowColor += vec3(0.07, 0.12, 0.025) * tipGlow;
@@ -599,9 +599,9 @@ export function createGrassMesh(
         meadowColor += vec3(0.07, 0.105, 0.024) * gustHighlight * (0.42 + nearDetail * 0.54);
         float rootBand = 1.0 - smoothstep(0.28, 0.34, vBladeMix);
         float tipBand = smoothstep(0.68, 0.76, vBladeMix);
-        vec3 bladeRootBand = vTint * vec3(0.27, 0.56, 0.265);
-        vec3 bladeMidBand = vTint * vec3(0.78, 1.07, 0.44) + vec3(0.035, 0.065, 0.0) * vPatchLight;
-        vec3 bladeTipBand = vTint * vec3(1.08, 1.22, 0.56) + vec3(0.06, 0.086, 0.01) * (vPatchLight + vHeroField * 0.6);
+        vec3 bladeRootBand = vTint * vec3(0.22, 0.5, 0.27);
+        vec3 bladeMidBand = vTint * vec3(0.82, 1.14, 0.46) + vec3(0.045, 0.075, 0.0) * vPatchLight;
+        vec3 bladeTipBand = vTint * vec3(1.18, 1.28, 0.62) + vec3(0.08, 0.088, 0.008) * (vPatchLight + vHeroField * 0.6);
         vec3 painterBands = mix(bladeMidBand, bladeRootBand, rootBand);
         painterBands = mix(painterBands, bladeTipBand, tipBand);
         float bandInfluence = mix(0.58, 0.26, vDistanceBlend) * (0.86 + vHeroField * 0.14);
@@ -614,9 +614,10 @@ export function createGrassMesh(
         float distanceCompression = clamp(vDistanceBlend + uDistanceCompressionBoost, 0.0, 1.0);
         meadowColor = mix(meadowColor, distantMass, distanceCompression * 0.7);
         meadowColor = mix(meadowColor, meadowColor * vec3(1.04, 1.035, 0.86), vRouteEdgePersonality * nearDetail * 0.1);
-        float cloudShadowWash = uSceneCloudShadow * smoothstep(0.16, 0.92, vBladeMix) * (0.16 + vPatchLight * 0.08 + vElevationMood * 0.05);
-        meadowColor *= 1.0 - cloudShadowWash;
-        meadowColor = mix(meadowColor, uSceneHorizon * vec3(0.98, 1.02, 0.82), uSceneSunHaze * nearDetail * 0.035);
+        float cloudShadowWash = uSceneCloudShadow * smoothstep(0.16, 0.92, vBladeMix) * (0.18 + vPatchLight * 0.08 + vElevationMood * 0.05);
+        vec3 coolCloud = mix(meadowColor * vec3(0.84, 0.96, 0.84), uSceneHorizon * vec3(0.72, 0.9, 0.78), 0.18);
+        meadowColor = mix(meadowColor, coolCloud, cloudShadowWash);
+        meadowColor = mix(meadowColor, uSceneHorizon * vec3(1.02, 1.02, 0.78), uSceneSunHaze * nearDetail * 0.052);
         // Far: collapse to cheap blended color (fewer highlights / less band detail)
         float farCheapMix = pow(clamp(vDistanceBlend * 0.92 + vSceneDepthMood * 0.2, 0.0, 1.0), 1.35);
         vec3 cheapFar = mix(
@@ -656,9 +657,9 @@ export function createGrassMesh(
         "#include <color_fragment>",
         `#include <color_fragment>
         float grassInkEdge = smoothstep(0.7, 1.0, vSoftEdge) * smoothstep(0.12, 0.86, vBladeMix) * (1.0 - vDistanceBlend * 0.64);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.72, 0.84, 0.58), grassInkEdge * 0.26);
-        vec3 posterized = floor(diffuseColor.rgb * 9.0 + 0.5) / 9.0;
-        diffuseColor.rgb = mix(diffuseColor.rgb, posterized, 0.18);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.68, 0.82, 0.56), grassInkEdge * 0.28);
+        vec3 posterized = floor(diffuseColor.rgb * 7.0 + 0.5) / 7.0;
+        diffuseColor.rgb = mix(diffuseColor.rgb, posterized, 0.24);
       `,
       );
 

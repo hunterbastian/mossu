@@ -5,9 +5,10 @@
  * player is always near the visible center; waves are anchored to world space
  * via the shader so they don't slide as the mesh shifts.
  *
- * Vertex: 5 layered Gerstner waves give a calm Nordic-filmic swell.
- * Fragment: deep→cool-cyan gradient by wave height, fresnel rim with sky
- * tint, sun specular, foam on crests, painterly shimmer, horizon fade.
+ * Vertex: 6 layered Gerstner waves give a broad tropical swell plus smaller chop.
+ * Fragment: rich-blue→turquoise→pale-cyan distance grade, cream/peach
+ * horizon haze, fresnel rim with sky tint, sun specular, foam on crests,
+ * and painterly shimmer.
  *
  * Sits below the floating sky island. Renders before everything else
  * (`renderOrder = -2`) so the depth buffer carves the island silhouette
@@ -33,6 +34,8 @@ export interface OceanOptions {
   /** Painterly tone overrides. */
   deepColor?: string;
   shallowColor?: string;
+  farColor?: string;
+  lagoonColor?: string;
   foamColor?: string;
   skyColor?: string;
   horizonColor?: string;
@@ -42,6 +45,7 @@ const VERT = /* glsl */ `
   uniform float uTime;
   varying vec3 vWorldPos;
   varying float vWaveHeight;
+  varying float vSwellSignal;
 
   // Single Gerstner wave: returns (x, y, z) offset to add to the rest position.
   // Direction is the surface flow direction in XZ; wavelength sets crest spacing;
@@ -68,12 +72,13 @@ const VERT = /* glsl */ `
     vec2 worldXZ = worldPos4.xz;
 
     vec3 offset = vec3(0.0);
-    // 5 waves: 2 long+slow swells, 2 mid chop, 1 restrained detail layer.
-    offset += gerstnerWave(vec2( 1.00,  0.20), 38.0, 0.52, 0.55, worldXZ, uTime);
-    offset += gerstnerWave(vec2( 0.45, -0.85), 26.0, 0.42, 0.78, worldXZ, uTime);
-    offset += gerstnerWave(vec2(-0.62,  0.78), 15.0, 0.34, 1.0, worldXZ, uTime);
-    offset += gerstnerWave(vec2( 0.92,  0.40),  8.5, 0.22, 1.35, worldXZ, uTime);
-    offset += gerstnerWave(vec2(-0.74, -0.32),  5.0, 0.12, 1.85, worldXZ, uTime);
+    // 6 waves: one readable hero swell, two ocean swells, two chop layers, one fine glint layer.
+    offset += gerstnerWave(vec2( 1.00,  0.18), 76.0, 0.68, 0.42, worldXZ, uTime);
+    offset += gerstnerWave(vec2( 0.45, -0.85), 44.0, 0.52, 0.62, worldXZ, uTime);
+    offset += gerstnerWave(vec2(-0.62,  0.78), 24.0, 0.42, 0.88, worldXZ, uTime);
+    offset += gerstnerWave(vec2( 0.92,  0.40), 12.0, 0.28, 1.24, worldXZ, uTime);
+    offset += gerstnerWave(vec2(-0.74, -0.32),  7.0, 0.18, 1.72, worldXZ, uTime);
+    offset += gerstnerWave(vec2( 0.18,  0.98),  4.2, 0.08, 2.05, worldXZ, uTime);
 
     // Apply offset in object space so the mesh's rotation transports it correctly.
     // Since we rotated -PI/2 around X, world Y is local Z, world Z is -local Y.
@@ -85,6 +90,10 @@ const VERT = /* glsl */ `
     vec4 finalWorld = modelMatrix * vec4(displaced, 1.0);
     vWorldPos = finalWorld.xyz;
     vWaveHeight = offset.y;
+    vSwellSignal =
+      sin(dot(normalize(vec2(1.0, 0.18)), worldXZ) * 0.083 - uTime * 0.46) * 0.54 +
+      sin(dot(normalize(vec2(0.45, -0.85)), worldXZ) * 0.143 - uTime * 0.62) * 0.28 +
+      sin(dot(normalize(vec2(-0.62, 0.78)), worldXZ) * 0.262 - uTime * 0.88) * 0.18;
 
     gl_Position = projectionMatrix * viewMatrix * finalWorld;
   }
@@ -99,10 +108,13 @@ const FRAG = /* glsl */ `
   uniform vec3 uHorizonColor;
   uniform vec3 uDeepColor;
   uniform vec3 uShallowColor;
+  uniform vec3 uFarColor;
+  uniform vec3 uLagoonColor;
   uniform vec3 uFoamColor;
   uniform vec3 uCameraWorld;
   varying vec3 vWorldPos;
   varying float vWaveHeight;
+  varying float vSwellSignal;
 
   float hash21(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -119,6 +131,17 @@ const FRAG = /* glsl */ `
     );
   }
 
+  float fbm2d(vec2 p) {
+    float value = 0.0;
+    float amp = 0.5;
+    for (int i = 0; i < 4; i += 1) {
+      value += noise2d(p) * amp;
+      p = p * 2.03 + vec2(13.2, 7.7);
+      amp *= 0.52;
+    }
+    return value;
+  }
+
   void main() {
     // Geometric normal from screen-space derivatives — cheap, matches the
     // tessellated wave surface, no need to redo Gerstner partials in fragment.
@@ -130,34 +153,67 @@ const FRAG = /* glsl */ `
     vec3 viewDir = normalize(uCameraWorld - vWorldPos);
     float ndotv = clamp(dot(normal, viewDir), 0.0, 1.0);
 
-    // Body color: trough → crest reads as deep blue → cool cyan.
-    float heightT = clamp(vWaveHeight * 0.55 + 0.5, 0.0, 1.0);
-    vec3 color = mix(uDeepColor, uShallowColor, heightT);
+    float dist = length(uCameraWorld - vWorldPos);
+    float midDistance = smoothstep(360.0, 1550.0, dist);
+    float farDistance = smoothstep(1350.0, 3400.0, dist);
+    float horizonDistance = smoothstep(3100.0, 5000.0, dist);
+
+    // Body color: distance sets the ocean grade; wave height adds local movement.
+    float heightT = clamp(vWaveHeight * 0.09 + 0.5, 0.0, 1.0);
+    float swellT = clamp(vSwellSignal * 0.5 + 0.5, 0.0, 1.0);
+    vec3 distanceColor = mix(uDeepColor, uShallowColor, midDistance);
+    distanceColor = mix(distanceColor, uFarColor, farDistance);
+    float lagoonBand = (1.0 - farDistance) * smoothstep(0.16, 0.74, midDistance) * (1.0 - smoothstep(0.94, 1.0, midDistance));
+    distanceColor = mix(distanceColor, uLagoonColor, lagoonBand * (0.4 + heightT * 0.18));
+    vec3 waveTint = mix(vec3(-0.038, -0.012, 0.05), vec3(0.055, 0.086, 0.06), heightT);
+    vec3 color = distanceColor + waveTint * (1.0 - farDistance * 0.58);
+    color = mix(color, uDeepColor, (1.0 - swellT) * (1.0 - farDistance) * 0.12);
 
     // Fresnel rim — fakes sky/horizon reflection at glancing angles
     float fresnel = pow(1.0 - ndotv, 4.0);
-    vec3 skyTint = mix(uHorizonColor, uSkyColor, ndotv);
+    vec3 skyTint = mix(uFarColor, uSkyColor, ndotv);
     color = mix(color, skyTint, fresnel * 0.72);
 
-    // Sun specular — sharp, small bright glint
+    // Sun specular — Sildur-inspired warm glint, kept stylized and broad.
     vec3 reflectDir = reflect(-uSunDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 90.0);
-    color += uSunColor * spec * 0.72;
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 72.0);
+    color += uSunColor * spec * 0.88;
 
-    // Foam: bright caps on tall wave crests, broken up by shimmer noise
-    float crest = smoothstep(0.5, 1.1, vWaveHeight);
+    vec2 sunFlat = normalize(uSunDir.xz + vec2(0.0001, -0.0001));
+    vec2 cameraRay = normalize(vWorldPos.xz - uCameraWorld.xz + vec2(0.0001, 0.0001));
+    float sunTrack = pow(max(dot(cameraRay, sunFlat), 0.0), 4.2);
     float shimmer = noise2d(vWorldPos.xz * 0.34 + uTime * 0.06);
-    float foamMask = smoothstep(0.62, 1.08, crest + shimmer * 0.22);
-    color = mix(color, uFoamColor, foamMask * 0.82);
+    float sunThread = sin(dot(vWorldPos.xz, sunFlat) * 0.052 - uTime * 0.62 + shimmer * 2.2) * 0.5 + 0.5;
+    float sunGlaze = smoothstep(0.52, 1.0, sunThread) * sunTrack * (0.05 + fresnel * 0.2) * (1.0 - farDistance * 0.46);
+    color += mix(uSunColor, uHorizonColor, 0.24) * sunGlaze;
+
+    // Foam: bright caps and long broken tropical lace lines like sunlit surf.
+    float crest = smoothstep(1.6, 7.8, vWaveHeight) * (0.68 + swellT * 0.42);
+    float foamNoise = fbm2d(vWorldPos.xz * 0.028 + vec2(uTime * 0.026, -uTime * 0.018));
+    vec2 foamDirA = normalize(vec2(0.92, 0.28));
+    vec2 foamDirB = normalize(vec2(-0.34, 0.94));
+    float heroBreaker = smoothstep(0.76, 0.98, swellT + foamNoise * 0.12) * (1.0 - horizonDistance * 0.74);
+    float longLineA = sin(dot(vWorldPos.xz, foamDirA) * 0.055 - uTime * 0.42 + foamNoise * 2.8) * 0.5 + 0.5;
+    float longLineB = sin(dot(vWorldPos.xz, foamDirB) * 0.072 + uTime * 0.26 + foamNoise * 2.2) * 0.5 + 0.5;
+    float foamLace =
+      smoothstep(0.78, 0.98, longLineA + foamNoise * 0.18) * 0.52 +
+      smoothstep(0.84, 1.0, longLineB + shimmer * 0.16) * 0.3;
+    foamLace *= (0.18 + lagoonBand * 0.58 + crest * 0.42 + heroBreaker * 0.34) * (1.0 - horizonDistance * 0.66);
+    float foamMask = smoothstep(0.62, 1.08, crest + shimmer * 0.22 + foamLace * 0.42);
+    color = mix(color, uFoamColor, clamp(foamMask * 0.72 + foamLace * 0.54 + heroBreaker * crest * 0.26, 0.0, 0.9));
+
+    float caustic = smoothstep(0.62, 0.98, fbm2d(vWorldPos.xz * 0.08 + vec2(uTime * 0.03, uTime * 0.018)));
+    color += mix(vec3(0.0), vec3(0.18, 0.28, 0.18), caustic * lagoonBand * (1.0 - farDistance) * 0.24);
 
     // Body shimmer — subtle painterly variation everywhere
     float bodyNoise = noise2d(vWorldPos.xz * 0.62 + uTime * 0.13);
     color += (bodyNoise - 0.5) * 0.035;
 
-    // Distance fade — far ocean blends into horizon for a clean sea-meets-sky read
-    float dist = length(uCameraWorld - vWorldPos);
-    float horizonFade = clamp(dist / 4200.0, 0.0, 1.0);
-    color = mix(color, uHorizonColor, horizonFade * horizonFade * 0.62);
+    // Horizon fade — far ocean lifts from pale cyan into the cream/peach haze band.
+    color = mix(color, uFarColor, farDistance * 0.18);
+    color = mix(color, uHorizonColor, horizonDistance * horizonDistance * (0.38 + fresnel * 0.18));
+    vec3 posterOcean = floor(color * 9.0 + 0.5) / 9.0;
+    color = mix(color, posterOcean, 0.2);
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -168,9 +224,9 @@ const _scratchSunDir = new Vector3();
 export function buildOceanSystem(options: OceanOptions = {}): OceanSystem {
   const size = options.size ?? 8000;
   const subdivisions = options.subdivisions ?? 176;
-  // Mossu's island shell extends down to ~y=-305 (lowerBelly bottom). Ocean sits
-  // below that so the cliff/underbelly emerges from the sea cleanly.
-  const level = options.level ?? -340;
+  // Keep the sea below the underside shell so profile views read a clear air gap
+  // before the floating island casts over open water.
+  const level = options.level ?? -352;
 
   const geometry = new PlaneGeometry(size, size, subdivisions, subdivisions);
 
@@ -184,11 +240,13 @@ export function buildOceanSystem(options: OceanOptions = {}): OceanSystem {
       uTime: { value: 0 },
       uSunDir: { value: new Vector3(0.4, 0.7, 0.3).normalize() },
       uSunColor: { value: new Color(0xfff1c8) },
-      uSkyColor: { value: new Color(options.skyColor ?? "#cfe8ee") },
-      uHorizonColor: { value: new Color(options.horizonColor ?? "#edece4") },
-      uDeepColor: { value: new Color(options.deepColor ?? "#10384f") },
-      uShallowColor: { value: new Color(options.shallowColor ?? "#6bb7c8") },
-      uFoamColor: { value: new Color(options.foamColor ?? "#f7fbff") },
+      uSkyColor: { value: new Color(options.skyColor ?? "#bff6ff") },
+      uHorizonColor: { value: new Color(options.horizonColor ?? "#eafff3") },
+      uDeepColor: { value: new Color(options.deepColor ?? "#0063af") },
+      uShallowColor: { value: new Color(options.shallowColor ?? "#12bfe4") },
+      uFarColor: { value: new Color(options.farColor ?? "#a9f8f2") },
+      uLagoonColor: { value: new Color(options.lagoonColor ?? "#39e5d0") },
+      uFoamColor: { value: new Color(options.foamColor ?? "#fffdf3") },
       uCameraWorld: { value: new Vector3() },
     },
   });

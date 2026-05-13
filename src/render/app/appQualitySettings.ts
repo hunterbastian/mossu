@@ -46,8 +46,8 @@ export const QUALITY_PRESETS: Record<VisualQualityPreset, QualitySettings> = {
     visualPreset: "anime",
     pixelRatioCap: 1,
     bloomEnabled: true,
-    bloomIntensity: 1,
-    fogStrength: 1,
+    bloomIntensity: 1.08,
+    fogStrength: 1.06,
     cameraDistance: 0,
   },
   crisp: {
@@ -62,8 +62,8 @@ export const QUALITY_PRESETS: Record<VisualQualityPreset, QualitySettings> = {
     visualPreset: "nordic",
     pixelRatioCap: 0.98,
     bloomEnabled: true,
-    bloomIntensity: 0.72,
-    fogStrength: 1.02,
+    bloomIntensity: 0.92,
+    fogStrength: 1.08,
     cameraDistance: 0,
   },
 };
@@ -187,11 +187,11 @@ export function getQualityToneMappingExposure(preset: VisualQualityPreset) {
     case "soft":
       return 1.08;
     case "anime":
-      return 1.06;
+      return 1.09;
     case "crisp":
       return 1.02;
     case "nordic":
-      return 1.14;
+      return 1.16;
   }
 }
 

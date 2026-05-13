@@ -1,7 +1,7 @@
 import { MathUtils, Vector3 } from "three";
 import type { PlayerState } from "./gameState";
 import type { PlayerSimulationRuntime } from "./playerSimulationRuntime";
-import type { WaterState } from "./world";
+import type { WaterState } from "./worldTypes";
 import {
   COYOTE_TIME,
   LANDING_MOMENTUM_GRACE_TIME,

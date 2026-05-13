@@ -19,7 +19,7 @@ import {
   ShaderMaterial,
   Vector3,
 } from "three";
-import type { BiomeZone } from "../../simulation/world";
+import type { BiomeZone } from "../../simulation/worldTypes";
 import { easeInOutSine, easeOutCubic } from "../motionCurves";
 
 /**

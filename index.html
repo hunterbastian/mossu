@@ -457,15 +457,244 @@
         }
       }
 
+      .instant-title {
+        color: #fff8d6;
+        background:
+          radial-gradient(
+            ellipse at 19% 18%,
+            rgba(255, 243, 190, 0.86) 0 5.4rem,
+            rgba(255, 221, 137, 0.28) 5.5rem 18rem,
+            transparent 24rem
+          ),
+          linear-gradient(180deg, #4aaee4 0%, #69bfe7 28%, #b9edf5 52%, #fff1c6 68%, #b7df89 100%) !important;
+        image-rendering: auto;
+      }
+
+      .instant-title::before {
+        inset: auto -6% -5%;
+        height: 52%;
+        background:
+          radial-gradient(ellipse at 24% 68%, rgba(255, 241, 184, 0.34) 0 14rem, transparent 26rem),
+          radial-gradient(ellipse at 74% 78%, rgba(39, 109, 73, 0.34) 0 19rem, transparent 31rem),
+          linear-gradient(172deg, transparent 0 30%, rgba(198, 234, 124, 0.94) 30.3% 50%, transparent 50.4%),
+          linear-gradient(188deg, transparent 0 42%, rgba(102, 177, 83, 0.98) 42.2% 66%, transparent 66.3%),
+          linear-gradient(180deg, rgba(177, 222, 111, 0.96), rgba(73, 136, 73, 0.98));
+        box-shadow: inset 0 0.18rem 0 rgba(255, 244, 184, 0.56);
+        animation: instant-meadow-light 5.8s ease-in-out infinite;
+      }
+
+      .instant-title::after {
+        background:
+          linear-gradient(180deg, rgba(255, 247, 208, 0.18), transparent 34%),
+          radial-gradient(ellipse at 50% 72%, rgba(30, 94, 68, 0.16), transparent 42rem);
+        mix-blend-mode: soft-light;
+        opacity: 1;
+      }
+
+      .instant-title__art::before,
+      .instant-title__art::after {
+        content: "";
+        position: absolute;
+        left: -8%;
+        right: -8%;
+        pointer-events: none;
+      }
+
+      .instant-title__art::before {
+        top: 50%;
+        height: 18%;
+        background:
+          linear-gradient(174deg, transparent 0 42%, rgba(79, 151, 77, 0.72) 42.2% 57%, transparent 57.2%),
+          linear-gradient(186deg, transparent 0 50%, rgba(119, 187, 95, 0.68) 50.2% 66%, transparent 66.2%);
+      }
+
+      .instant-title__art::after {
+        bottom: 9%;
+        height: 26%;
+        background:
+          repeating-linear-gradient(102deg, rgba(255, 244, 182, 0.16) 0 0.18rem, transparent 0.2rem 1.8rem),
+          radial-gradient(ellipse at 40% 82%, rgba(255, 239, 176, 0.22) 0 12rem, transparent 22rem),
+          linear-gradient(168deg, transparent 0 44%, rgba(168, 215, 102, 0.9) 44.2% 66%, transparent 66.2%);
+        animation: instant-meadow-grass 6.2s ease-in-out infinite;
+      }
+
+      .instant-title__sun {
+        left: clamp(4rem, 16vw, 15rem);
+        top: clamp(3rem, 10vh, 6.6rem);
+        width: clamp(12rem, 24vw, 22rem);
+        background: radial-gradient(
+          circle,
+          rgba(255, 252, 222, 0.72) 0 10%,
+          rgba(255, 224, 145, 0.28) 32%,
+          transparent 70%
+        );
+        box-shadow: none;
+        opacity: 0.9;
+        animation: instant-meadow-haze 7s ease-in-out infinite;
+      }
+
+      .instant-title__cloud {
+        height: clamp(1.6rem, 3vw, 2.6rem);
+        border-radius: 999px;
+        background:
+          radial-gradient(ellipse at 17% 68%, rgba(255, 255, 242, 0.92) 0 36%, transparent 38%),
+          radial-gradient(ellipse at 42% 44%, rgba(255, 249, 220, 0.96) 0 42%, transparent 44%),
+          radial-gradient(ellipse at 68% 62%, rgba(255, 252, 232, 0.9) 0 38%, transparent 40%),
+          linear-gradient(180deg, rgba(255, 247, 216, 0.78), rgba(187, 216, 214, 0.26));
+        filter: blur(0.2px);
+        opacity: 0.86;
+        animation: instant-meadow-cloud 18s ease-in-out infinite;
+      }
+
+      .instant-title__cloud--two {
+        animation-duration: 22s;
+        animation-delay: -7s;
+      }
+
+      .instant-title__cloud--three {
+        animation-duration: 26s;
+        animation-delay: -12s;
+      }
+
+      .instant-title__island {
+        opacity: 0.82;
+        filter: drop-shadow(0 0.7rem 0.9rem rgba(32, 86, 77, 0.18));
+      }
+
+      .instant-title__island::before {
+        background:
+          radial-gradient(ellipse at 24% 18%, rgba(255, 241, 156, 0.72) 0 14%, transparent 15%),
+          linear-gradient(180deg, #c7ea7f 0 34%, #77bd66 35% 100%);
+      }
+
+      .instant-title__island::after {
+        background:
+          linear-gradient(90deg, transparent 28%, rgba(219, 245, 255, 0.82) 29% 34%, transparent 35%),
+          linear-gradient(180deg, #a47f57 0%, #756654 48%, #48605a 100%);
+      }
+
+      .instant-title__logo {
+        color: #fff2b5;
+        text-shadow:
+          0 0.08em 0 rgba(89, 118, 50, 0.96),
+          0.04em 0.04em 0 rgba(44, 94, 70, 0.9),
+          0 0.18em 0.42em rgba(22, 76, 62, 0.34);
+      }
+
+      .instant-title__sprout::before,
+      .instant-title__sprout::after {
+        border-color: #3e7c4a;
+        background: linear-gradient(180deg, #d8f284, #62ad59);
+      }
+
+      .instant-title__progress {
+        height: clamp(0.88rem, 1.8vw, 1.16rem);
+        padding: 0.14rem;
+        border: 1px solid rgba(255, 248, 211, 0.86);
+        background:
+          linear-gradient(180deg, rgba(255, 248, 216, 0.84), rgba(93, 143, 82, 0.28)),
+          rgba(31, 91, 70, 0.42);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.7),
+          0 0.7rem 1.8rem rgba(22, 81, 67, 0.22);
+      }
+
+      .instant-title__progress::after {
+        inset: 0;
+        background: linear-gradient(90deg, transparent, rgba(255, 247, 195, 0.28), transparent);
+        animation: instant-meadow-progress-wind 1.7s ease-in-out infinite;
+      }
+
+      .instant-title__progress-fill {
+        background:
+          linear-gradient(180deg, rgba(255, 253, 223, 0.82), rgba(255, 255, 255, 0) 38%),
+          linear-gradient(90deg, #dff18a, #8bc95e 54%, #4f9860);
+      }
+
+      .instant-title__progress-glint {
+        width: 0.72rem;
+        border-radius: 999px;
+        background: radial-gradient(circle, rgba(255, 251, 206, 0.95), transparent 72%);
+        animation: instant-meadow-dew 1.15s ease-in-out infinite;
+      }
+
+      .instant-title__percent {
+        color: rgba(255, 248, 217, 0.94);
+        text-shadow: 0 0.18rem 0.75rem rgba(33, 85, 64, 0.45);
+      }
+
+      @keyframes instant-meadow-haze {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 0.78;
+        }
+        50% {
+          transform: scale(1.04);
+          opacity: 0.96;
+        }
+      }
+
+      @keyframes instant-meadow-light {
+        0%,
+        100% {
+          filter: saturate(1) brightness(1);
+        }
+        50% {
+          filter: saturate(1.05) brightness(1.04);
+        }
+      }
+
+      @keyframes instant-meadow-cloud {
+        0%,
+        100% {
+          transform: translate3d(0, 0, 0);
+        }
+        50% {
+          transform: translate3d(1.15rem, -0.18rem, 0);
+        }
+      }
+
+      @keyframes instant-meadow-grass {
+        0%,
+        100% {
+          transform: translateX(0);
+        }
+        50% {
+          transform: translateX(0.55rem);
+        }
+      }
+
+      @keyframes instant-meadow-progress-wind {
+        0% {
+          transform: translateX(-60%);
+        }
+        100% {
+          transform: translateX(60%);
+        }
+      }
+
+      @keyframes instant-meadow-dew {
+        0%,
+        100% {
+          opacity: 0.55;
+          transform: translateY(-50%) scale(0.72);
+        }
+        50% {
+          opacity: 1;
+          transform: translateY(-50%) scale(1.18);
+        }
+      }
+
       @media (max-width: 720px) {
         .instant-title__sun {
-          left: 12vw;
-          top: 10vh;
+          left: -2.5rem;
+          top: 2.4rem;
+          width: clamp(8rem, 42vw, 12rem);
         }
 
         .instant-title__island--large {
-          left: 5vw;
-          top: 25vh;
+          display: none;
         }
 
         .instant-title__island--mid {

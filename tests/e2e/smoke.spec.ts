@@ -235,13 +235,19 @@ test.describe("Mossu smoke", () => {
     await step(260);
     let state = await readState();
     expect(state.save?.recruitedKaruIds ?? []).toEqual([]);
+    await expect(page.locator(".karu-roster")).toBeVisible();
+    await expect(page.locator(".karu-roster")).toContainText("Karu friends");
+    await expect(page.locator(".karu-roster-card--empty")).toContainText("No Karu yet");
 
     await holdInteract();
     state = await readState();
     expect(state.save?.recruitedKaruIds ?? []).toHaveLength(1);
     await expect(page.locator(".karu-profile-card--visible")).toContainText("profile unlocked");
+    await expect(page.locator(".karu-roster__count")).toHaveText("1");
+    await expect(page.locator(".karu-roster-card").filter({ hasText: "Karu" }).first()).toBeVisible();
     await page.keyboard.press("Tab");
     await step(180);
+    await expect(page.locator(".karu-roster")).toBeVisible();
     await expect(page.locator(".karu-companion-card").filter({ hasText: "Friend 1/1" })).toBeVisible();
     await expect(page.locator(".karu-companion-card").filter({ hasText: "mood" })).toBeVisible();
     await page.keyboard.press("Escape");
@@ -267,6 +273,7 @@ test.describe("Mossu smoke", () => {
     await holdInteract();
     state = await readState();
     expect(new Set(state.save?.recruitedKaruIds ?? []).size).toBe(2);
+    await expect(page.locator(".karu-roster__count")).toHaveText("2");
   });
 
   test("debug route jumps land on named inspection spots", async ({ page }) => {
@@ -327,5 +334,49 @@ test.describe("Mossu smoke", () => {
       selectedModel?: string;
     };
     expect(state.selectedModel).toBe("karu");
+  });
+
+  test("island viewer route loads terrain atlas", async ({ page }) => {
+    await page.goto("/?islandViewer=1&e2e=1", { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await expect(page.locator("#app")).toBeVisible();
+    await page.waitForFunction(
+      () => window.__MOSSU_E2E__?.ready === true && window.__MOSSU_E2E__?.mode === "island_viewer",
+      { timeout: 60_000 },
+    );
+    await expect(page.locator("canvas.island-viewer__canvas")).toBeVisible({ timeout: 60_000 });
+
+    const state = JSON.parse(await page.evaluate(() => window.render_game_to_text?.() ?? "{}")) as {
+      flyMode?: boolean;
+      maxDistance?: number;
+      markerCount?: number;
+      mode?: string;
+      terrainVertices?: number;
+      visibleLayers?: string[];
+      waterfallMarkers?: number;
+    };
+    expect(state.mode).toBe("island_viewer");
+    expect(state.markerCount).toBeGreaterThan(5);
+    expect(state.terrainVertices).toBeGreaterThan(1000);
+    expect(state.waterfallMarkers).toBeGreaterThanOrEqual(15);
+    expect(state.visibleLayers).toContain("falls");
+    expect(state.maxDistance).toBeGreaterThanOrEqual(3200);
+
+    await page.getByRole("button", { name: /Fly WASD/ }).click();
+    const flyStart = JSON.parse(await page.evaluate(() => window.render_game_to_text?.() ?? "{}")) as {
+      camera?: { target?: { x?: number; y?: number; z?: number } };
+      flyMode?: boolean;
+    };
+    expect(flyStart.flyMode).toBe(true);
+    await page.keyboard.down("w");
+    await page.evaluate(() => window.advanceTime?.(500));
+    await page.keyboard.up("w");
+    const flyMoved = JSON.parse(await page.evaluate(() => window.render_game_to_text?.() ?? "{}")) as {
+      camera?: { target?: { x?: number; y?: number; z?: number } };
+    };
+    const movedDistance =
+      Math.abs((flyMoved.camera?.target?.x ?? 0) - (flyStart.camera?.target?.x ?? 0)) +
+      Math.abs((flyMoved.camera?.target?.y ?? 0) - (flyStart.camera?.target?.y ?? 0)) +
+      Math.abs((flyMoved.camera?.target?.z ?? 0) - (flyStart.camera?.target?.z ?? 0));
+    expect(movedDistance).toBeGreaterThan(20);
   });
 });

@@ -13,6 +13,27 @@ const appContainer = container;
 /** Prevents stacking fatal overlays / handler feedback loops after the first runtime fatal. */
 let runtimeFatalUiLocked = false;
 
+function isBrowserExtensionRuntimeError(details: {
+  message?: string;
+  reason?: unknown;
+  source?: string;
+  error?: Error;
+}) {
+  const source = details.source ?? "";
+  if (/^(chrome|moz|safari)-extension:\/\//.test(source)) {
+    return true;
+  }
+
+  const reasonText =
+    details.reason instanceof Error
+      ? `${details.reason.message}\n${details.reason.stack ?? ""}`
+      : typeof details.reason === "string"
+        ? details.reason
+        : "";
+  const stackText = details.error?.stack ?? "";
+  return /(?:chrome|moz|safari)-extension:\/\//.test(`${details.message ?? ""}\n${reasonText}\n${stackText}`);
+}
+
 type LoadingMode = "simulated" | "real";
 type LoadingAsset = string | URL | Request | PromiseLike<unknown> | (() => Promise<unknown>);
 type LoadingCompleteDetail = {
@@ -279,6 +300,11 @@ window.mossuLoading = {
 void startFakeLoading({ autoComplete: false, durationMs: 5200, holdAt: 92 });
 
 function surfaceRuntimeError(details: MossuErrorDetail) {
+  if (isBrowserExtensionRuntimeError(details)) {
+    console.warn("Mossu: ignored browser-extension runtime error", details);
+    return;
+  }
+
   if (runtimeFatalUiLocked) {
     console.error("Mossu: suppressed duplicate fatal UI", details);
     return;
@@ -339,8 +365,21 @@ async function startModelViewer() {
   await finishLoading();
 }
 
+async function startIslandViewer() {
+  setLoadingStatus("Mapping the island", 64);
+  const { IslandViewerApp } = await import("./render/app/IslandViewerApp");
+  const viewer = new IslandViewerApp(appContainer);
+  attachRuntime(viewer, "island_viewer");
+  await finishLoading();
+}
+
 async function bootstrap() {
   const route = new URLSearchParams(window.location.search);
+  if (route.has("islandViewer")) {
+    await startIslandViewer();
+    return;
+  }
+
   if (route.has("modelViewer")) {
     await startModelViewer();
     return;

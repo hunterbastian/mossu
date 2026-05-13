@@ -38,7 +38,7 @@ const START_SHOULDER = -2.8;
 const OPENING_HANDOFF_START = 0.62;
 const MIN_POLAR_ANGLE = 0.58;
 const MAX_POLAR_ANGLE = 2.28;
-const MANUAL_LOOK_COOLDOWN_SECONDS = 3.4;
+const MANUAL_LOOK_COOLDOWN_SECONDS = 2.35;
 const IDLE_ORBIT_YAW_SPEED = 0.16;
 const IDLE_ORBIT_YAW_DAMPING = 2.4;
 const IDLE_ORBIT_DISTANCE_BOOST = 3.8;
@@ -103,12 +103,12 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
     speedPolarLift: 0.008,
     fov: 50,
     shoulder: 0.14,
-    yawResponsiveness: 0.42,
-    focusDamping: 3.8,
-    distanceDamping: 3.2,
-    profileDamping: 2.7,
-    positionDamping: 4.7,
-    targetDamping: 3.9,
+    yawResponsiveness: 0.5,
+    focusDamping: 4.35,
+    distanceDamping: 3.65,
+    profileDamping: 3.1,
+    positionDamping: 5.2,
+    targetDamping: 4.45,
   },
   roll: {
     name: "roll",
@@ -124,12 +124,12 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
     speedPolarLift: 0.025,
     fov: 54,
     shoulder: 0.16,
-    yawResponsiveness: 0.6,
-    focusDamping: 4.05,
-    distanceDamping: 3.15,
-    profileDamping: 3.0,
-    positionDamping: 4.9,
-    targetDamping: 3.95,
+    yawResponsiveness: 0.7,
+    focusDamping: 4.45,
+    distanceDamping: 3.45,
+    profileDamping: 3.35,
+    positionDamping: 5.35,
+    targetDamping: 4.3,
   },
   air: {
     name: "air",
@@ -145,16 +145,16 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
     speedPolarLift: 0,
     fov: 52,
     shoulder: 0.18,
-    yawResponsiveness: 0.34,
-    focusDamping: 3.45,
-    distanceDamping: 2.85,
-    profileDamping: 2.45,
-    positionDamping: 4.35,
-    targetDamping: 3.5,
+    yawResponsiveness: 0.4,
+    focusDamping: 3.85,
+    distanceDamping: 3.05,
+    profileDamping: 2.75,
+    positionDamping: 4.8,
+    targetDamping: 3.95,
   },
   swim: {
     name: "swim",
-    distance: 32,
+    distance: 34,
     speedDistanceBoost: 0.62,
     terrainDistanceBoost: 0.75,
     focusHeight: 4.75,
@@ -166,12 +166,12 @@ const CAMERA_PROFILES: Record<CameraProfileName, CameraProfile> = {
     speedPolarLift: 0.02,
     fov: 50,
     shoulder: 0.1,
-    yawResponsiveness: 0.48,
-    focusDamping: 3.7,
-    distanceDamping: 3.05,
-    profileDamping: 2.95,
-    positionDamping: 4.5,
-    targetDamping: 3.65,
+    yawResponsiveness: 0.56,
+    focusDamping: 4,
+    distanceDamping: 3.3,
+    profileDamping: 3.15,
+    positionDamping: 4.9,
+    targetDamping: 4.05,
   },
   ridge: {
     name: "ridge",
@@ -313,6 +313,7 @@ export class FollowCamera {
   private shoulderFeedbackKick = 0;
   private landingSettle = 0;
   private rollSettle = 0;
+  private lastPlanarSpeed = 0;
   private cinematicTime = 0;
   private previousRolling = false;
   private activeProfileName: CameraProfileName = "walk";
@@ -400,6 +401,7 @@ export class FollowCamera {
     this.cinematicTime += dt;
     const terrainLift = MathUtils.clamp((player.position.z + 160) / 360, 0, 1);
     const speed = Math.hypot(player.velocity.x, player.velocity.z);
+    this.lastPlanarSpeed = speed;
     const speedBoost = MathUtils.clamp(speed / 24, 0, 1);
     this.playerVelocity.set(player.velocity.x, 0, player.velocity.z);
     const profile = this.selectCameraProfile(player, terrainLift);
@@ -754,6 +756,7 @@ export class FollowCamera {
       pointerLocked: this.pointerLocked,
       idleOrbitActive: this.idleOrbitRequested,
       idleOrbitBlend: Number(this.idleOrbitBlend.toFixed(3)),
+      planarSpeed: Number(this.lastPlanarSpeed.toFixed(2)),
       distance: Number(this.currentDistance.toFixed(2)),
       userDistanceBias: Number(this.userDistanceBias.toFixed(1)),
       polar: Number(this.currentPolar.toFixed(3)),
@@ -917,8 +920,8 @@ export class FollowCamera {
     this.controls.touches.one = CameraControls.ACTION.NONE;
     this.controls.touches.two = CameraControls.ACTION.NONE;
     this.controls.touches.three = CameraControls.ACTION.NONE;
-    this.controls.smoothTime = 0.58;
-    this.controls.draggingSmoothTime = 0.18;
+    this.controls.smoothTime = 0.48;
+    this.controls.draggingSmoothTime = 0.14;
     this.controls.restThreshold = 0.003;
     this.controls.minDistance = MIN_DISTANCE;
     this.controls.maxDistance = MAX_DISTANCE;
@@ -1006,14 +1009,14 @@ export class FollowCamera {
     if (player.swimming) {
       return CAMERA_PROFILES.swim;
     }
+    if (player.rolling) {
+      return CAMERA_PROFILES.roll;
+    }
     if (!player.grounded) {
       return CAMERA_PROFILES.air;
     }
     if (player.position.z > 198 || player.position.y > 144) {
       return CAMERA_PROFILES.summit;
-    }
-    if (player.rolling) {
-      return CAMERA_PROFILES.roll;
     }
     if (terrainLift > 0.74 || player.position.z > 112) {
       return CAMERA_PROFILES.ridge;

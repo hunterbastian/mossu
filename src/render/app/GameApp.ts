@@ -124,9 +124,9 @@ const DEBUG_ROUTE_JUMPS: Record<DebugRouteJumpId, DebugRouteJump> = {
   "fir-gate": {
     label: "Fir Gate",
     landmarkId: "fir-gate",
-    position: { x: 24, z: 88 },
-    heading: -0.18,
-    cameraOptions: { distance: 12, focusHeight: 6, lift: 14 },
+    position: { x: 20, z: 76 },
+    heading: 0.35,
+    cameraOptions: { distance: 18, focusHeight: 6, lift: 12 },
   },
   "highland-basin": {
     label: "Highland Basin",

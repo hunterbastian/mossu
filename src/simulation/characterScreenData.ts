@@ -2,6 +2,7 @@ import type { ForageableEntryState, FrameState, InventoryEntryState, SaveState }
 import { getForageableEntries } from "./forageableProgress";
 import { getCollectionEntries } from "./landmarkProgress";
 import { JUMP_VELOCITY, ROLL_BOOST_MULTIPLIER, ROLL_SPEED, WALK_SPEED } from "./playerSimulationConstants";
+import { buildTrailProgression, type TrailProgressionView } from "./progressionObjectives";
 import { canUseBreezeFloat } from "./staminaAbilities";
 
 const FORAGE_GOAL_TARGET = 3;
@@ -35,13 +36,7 @@ export interface CharacterUpgradeView {
 }
 
 export interface CharacterScreenView {
-  progression: {
-    label: string;
-    detail: string;
-    percent: number;
-    collected: number;
-    total: number;
-  };
+  progression: TrailProgressionView;
   stats: CharacterStatView[];
   upgrades: {
     unlocked: CharacterUpgradeView[];
@@ -71,7 +66,7 @@ export function buildCharacterScreenData(save: SaveState, frame: FrameState): Ch
   const totalCollectibles = collections.length + gatheredGoods.length;
   const totalCollected = discoveredCount + gatheredCount;
   const canFloat = canUseBreezeFloat(save);
-  const progression = getTrailProgression(save, totalCollected, totalCollectibles);
+  const progression = buildTrailProgression(save, totalCollected, totalCollectibles);
   const forageGoalTarget = Math.min(FORAGE_GOAL_TARGET, gatheredGoods.length);
   const forageGoalCount = Math.min(gatheredCount, forageGoalTarget);
   const shrineRewardClaimed = save.catalogedLandmarkIds.has("peak-shrine");
@@ -252,51 +247,4 @@ function karuMoodDetail(mood: KaruProfileMood) {
     default:
       return "Perks up at tiny ripples, leaf glints, and Mossu's call.";
   }
-}
-
-function getTrailProgression(save: SaveState, collected: number, total: number): CharacterScreenView["progression"] {
-  const percent = total <= 0 ? 0 : Math.round((collected / total) * 100);
-  if (save.catalogedLandmarkIds.has("peak-shrine")) {
-    return {
-      label: "Summit circuit",
-      detail: "Moss Crown is stamped. The return loop is open for missed notes and samples.",
-      percent,
-      collected,
-      total,
-    };
-  }
-  if (!save.catalogedLandmarkIds.has("start-burrow")) {
-    return {
-      label: "Burrow start",
-      detail: "Wake the field guide by leaving the nest and stamping Burrow Hollow.",
-      percent,
-      collected,
-      total,
-    };
-  }
-  if (!save.gatheredForageableIds.has("lake-shell")) {
-    return {
-      label: "First sleeve",
-      detail: "Find the lake-shore shell so the guide has both a note and a sample.",
-      percent,
-      collected,
-      total,
-    };
-  }
-  if (!save.catalogedLandmarkIds.has("orange-tree-overlook")) {
-    return {
-      label: "Amber lookout",
-      detail: "Follow the warm rise to the lone amber tree and stamp the next field note.",
-      percent,
-      collected,
-      total,
-    };
-  }
-  return {
-    label: "Shrine climb",
-    detail: "The guide is started. Keep following river bends, glades, and highland shelves.",
-    percent,
-    collected,
-    total,
-  };
 }

@@ -171,9 +171,9 @@ export function buildStylizedSkySun() {
 
 function createCloudPuffMaterial() {
   const material = new MeshBasicMaterial({
-    color: "#fffaf0",
+    color: "#fff8e9",
     transparent: true,
-    opacity: 0.2,
+    opacity: 0.24,
     depthWrite: false,
     fog: true,
   });
@@ -335,9 +335,9 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
         vec3 dir = normalize(vWorldDirection);
         float mood = clamp(uElevationMood, 0.0, 1.0);
         // Cozy lowland → cooler alpine: zenith and mid band shift with elevation mood.
-        vec3 horizonColor = vec3(1.0, 0.975, 0.82);
-        vec3 midColor = mix(vec3(0.70, 0.90, 0.965), vec3(0.66, 0.83, 0.955), mood);
-        vec3 zenithColor = mix(vec3(0.52, 0.77, 0.965), vec3(0.47, 0.67, 0.94), mood);
+        vec3 horizonColor = vec3(1.0, 0.965, 0.78);
+        vec3 midColor = mix(vec3(0.62, 0.88, 0.99), vec3(0.64, 0.84, 0.965), mood);
+        vec3 zenithColor = mix(vec3(0.39, 0.68, 0.98), vec3(0.45, 0.66, 0.94), mood);
         vec3 color = mix(horizonColor, midColor, smoothstep(-0.08, 0.18, dir.y));
         color = mix(color, zenithColor, smoothstep(0.22, 0.96, dir.y));
 
@@ -356,10 +356,10 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
         vec3 warmHaze = mix(vec3(1.0, 0.78, 0.42), sunCream, 0.42);
         vec3 coolBloom = vec3(0.62, 0.82, 0.94) * (0.055 + mood * 0.025);
         color += coolBloom * sunBloom;
-        color += sunApricot * sunBloom * 0.24;
-        color += warmHaze * sunCorona * (0.21 + (1.0 - mood) * 0.055 + uSunHaze * 0.08);
-        color += sunIvory * broadSunHaze * (0.08 + (1.0 - mood) * 0.022 + uSunHaze * 0.045);
-        color += sunCream * lightShaft * (0.014 + (1.0 - mood) * 0.008 + uSunHaze * 0.012);
+        color += sunApricot * sunBloom * 0.28;
+        color += warmHaze * sunCorona * (0.25 + (1.0 - mood) * 0.065 + uSunHaze * 0.1);
+        color += sunIvory * broadSunHaze * (0.1 + (1.0 - mood) * 0.03 + uSunHaze * 0.06);
+        color += sunCream * lightShaft * (0.018 + (1.0 - mood) * 0.01 + uSunHaze * 0.018);
 
         vec2 skyUv = dir.xz * (2.05 / max(0.26, dir.y + 0.38));
         float highWisp = fbm(skyUv * vec2(0.62, 0.26) + vec2(8.0, 3.0));
@@ -394,6 +394,13 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
         color = mix(color, creamAir, atmosphericDepth * (0.16 + horizonGrain * 0.06));
         color = mix(color, sunMilk, warmHorizon * (0.22 + horizonGrain * 0.08));
         color = mix(color, coolDistantAir, coolHorizon);
+
+        float cloudBandA = fbm(vec2(atan(dir.z, dir.x) * 1.9 + uTime * 0.004, dir.y * 7.2 + 5.0));
+        float cloudBandB = fbm(vec2(atan(dir.z, dir.x) * 2.7 - uTime * 0.003, dir.y * 9.4 - 2.0));
+        float lowCloudShelf = smoothstep(-0.1, 0.32, dir.y) * (1.0 - smoothstep(0.38, 0.72, dir.y));
+        float cloudBand = smoothstep(0.58, 0.86, cloudBandA * 0.66 + cloudBandB * 0.34) * lowCloudShelf;
+        vec3 bandCream = mix(vec3(0.9, 0.985, 1.0), sunMilk, 0.38 + sunAzimuth * 0.24);
+        color = mix(color, bandCream, cloudBand * (0.055 + uWatercolorFog * 0.035 + uWarmHaze * 0.025));
 
         float viewAz = atan(dir.z, dir.x);
         float sunAz = atan(sunDir.z, sunDir.x);

@@ -1,5 +1,5 @@
 import type { PlayerState } from "./gameState";
-import type { WaterState } from "./world";
+import type { WaterState } from "./worldTypes";
 import { SWIM_ENTRY_MARGIN, SWIM_EXIT_MARGIN, SWIM_MIN_DEPTH } from "./playerSimulationConstants";
 
 export type PlayerWaterMovementState = "onLand" | "wading" | "swimmingSurface" | "underwater";

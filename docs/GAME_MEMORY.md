@@ -1,6 +1,6 @@
 # Mossu Game Memory
 
-Last updated: 2026-05-08
+Last updated: 2026-05-12
 
 This file is the durable project memory for Mossu. It captures the game we are making, the current design direction, and the decisions that should guide future implementation.
 
@@ -17,8 +17,12 @@ The game should feel:
 - desktop gameplay HUD can lean Windows 7 / Frutiger Aero when kept lightweight: translucent aqua glass, rounded glossy edges, blue depth, gold actionable accents, and bubble-like highlights
 - desktop HUD hierarchy should stay compact and centered: the current objective is the main chip, while secondary stats should not compete with the playfield
 - mobile gameplay UI should stay especially low-chrome: teach controls briefly, then collapse to one objective chip plus contextual pouch/roll/stamina feedback
-- the first-paint loading and main title menu can lean into a cleaner retro pixel ocean/floating-island presentation, with the gold/blue Mossu logo carrying the brand before gameplay starts
+- the first-paint loading and main title menu should lean into a soft green meadow-hill presentation: layered fresh greens, cream/cyan sky haze, drifting cloud bands, broad warm sun glow, floating-island accents, and a quiet sprout/dew loading bar before gameplay starts
 - opening presentation should be shareable: start with a calm aerial route reveal, keep water/valley readable, use only a concise Karu-first prompt, then hand off smoothly to playable camera without feeling like a debug teleport
+- the world must keep a clear floating-island read: ridge, rim, and overlook views should reveal open air and blue ocean below instead of enclosing the route inside an interior cliff wall
+- Burrow Hollow's starting nest should feel creature-made and cozy, closer to a clean Spore-like living cradle than a realistic animal den: rounded moss/pod forms, warm lining petals, soft seed glows, seed/dew details, and a readable path out
+- controller feel should be immediate but soft: quick walking startup, decisive stopping, stronger turn correction, roll release that carries into walking instead of snapping, forgiving Breeze Float handoff near jump apex, swim-bank entry that preserves motion, and a camera that follows Mossu's intent without feeling glued on
+- durable concept art references live under `docs/concept-art/`; use the floating-island board there for silhouette, cloud, cliff, waterfall, and ocean-below direction before making broad island-shape changes
 - mechanically simple at first, with no combat in the current slice
 
 The current goal is one polished biome route, not a giant unfinished open world.
@@ -78,10 +82,12 @@ Mossu should read as cute without becoming too plastic or mascot-like. Motion sh
 - Karu join feedback: one small `Karu joined Mossu's trail` prompt, briefly softened HUD, a lightweight hop/glow pulse on the recruited Karu, and a companion profile card that points back to the field guide
 - Boids-style Karu follow behavior
 - Karu route follow stabilizers: damped per-follower heading, short-lived water-bank hold targets, lost-follower catch-up placement, and debug follower snapshots for route probes
-- Recruited Karu persistence in local save state, plus saved Karu friend cards in the field guide
+- Recruited Karu persistence in local save state, plus an always-visible right-side Karu friends HUD rail and saved Karu friend cards in the field guide
 - Debug route jumps for focused route inspection
+- Debug `?islandViewer=1` atlas for orbiting or flying around the full floating island, checking overview/aerial/top/profile/under composition, inspecting named Terrain/Water/Forests/Meadows/Rocks/Landmarks/Lighting/Debug folders, toggling terrain/biomes/rocks/ocean/water/guides/landmarks/falls layers, planning cliffs/waterfalls/ocean visibility away from Mossu's gameplay camera, and using `?referenceAerial=1` for no-UI concept-art comparison captures
 - Debug save presets for fresh start, recruited Karu, populated handbook, water route, and summit-ready QA states
-- Isolated `?modelViewer=karu` Aqua workshop route for Karu/Mossu rig inspection, with macOS-style window chrome, Geist typography, playful creature controls, pose/lighting previews, timeline playback, and drag-to-orbit camera inspection
+- Isolated `?modelViewer=karu` neutral debug-tool route for Karu/Mossu rig inspection, with compact viewer chrome, Geist typography, playful creature controls, pose/lighting previews, timeline playback, and drag-to-orbit camera inspection
+- Debug viewer UI direction now favors Vercel/Linear-inspired tooling surfaces for the atlas and model viewer: neutral white panels, compact controls, fine borders, mono metadata, and restrained active states.
 - `npm run art:review` for named real-browser route screenshots using debug startup, real-time visual stepping, debug route jumps, and stale-artifact protection
 - `npm run art:compare` for route artifact/state validation after art review captures, including screenshot byte-size, contrast, chroma, detail, and distinct-frame checks so stale sky-only captures cannot pass as route review
 - `npm run karu:route` for a recruited-Karu route regression check from Burrow-side terrain through water banks, highland slopes, narrow ridge turns, and Moss Crown
@@ -100,7 +106,7 @@ Herd AI:
 - Recruited Karu should remain cute and blob-like, not robotic.
 - Followers now have route-level lost-follow protection; future companion work should preserve cute motion while improving celebration, visibility, and personality.
 - Recruitment is now individual and held, so each Karu should feel like a small deliberate invitation rather than a cluster pickup.
-- Karu recruitment now persists in save state; the saved companion state is visible through the join profile card and the field guide's Karu friends sleeve.
+- Karu recruitment now persists in save state; the saved companion state is visible through the join profile card, the always-visible right-side Karu friends HUD rail, and the field guide's Karu friends sleeve.
 
 Inventory:
 
@@ -115,16 +121,30 @@ Terrain:
 
 - Layered heightmap feel: low-frequency rolling hills, ridged peaks, domain-warped organic shapes.
 - Color by height and slope: flat grass, steep rock, high snow, with smooth blending.
+- The playable route sits on a floating island. Cliff shell, underside haze, rim bands, thin ledge-like cliff strata, waterfall source lips, faint lower mist, tiny perched groves on selected cliff lips, and frequent edge waterfalls should frame the exterior silhouette while preserving sea/sky glimpses below the island from highland and overlook cameras.
+- At island-overview scale, the world should read like the reference spec sheet and floating-island concept art: a central 2-3 peak mountain spine with sharper needle peaks, an alpine source cleft feeding stepped waterfall terraces and a main river, a visible west-side lake basin, a cleaner south/front meadow plateau with an intentional walking loop, meadow lowlands, evergreen bands along the climb and cliff lips, alpine/snow caps, authored headlands/coves that break the oval/board read, warm tan cliff strata and sheer cliff-wall faces, wider front hero falls, white/cyan surf contact around the ocean base, and a strong cliff-edge silhouette floating over blue ocean.
+- The west lowland lake should read as a true great lake, not a small pond: keep it broad, visibly fed by the silver river braid, and framed by warm shore shelves plus boulder clusters while protecting the Burrow start and route movement lane from wetness/river-nook terrain influence.
+- Great-lake and still-pool water should get "hero water" treatment through reusable water-profile knobs, not one-off lake shader forks: shoreline definition, shallow/deep depth-band strength, current-stroke strength, and hero specular strength should be tuned per water type while preserving swim/depth contracts.
+- Current concept-art reverify notes: the strongest improvements are the mountain/cascade spine, asymmetric rim, wider front falls, smooth underside taper, clearer ocean/air gap, and the layered front/south terrace pass. The front cliff should use warm broken strata and inset face slabs, not continuous dark rim bars; atlas Rocks/Biomes overlays can exaggerate a dark jagged profile line, so judge the final terrain read from clean atlas captures plus route/art-review frames.
+- Current reference-aerial notes: `?islandViewer=1&referenceAerial=1&e2e=1` is the stable no-UI full-island composition preset. Use it to judge whether the island reads like the provided image: open sky and ocean, full mountain peak visible, visible route loop over a clean meadow shelf, sheer warm cliff walls, front waterfall drop, and surf foam at the ocean contact.
+- The clean atlas view can use debug-only visual helpers such as terrain edge clipping when they improve whole-island captures, but do not put that cost into the normal gameplay terrain path unless perf is reprofiled.
+- Prefer concept-art translation through terrain massing, material color, atlas blockouts, and a few high-signal shell accents before adding many separate edge meshes. Burrow/Amber/Skyward route budgets are sensitive to global shell call count, so preserve the concept read with coarse forms first.
+- Keep the broad south/front meadow more open than the mid-slope forest bands. Thin tree density across that front shelf so the terraced cliff face, waterfall mouth, and cove cuts stay visible in `?islandViewer=1` and high route-overlook frames.
+- From below/profile views, preserve an obvious band of air between the island underside and the sea. Avoid dark rounded belly or saucer-like underside pieces; the bottom should feel like a smooth terrain-derived taper that grows out of the cliff mass, with strata, mist, and falling-water silhouettes around it.
 - Mountains should be visible enough that the player can look up and admire them.
 - Moss Crown should feel like a real destination before arrival: far highland layers and the shrine crown silhouette should be readable from earlier climb checkpoints without becoming noisy props.
-- Route paths and clearings should stay readable without looking like hard roads: use warm dirt bands, soft edge strokes, and painted grass/brush clumps to imply travel.
+- Route paths and clearings should stay readable without looking like hard roads: use warm dirt bands, sparse pale half-buried stepping stones, soft edge strokes, and painted grass/brush clumps to imply travel.
+- Mossu/Karu habitat props should stay biological and cute, using rounded moss cushions, pod rims, bedding leaves, warm glow discs, seed pearls, comfort seeds, and subtle glints without body-horror, clutter, or oversized landmark treatment.
 
 Anime / painterly finish:
 
 - Push the world through warm-paper highlights, cooler green-blue shadows, and modest cel-like value bands.
+- Current shader direction leans more deliberately Ghibli/anime: saturated clean blue-to-cream skies, peach horizon haze, cooler teal shadow separation, warm cream sun glints, watercolor terrain patching, richer turquoise water, and restrained bloom/reflection energy inspired by Sildur-style warmth without turning Mossu into a high-gloss shader showcase.
+- Keep terrain materials semantically separated in the palette and final mesh blend: grass can stay lush, but shore shelves should read warmer/sandier, damp banks cooler/teal, rocks cooler/tanner, snow brighter/cooler, and dry lips warmer. Do not let broad atlas views collapse back into one green/yellow wash.
 - Use soft outlines selectively on Mossu, Karu, and major readable silhouettes; avoid thick black comic outlines.
 - Keep grade and posterization subtle enough that route depth, swimming cues, HUD contrast, and dusk/sun reads still work.
 - Prefer material/shader tuning over adding heavy image filters or expensive post effects.
+- Keep close pine silhouettes dark green instead of true black; automated visual guards treat huge near-black foreground canopies as blank, and the route should read like shaded needles rather than a black cutout.
 
 Rivers:
 
@@ -153,8 +173,10 @@ Forest:
 Water:
 
 - Stylized/cartoon water with soft edges, depth tint, bank foam/milkiness, sparkles, and flow.
+- Still-water lakes should have enough scale and opacity to register from atlas and route-overlook views, especially the west great lake; rock shelves and reeds should frame the edge without turning the route into an obstacle field.
 - Anime/cel-shaded water now leans on simplified blue-green depth ramps, hand-drawn foam strokes, tiny restrained sparkle strokes, and soft shoreline milk. Close camera views should show readable bank milk and depth bands without making swimming or route guidance less clear.
 - Water movement should read as downstream travel, not just surface shimmer: use moving current threads, lens-current ribbons, bend eddies, soft bank laps, traveling caustics, and longer Mossu/Karu ripple rings while keeping the shared surface/underfill displacement aligned.
+- The far ocean should grade by distance: rich blue near the camera, turquoise-blue through the middle distance, pale cyan toward the far plane, then cream/peach haze at the horizon so the floating island sits in humid open air.
 
 Atmosphere:
 
@@ -162,7 +184,7 @@ Atmosphere:
 - Default lighting should read as Nordic filmic: lifted ACES exposure, cool pearl fog, clean highlights, restrained bloom, and matte midtones rather than heavy glow.
 - BotW-style readable depth, not dense horror fog.
 - The visible sun should feel like part of the world: it orbits around the route, drives the directional-light mood to a degree, and stays subtle enough that Mossu and the route remain readable.
-- Sky softness should come from warm sun haze, layered cream-blue cloud puffs, high watercolor veils, and very light moving cloud-shadow patches across grass.
+- Sky softness should come from warm sun haze, layered cream-blue cloud puffs, high watercolor veils, and very light slow-moving cloud-shadow patches across grass. Keep them broad and quiet so they make the island feel alive without adding visual clutter.
 - Keep fog and glow away from camera-critical gameplay reads; softness should mostly live in the far range and horizon layers.
 
 ## UI Direction

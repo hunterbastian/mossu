@@ -1,6 +1,7 @@
 import { Vector2, Vector3 } from "three";
-import { sampleBiomeZone, WorldLandmark, worldLandmarks } from "./world";
+import { sampleBiomeZone, worldLandmarks } from "./world";
 import type { InteractionTargetState, InventoryEntryState } from "./gameState";
+import type { WorldLandmark } from "./worldTypes";
 
 const DEFAULT_INTERACTION_RADIUS = 15;
 const landmarkScratch = new Vector2();

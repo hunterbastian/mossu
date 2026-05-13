@@ -14,6 +14,7 @@ export function runIslandRegionContracts() {
   const samples = [
     { label: "opening meadow", x: -68, z: -140, region: "meadow", material: "meadow_grass" },
     { label: "central lake", x: -34, z: -112, region: "lake", material: "water" },
+    { label: "west great lake", x: -188, z: -86, region: "lake", material: "water" },
     { label: "beach rim", x: 430, z: -520, region: "shore", material: "sand" },
     { label: "forest grove", x: -126, z: -84, region: "forest", material: "forest_floor" },
     { label: "highland basin", x: 42, z: 134, region: "highland", material: "highland_grass" },

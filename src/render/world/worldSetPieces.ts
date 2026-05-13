@@ -1,9 +1,12 @@
 import {
+  BoxGeometry,
+  BufferGeometry,
   CircleGeometry,
   ConeGeometry,
   Color,
   CylinderGeometry,
   DoubleSide,
+  Float32BufferAttribute,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -24,6 +27,96 @@ import {
   startingPosition,
 } from "../../simulation/world";
 import { markCameraCollider } from "./sceneHelpers";
+
+export const ISLAND_EDGE_WATERFALL_TURNS = [
+  0.02,
+  0.055,
+  0.1,
+  0.16,
+  0.24,
+  0.35,
+  0.46,
+  0.52,
+  0.58,
+  0.66,
+  0.765,
+  0.78,
+  0.88,
+  0.93,
+  0.965,
+] as const;
+
+const ISLAND_UNDERSIDE_SEGMENTS = 128;
+
+function buildSmoothIslandUnderside(center: Vector3, rimHeight: number) {
+  const ringProfiles = [
+    { scale: 0.99, drop: 34, wobble: 2.2, tone: 0 },
+    { scale: 0.74, drop: 74, wobble: 5.0, tone: 0.18 },
+    { scale: 0.54, drop: 116, wobble: 7.2, tone: 0.34 },
+    { scale: 0.37, drop: 158, wobble: 7.4, tone: 0.5 },
+    { scale: 0.23, drop: 202, wobble: 6.1, tone: 0.64 },
+    { scale: 0.12, drop: 238, wobble: 4.2, tone: 0.75 },
+    { scale: 0.052, drop: 266, wobble: 2.6, tone: 0.84 },
+    { scale: 0.022, drop: 288, wobble: 1.2, tone: 0.9 },
+  ] as const;
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const indices: number[] = [];
+  const topColor = new Color("#b7a875");
+  const bellyColor = new Color("#788173");
+
+  ringProfiles.forEach((profile, ringIndex) => {
+    const ringT = ringIndex / (ringProfiles.length - 1);
+    for (let segment = 0; segment < ISLAND_UNDERSIDE_SEGMENTS; segment += 1) {
+      const angle = (segment / ISLAND_UNDERSIDE_SEGMENTS) * Math.PI * 2;
+      const boundary = sampleIslandBoundaryPoint(angle);
+      const baseY = sampleBaseTerrainHeight(boundary.x, boundary.z) - profile.drop;
+      const smoothedY = rimHeight - profile.drop - 5 * ringT;
+      const localWeight = Math.max(0.18, 1 - ringT * 0.82);
+      const ripple = Math.sin(angle * 3.4 + ringIndex * 0.77) * profile.wobble;
+      const frontKeel = Math.max(0, Math.cos(angle - Math.PI * 1.5));
+      const shoulder = 1 + Math.sin(angle * 5.2 - ringIndex * 0.31) * 0.012 * (1 - ringT);
+      const x = center.x + (boundary.x - center.x) * profile.scale * shoulder;
+      const z = center.z + (boundary.z - center.z) * profile.scale * shoulder;
+      const y = baseY * localWeight + smoothedY * (1 - localWeight) + ripple - frontKeel * ringT * ringT * 10;
+      const color = topColor.clone().lerp(bellyColor, profile.tone);
+      positions.push(x, y, z);
+      colors.push(color.r, color.g, color.b);
+    }
+  });
+
+  for (let ringIndex = 0; ringIndex < ringProfiles.length - 1; ringIndex += 1) {
+    const ringStart = ringIndex * ISLAND_UNDERSIDE_SEGMENTS;
+    const nextRingStart = (ringIndex + 1) * ISLAND_UNDERSIDE_SEGMENTS;
+    for (let segment = 0; segment < ISLAND_UNDERSIDE_SEGMENTS; segment += 1) {
+      const nextSegment = (segment + 1) % ISLAND_UNDERSIDE_SEGMENTS;
+      indices.push(
+        ringStart + segment,
+        ringStart + nextSegment,
+        nextRingStart + segment,
+        ringStart + nextSegment,
+        nextRingStart + nextSegment,
+        nextRingStart + segment,
+      );
+    }
+  }
+
+  const capIndex = positions.length / 3;
+  positions.push(center.x, rimHeight - 304, center.z - 12);
+  colors.push(bellyColor.r, bellyColor.g, bellyColor.b);
+  const lastRingStart = (ringProfiles.length - 1) * ISLAND_UNDERSIDE_SEGMENTS;
+  for (let segment = 0; segment < ISLAND_UNDERSIDE_SEGMENTS; segment += 1) {
+    const nextSegment = (segment + 1) % ISLAND_UNDERSIDE_SEGMENTS;
+    indices.push(lastRingStart + nextSegment, capIndex, lastRingStart + segment);
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setIndex(indices);
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
 
 export function buildOpeningNestVista() {
   const group = new Group();
@@ -54,10 +147,42 @@ export function buildOpeningNestVista() {
   const softLeafMaterial = new MeshLambertMaterial({ color: "#8fc86a" });
   const darkLeafMaterial = new MeshLambertMaterial({ color: "#6fa257" });
   const mossLeafMaterial = new MeshLambertMaterial({ color: "#b8d873" });
+  const podRimMaterial = new MeshLambertMaterial({ color: "#a4bf75" });
+  const podShadowMaterial = new MeshLambertMaterial({ color: "#6f844f" });
+  const cushionMaterial = new MeshLambertMaterial({ color: "#d1e48d" });
+  const seedPearlMaterial = new MeshStandardMaterial({
+    color: "#fff1b8",
+    emissive: "#ffd87a",
+    emissiveIntensity: 0.1,
+    roughness: 0.82,
+    metalness: 0,
+  });
+  const dewMaterial = new MeshBasicMaterial({
+    color: "#ecfbff",
+    transparent: true,
+    opacity: 0.64,
+    depthWrite: false,
+  });
   const twigMaterial = new MeshLambertMaterial({ color: "#8a6a43" });
   const pebbleMaterial = new MeshStandardMaterial({ color: "#c8c3aa", roughness: 1, metalness: 0 });
   const flowerMaterial = new MeshBasicMaterial({ color: "#f7f4d6", transparent: true, opacity: 0.92 });
   const pollenMaterial = new MeshBasicMaterial({ color: "#ffd76a", transparent: true, opacity: 0.88 });
+  const hearthGlowMaterial = new MeshBasicMaterial({
+    color: "#ffe8a2",
+    transparent: true,
+    opacity: 0.16,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const liningPetalMaterial = new MeshLambertMaterial({ color: "#ead39a" });
+  const warmLiningMaterial = new MeshLambertMaterial({ color: "#f3dfad" });
+  const lanternSeedMaterial = new MeshBasicMaterial({
+    color: "#ffd986",
+    transparent: true,
+    opacity: 0.78,
+    depthWrite: false,
+  });
   const pressedGrassMaterial = new MeshLambertMaterial({
     color: "#9fb86a",
     transparent: true,
@@ -77,8 +202,81 @@ export function buildOpeningNestVista() {
   floor.rotation.x = -Math.PI / 2;
   floor.rotation.z = Math.atan2(forward.x, forward.z) + 0.2;
   floor.position.set(nestCenter.x, nestCenter.y + 0.075, nestCenter.z);
-  floor.scale.set(6.6, 4.15, 1);
+  floor.scale.set(7.3, 4.7, 1);
   group.add(floor);
+
+  const innerCup = new Mesh(new CircleGeometry(1, 30), podShadowMaterial);
+  innerCup.rotation.x = -Math.PI / 2;
+  innerCup.rotation.z = Math.atan2(forward.x, forward.z) + 0.24;
+  innerCup.position.set(nestCenter.x + forward.x * 0.18, nestCenter.y + 0.096, nestCenter.z + forward.z * 0.18);
+  innerCup.scale.set(4.45, 2.35, 1);
+  innerCup.renderOrder = 1;
+  group.add(innerCup);
+
+  const hearthGlow = new Mesh(new CircleGeometry(1, 28), hearthGlowMaterial);
+  hearthGlow.rotation.x = -Math.PI / 2;
+  hearthGlow.rotation.z = Math.atan2(forward.x, forward.z) + 0.18;
+  hearthGlow.position.set(nestCenter.x + forward.x * 0.16, nestCenter.y + 0.108, nestCenter.z + forward.z * 0.16);
+  hearthGlow.scale.set(4.9, 2.58, 1);
+  hearthGlow.renderOrder = 2;
+  group.add(hearthGlow);
+
+  const podRim = new Mesh(new TorusGeometry(1, 0.105, 8, 52), podRimMaterial);
+  podRim.rotation.x = Math.PI / 2;
+  podRim.rotation.z = Math.atan2(forward.x, forward.z) + 0.18;
+  podRim.position.set(nestCenter.x, nestCenter.y + 0.2, nestCenter.z);
+  podRim.scale.set(4.25, 2.55, 0.7);
+  group.add(podRim);
+
+  for (let i = 0; i < 12; i += 1) {
+    const angle = (i / 12) * Math.PI * 2 + 0.12;
+    const frontBias = Math.max(0, Math.cos(angle - Math.atan2(forward.z, forward.x)));
+    const ringRadius = 3.55 + (i % 3) * 0.12 - frontBias * 0.38;
+    const x = nestCenter.x + Math.cos(angle) * ringRadius;
+    const z = nestCenter.z + Math.sin(angle) * ringRadius;
+    const y = sampleTerrainHeight(x, z);
+    const rib = new Mesh(new CylinderGeometry(0.035, 0.055, 1.28 + (i % 3) * 0.14, 6), twigMaterial);
+    rib.position.set(x, y + 0.28 + (i % 2) * 0.03, z);
+    rib.rotation.set(
+      0.15 * Math.sin(i * 1.4),
+      angle + Math.PI / 2,
+      Math.PI / 2 + 0.2 * Math.sin(i * 0.9),
+    );
+    group.add(rib);
+  }
+
+  for (let i = 0; i < 9; i += 1) {
+    const angle = -1.95 + i * 0.48;
+    const radius = 1.05 + (i % 3) * 0.18;
+    const x = nestCenter.x + right.x * Math.sin(angle) * radius + forward.x * (0.1 + Math.cos(angle) * 0.72);
+    const z = nestCenter.z + right.z * Math.sin(angle) * radius + forward.z * (0.1 + Math.cos(angle) * 0.72);
+    const y = sampleTerrainHeight(x, z);
+    const cushion = new Mesh(
+      new SphereGeometry(1, 12, 8),
+      i % 3 === 0 ? cushionMaterial : i % 2 === 0 ? mossLeafMaterial : softLeafMaterial,
+    );
+    cushion.position.set(x, y + 0.17 + (i % 3) * 0.018, z);
+    cushion.rotation.y = Math.atan2(forward.x, forward.z) + angle * 0.22;
+    cushion.scale.set(0.72 + (i % 4) * 0.08, 0.105, 0.42 + (i % 3) * 0.06);
+    group.add(cushion);
+  }
+
+  for (let i = 0; i < 10; i += 1) {
+    const lateral = (i - 4.5) * 0.32 + Math.sin(i * 1.7) * 0.08;
+    const depth = -0.42 + Math.cos(i * 0.82) * 0.22 + (i % 2) * 0.12;
+    const x = nestCenter.x + right.x * lateral + forward.x * depth;
+    const z = nestCenter.z + right.z * lateral + forward.z * depth;
+    const y = sampleTerrainHeight(x, z);
+    const lining = new Mesh(new SphereGeometry(1, 10, 6), i % 3 === 0 ? warmLiningMaterial : liningPetalMaterial);
+    lining.position.set(x, y + 0.15 + (i % 3) * 0.006, z);
+    lining.rotation.set(
+      0.03 * Math.sin(i),
+      Math.atan2(forward.x, forward.z) + Math.sin(i * 1.3) * 0.14,
+      0.04 * Math.cos(i),
+    );
+    lining.scale.set(0.38 + (i % 3) * 0.05, 0.035, 0.68 + (i % 2) * 0.08);
+    group.add(lining);
+  }
 
   for (let i = 0; i < 28; i += 1) {
     const angle = (i / 28) * Math.PI * 2 + Math.sin(i * 1.7) * 0.12;
@@ -118,6 +316,67 @@ export function buildOpeningNestVista() {
     twig.rotation.set(0.06 * Math.sin(i), angle + Math.PI / 2, Math.PI / 2 + Math.sin(i * 0.8) * 0.18);
     group.add(twig);
   }
+
+  for (let i = 0; i < 22; i += 1) {
+    const angle = (i / 22) * Math.PI * 2 + Math.sin(i * 1.3) * 0.16;
+    const radius = 2.55 + (i % 5) * 0.34;
+    const x = nestCenter.x + Math.cos(angle) * radius + forward.x * 0.24;
+    const z = nestCenter.z + Math.sin(angle) * radius + forward.z * 0.24;
+    const y = sampleTerrainHeight(x, z);
+    const pearl = new Mesh(new SphereGeometry(1, 8, 6), i % 3 === 0 ? seedPearlMaterial : dewMaterial);
+    pearl.position.set(x, y + 0.24 + (i % 4) * 0.025, z);
+    pearl.scale.setScalar(i % 3 === 0 ? 0.095 + (i % 2) * 0.02 : 0.055 + (i % 2) * 0.015);
+    group.add(pearl);
+  }
+
+  for (let i = 0; i < 6; i += 1) {
+    const side = i < 3 ? -1 : 1;
+    const depth = 2.15 + (i % 3) * 0.44;
+    const lateral = side * (1.95 + (i % 3) * 0.38);
+    const x = nestCenter.x + uphill.x * depth + rimSide.x * lateral;
+    const z = nestCenter.z + uphill.z * depth + rimSide.z * lateral;
+    const y = sampleTerrainHeight(x, z);
+    const stem = new Mesh(new ConeGeometry(0.035, 0.42 + (i % 2) * 0.05, 6), darkLeafMaterial);
+    stem.position.set(x, y + 0.21, z);
+    stem.rotation.z = side * (0.16 + (i % 2) * 0.04);
+    group.add(stem);
+
+    const seed = new Mesh(new SphereGeometry(1, 8, 6), lanternSeedMaterial);
+    seed.position.set(x + rimSide.x * side * 0.04, y + 0.45 + (i % 2) * 0.035, z + rimSide.z * side * 0.04);
+    seed.scale.setScalar(0.07 + (i % 3) * 0.012);
+    group.add(seed);
+  }
+
+  for (let i = 0; i < 8; i += 1) {
+    const side = i < 4 ? -1 : 1;
+    const distance = 1.8 + (i % 4) * 0.78;
+    const lateral = side * (2.7 + (i % 2) * 0.48);
+    const x = nestCenter.x + forward.x * distance + right.x * lateral;
+    const z = nestCenter.z + forward.z * distance + right.z * lateral;
+    const y = sampleTerrainHeight(x, z);
+    const sprout = new Mesh(new ConeGeometry(0.055, 0.68 + (i % 3) * 0.08, 6), darkLeafMaterial);
+    sprout.position.set(x, y + 0.34, z);
+    sprout.rotation.z = side * (0.22 + (i % 2) * 0.08);
+    group.add(sprout);
+
+    const leaf = new Mesh(new SphereGeometry(1, 8, 6), i % 2 === 0 ? mossLeafMaterial : softLeafMaterial);
+    leaf.position.set(x + right.x * side * 0.14, y + 0.72 + (i % 2) * 0.04, z + right.z * side * 0.14);
+    leaf.rotation.set(0.08, Math.atan2(forward.x, forward.z) + side * 0.28, side * 0.16);
+    leaf.scale.set(0.28, 0.045, 0.18);
+    group.add(leaf);
+  }
+
+  const exitMouth = new Mesh(new CircleGeometry(1, 20), warmTreadMaterial);
+  exitMouth.rotation.x = -Math.PI / 2;
+  exitMouth.rotation.z = Math.atan2(trailForward.x, trailForward.z);
+  exitMouth.position.set(
+    nestCenter.x + trailForward.x * 3.95,
+    sampleTerrainHeight(nestCenter.x + trailForward.x * 3.95, nestCenter.z + trailForward.z * 3.95) + 0.08,
+    nestCenter.z + trailForward.z * 3.95,
+  );
+  exitMouth.scale.set(3.3, 0.92, 1);
+  exitMouth.renderOrder = 2;
+  group.add(exitMouth);
 
   for (let i = 0; i < 13; i += 1) {
     const distance = 4.8 + i * 2.15;
@@ -198,12 +457,15 @@ export function buildOpeningWaterComposition() {
   const reedMaterial = new MeshLambertMaterial({ color: "#6fa759", side: DoubleSide });
   const reedTipMaterial = new MeshLambertMaterial({ color: "#c89c58" });
   const stoneMaterial = new MeshStandardMaterial({ color: "#bfc5b2", roughness: 1, metalness: 0 });
+  const lakeRockMaterial = new MeshStandardMaterial({ color: "#9e967f", roughness: 1, metalness: 0 });
+  const lakeWetRockMaterial = new MeshStandardMaterial({ color: "#778476", roughness: 1, metalness: 0 });
 
   const patchGeometry = new CircleGeometry(1, 18);
   patchGeometry.rotateX(-Math.PI / 2);
   const reedGeometry = new ConeGeometry(0.08, 1, 6);
   const reedTipGeometry = new SphereGeometry(0.12, 8, 6);
   const stoneGeometry = new SphereGeometry(1, 10, 8);
+  const lakeRockGeometry = new SphereGeometry(1, 7, 5);
 
   const addPatch = (material: MeshLambertMaterial, x: number, z: number, sx: number, sz: number, yaw: number) => {
     const patch = new Mesh(patchGeometry, material);
@@ -237,9 +499,23 @@ export function buildOpeningWaterComposition() {
     }
   };
 
+  const addLakeRock = (x: number, z: number, seed: number, scale = 1) => {
+    const rock = new Mesh(lakeRockGeometry, seed % 3 === 0 ? lakeWetRockMaterial : lakeRockMaterial);
+    rock.name = "great-lake-shore-rock";
+    rock.position.set(x, sampleTerrainHeight(x, z) + 0.32 * scale, z);
+    rock.rotation.set(Math.sin(seed * 1.7) * 0.18, seed * 0.71, Math.cos(seed * 1.3) * 0.2);
+    rock.scale.set(
+      scale * (1.4 + (seed % 5) * 0.22),
+      scale * (0.34 + (seed % 4) * 0.08),
+      scale * (0.88 + (seed % 6) * 0.16),
+    );
+    group.add(rock);
+  };
+
   STARTING_WATER_POOLS.forEach((pool, poolIndex) => {
     const isMainLake = pool.id === "opening-lake";
-    const patchCount = isMainLake ? 48 : 18;
+    const isGreatLake = pool.id === "great-lake";
+    const patchCount = isGreatLake ? 84 : isMainLake ? 48 : 18;
     for (let i = 0; i < patchCount; i += 1) {
       const angle = (i / patchCount) * Math.PI * 2 + Math.sin(i * 1.93 + poolIndex) * 0.08;
       const scallop = Math.sin(i * 2.37 + pool.x * 0.04 + pool.z * 0.02);
@@ -247,20 +523,42 @@ export function buildOpeningWaterComposition() {
       const edgeX = pool.x + Math.cos(angle) * pool.renderRadiusX * shoreScale;
       const edgeZ = pool.z + Math.sin(angle) * pool.renderRadiusZ * shoreScale;
       const tangentYaw = -angle + Math.PI * 0.5;
-      const longAxis = isMainLake ? 3.6 + (i % 4) * 0.4 : 2.5 + (i % 3) * 0.34;
-      const shortAxis = isMainLake ? 0.8 + (i % 3) * 0.16 : 0.62 + (i % 2) * 0.16;
+      const longAxis = isGreatLake ? 5.6 + (i % 5) * 0.7 : isMainLake ? 3.6 + (i % 4) * 0.4 : 2.5 + (i % 3) * 0.34;
+      const shortAxis = isGreatLake ? 1 + (i % 4) * 0.18 : isMainLake ? 0.8 + (i % 3) * 0.16 : 0.62 + (i % 2) * 0.16;
       addPatch(i % 4 === 0 ? wetSandMaterial : dampMaterial, edgeX, edgeZ, longAxis, shortAxis, tangentYaw);
 
-      if (isMainLake && (i % 6 === 0 || (i > 28 && i < 40 && i % 3 === 0))) {
+      if ((isMainLake || isGreatLake) && (i % 6 === 0 || (i > 28 && i < 40 && i % 3 === 0))) {
         const sandX = pool.x + Math.cos(angle) * pool.renderRadiusX * (0.78 + scallop * 0.04);
         const sandZ = pool.z + Math.sin(angle) * pool.renderRadiusZ * (0.78 + scallop * 0.04);
-        addPatch(sandMaterial, sandX, sandZ, 2.6 + (i % 5) * 0.3, 0.62 + (i % 4) * 0.12, tangentYaw + 0.2);
+        addPatch(
+          sandMaterial,
+          sandX,
+          sandZ,
+          (isGreatLake ? 4.4 : 2.6) + (i % 5) * 0.3,
+          (isGreatLake ? 0.82 : 0.62) + (i % 4) * 0.12,
+          tangentYaw + 0.2,
+        );
       }
 
-      if ((isMainLake && i % 5 === 0) || (!isMainLake && i % 7 === 0)) {
+      if ((isMainLake && i % 5 === 0) || (isGreatLake && i % 8 === 0) || (!isMainLake && !isGreatLake && i % 7 === 0)) {
         const reedX = pool.x + Math.cos(angle) * pool.renderRadiusX * 1.08;
         const reedZ = pool.z + Math.sin(angle) * pool.renderRadiusZ * 1.08;
         addReedCluster(reedX, reedZ, i + poolIndex * 19);
+      }
+
+      if (isGreatLake && (i % 4 === 0 || (i > 54 && i < 72 && i % 3 === 0))) {
+        const rockScale = 0.78 + (i % 7) * 0.09;
+        const rockX = pool.x + Math.cos(angle) * pool.renderRadiusX * (1.02 + scallop * 0.08);
+        const rockZ = pool.z + Math.sin(angle) * pool.renderRadiusZ * (1.02 + scallop * 0.08);
+        addLakeRock(rockX, rockZ, i + poolIndex * 31, rockScale);
+        if (i % 12 === 0) {
+          addLakeRock(
+            pool.x + Math.cos(angle + 0.09) * pool.renderRadiusX * 0.92,
+            pool.z + Math.sin(angle + 0.09) * pool.renderRadiusZ * 0.92,
+            i + poolIndex * 37 + 5,
+            rockScale * 0.7,
+          );
+        }
       }
     }
   });
@@ -342,14 +640,16 @@ export function buildShrine() {
 
 export function buildShadowPockets() {
   const group = new Group();
-  const geometry = new PlaneGeometry(1, 1, 10, 3);
+  const geometry = new CircleGeometry(1, 30);
   const placements = [
-    [-84, -84, 92, 28, 0.055, 0.18],
-    [-10, -12, 124, 34, 0.048, -0.08],
-    [48, 68, 106, 32, 0.044, 0.14],
-    [30, 132, 128, 42, 0.052, -0.18],
-    [-18, 178, 118, 38, 0.046, 0.06],
-    [24, 214, 98, 30, 0.04, -0.12],
+    [-112, -112, 118, 30, 0.052, 0.18],
+    [-22, -58, 136, 34, 0.045, -0.08],
+    [58, 18, 114, 31, 0.042, 0.14],
+    [-76, 78, 126, 34, 0.04, -0.24],
+    [36, 132, 148, 42, 0.048, -0.18],
+    [-20, 178, 132, 38, 0.043, 0.06],
+    [34, 218, 110, 31, 0.038, -0.12],
+    [-94, 208, 104, 28, 0.036, 0.22],
   ] as const;
 
   placements.forEach(([x, z, width, depth, opacity, rotation], index) => {
@@ -371,8 +671,8 @@ export function buildShadowPockets() {
     patch.userData.baseZ = z;
     patch.userData.baseOpacity = opacity;
     patch.userData.baseRotation = rotation;
-    patch.userData.drift = 26 + index * 5;
-    patch.userData.speed = 0.018 + index * 0.003;
+    patch.userData.drift = 38 + index * 4;
+    patch.userData.speed = 0.0065 + index * 0.0011;
     patch.name = `moving-cloud-shadow-${index + 1}`;
     group.add(patch);
   });
@@ -417,24 +717,134 @@ export function buildFloatingIslandShell() {
   const group = new Group();
   group.name = "floating-island-shell";
 
-  const upperMaterial = new MeshStandardMaterial({ color: "#d4cdb8", roughness: 0.98, side: DoubleSide });
-  const lowerMaterial = new MeshStandardMaterial({ color: "#b9b7a2", roughness: 0.99, side: DoubleSide });
-  const lowerShadowMaterial = new MeshStandardMaterial({ color: "#b6baa5", roughness: 0.99, side: DoubleSide });
-  const underbellyMaterial = new MeshStandardMaterial({
-    color: "#98aa8f",
+  const undersideMaterial = new MeshStandardMaterial({
+    color: "#ffffff",
     roughness: 0.99,
+    metalness: 0.01,
+    emissive: new Color("#343226"),
+    emissiveIntensity: 0.1,
+    vertexColors: true,
     side: DoubleSide,
-    metalness: 0.02,
   });
+  const waterfallLipMaterial = new MeshStandardMaterial({ color: "#b2c58a", roughness: 0.96 });
   const mossMaterial = new MeshStandardMaterial({
     color: "#91b76d",
     roughness: 0.97,
-    side: DoubleSide,
     emissive: new Color("#2a351e"),
     emissiveIntensity: 0.12,
   });
-  const rimLipMaterial = new MeshStandardMaterial({ color: "#8a9f72", roughness: 0.9, side: DoubleSide });
-  const hangMaterial = new MeshStandardMaterial({ color: "#727467", roughness: 0.97, side: DoubleSide });
+  const perchedMossMaterial = new MeshStandardMaterial({ color: "#9cc978", roughness: 0.98 });
+  const perchedTrunkMaterial = new MeshStandardMaterial({ color: "#6a543f", roughness: 0.98 });
+  const perchedLeafMaterial = new MeshStandardMaterial({
+    color: "#5f8a4d",
+    roughness: 0.96,
+    emissive: new Color("#24311f"),
+    emissiveIntensity: 0.08,
+  });
+  const perchedLeafWarmMaterial = new MeshStandardMaterial({
+    color: "#7fb95d",
+    roughness: 0.96,
+    emissive: new Color("#25361e"),
+    emissiveIntensity: 0.08,
+  });
+  const hangMaterial = new MeshStandardMaterial({ color: "#65725f", roughness: 0.97 });
+  const cliffStrataMaterial = new MeshStandardMaterial({ color: "#967954", roughness: 0.99 });
+  const cliffHighlightMaterial = new MeshStandardMaterial({ color: "#dec486", roughness: 0.98 });
+  const frontCliffFaceMaterial = new MeshStandardMaterial({
+    color: "#a8875c",
+    roughness: 0.99,
+    emissive: new Color("#2d2419"),
+    emissiveIntensity: 0.07,
+  });
+  const frontCliffWarmLipMaterial = new MeshStandardMaterial({
+    color: "#d4bb7d",
+    roughness: 0.98,
+    emissive: new Color("#302515"),
+    emissiveIntensity: 0.05,
+  });
+  const frontCliffShadowMaterial = new MeshStandardMaterial({
+    color: "#80694b",
+    roughness: 0.99,
+    emissive: new Color("#211b14"),
+    emissiveIntensity: 0.07,
+  });
+  const aerialCliffWallMaterial = new MeshStandardMaterial({
+    color: "#9a8566",
+    roughness: 0.99,
+    emissive: new Color("#2b241c"),
+    emissiveIntensity: 0.055,
+  });
+  const aerialCliffShadowMaterial = new MeshStandardMaterial({
+    color: "#695e50",
+    roughness: 1,
+    emissive: new Color("#1d1b17"),
+    emissiveIntensity: 0.075,
+  });
+  const aerialPathMaterial = new MeshBasicMaterial({
+    color: "#caa45b",
+    transparent: true,
+    opacity: 0.78,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const aerialPathCoreMaterial = new MeshBasicMaterial({
+    color: "#f1dea2",
+    transparent: true,
+    opacity: 0.56,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const surfFoamMaterial = new MeshBasicMaterial({
+    color: "#f7fff1",
+    transparent: true,
+    opacity: 0.62,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const surfFoamBrightMaterial = new MeshBasicMaterial({
+    color: "#ffffff",
+    transparent: true,
+    opacity: 0.72,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const surfBlueMaterial = new MeshBasicMaterial({
+    color: "#92f4ec",
+    transparent: true,
+    opacity: 0.34,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const contactDarkWaterMaterial = new MeshBasicMaterial({
+    color: "#064f72",
+    transparent: true,
+    opacity: 0.34,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const contactDeepWaterMaterial = new MeshBasicMaterial({
+    color: "#032f54",
+    transparent: true,
+    opacity: 0.24,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const cliffShelfGeometry = new BoxGeometry(1, 1, 1);
+  const aerialCliffWallGeometry = new BoxGeometry(1, 1, 1);
+  const aerialPathGeometry = new CircleGeometry(1, 18);
+  const surfFoamGeometry = new CircleGeometry(1, 24);
+  const contactWaterGeometry = new CircleGeometry(1, 28);
+  const perchedMossGeometry = new CircleGeometry(1, 18);
+  const perchedTrunkGeometry = new CylinderGeometry(0.22, 0.34, 2.8, 5);
+  const perchedPineGeometry = new ConeGeometry(1, 2.9, 7);
+  const perchedRoundGeometry = new SphereGeometry(1, 7, 5);
   const perimeter: Vector3[] = [];
   const center = new Vector3();
 
@@ -457,136 +867,470 @@ export function buildFloatingIslandShell() {
   rimHeight /= perimeter.length;
 
   const maxR = Math.max(radiusX, radiusZ);
-  const upperSkirt = new Mesh(new CylinderGeometry(1.04, 0.86, 90, 40, 5, true), upperMaterial);
-  upperSkirt.scale.set(radiusX * 1.02, 1, radiusZ * 1.04);
-  upperSkirt.position.set(center.x, rimHeight - 57, center.z);
-  markCameraCollider(upperSkirt);
+  const smoothUnderside = new Mesh(buildSmoothIslandUnderside(center, rimHeight), undersideMaterial);
+  smoothUnderside.name = "floating-island-smooth-underside";
+  markCameraCollider(smoothUnderside);
 
-  const mossBand = new Mesh(new CylinderGeometry(1, 0.95, 12, 40, 1, true), mossMaterial);
-  mossBand.scale.set(radiusX * 1.03, 1, radiusZ * 1.05);
-  mossBand.position.set(center.x, rimHeight - 8, center.z);
+  const mossBand = new Mesh(new CylinderGeometry(1, 0.93, 5, 40, 1, true), mossMaterial);
+  mossBand.scale.set(radiusX * 1.01, 1, radiusZ * 1.03);
+  mossBand.position.set(center.x, rimHeight - 24, center.z);
   markCameraCollider(mossBand);
 
-  /** Upper taper: soil → overhang; lower taper: stronger shadow and pinching before the belly. */
-  const lowerSkirtTop = new Mesh(new CylinderGeometry(0.86, 0.62, 64, 40, 5, true), lowerMaterial);
-  lowerSkirtTop.scale.set(radiusX * 0.95, 1, radiusZ * 0.98);
-  lowerSkirtTop.position.set(center.x, rimHeight - 127, center.z);
-  markCameraCollider(lowerSkirtTop);
-
-  const lowerSkirtBottom = new Mesh(new CylinderGeometry(0.62, 0.3, 64, 40, 5, true), lowerShadowMaterial);
-  lowerSkirtBottom.scale.set(radiusX * 0.95, 1, radiusZ * 0.98);
-  lowerSkirtBottom.position.set(center.x, rimHeight - 191, center.z);
-  markCameraCollider(lowerSkirtBottom);
-
-  const lowerBelly = new Mesh(new SphereGeometry(1.2, 22, 18), underbellyMaterial);
-  lowerBelly.scale.set(radiusX * 0.55, 54, radiusZ * 0.5);
-  lowerBelly.position.set(center.x, rimHeight - 240, center.z);
-  markCameraCollider(lowerBelly);
-
-  const rimLip = new TorusGeometry(1, 0.04, 8, 56);
-  const rimMesh = new Mesh(rimLip, rimLipMaterial);
-  rimMesh.rotation.x = Math.PI / 2;
-  rimMesh.position.set(center.x, rimHeight - 2.2, center.z);
-  rimMesh.scale.set(radiusX * 0.96, 1, radiusZ * 0.96);
-  markCameraCollider(rimMesh);
-
   const mist1 = new Mesh(
-    new CircleGeometry(maxR * 1.14, 56),
+    new CircleGeometry(maxR * 0.98, 56),
     new MeshBasicMaterial({
       color: "#d0e2ec",
       transparent: true,
-      opacity: 0.065,
+      opacity: 0.038,
       depthWrite: false,
       side: DoubleSide,
     }),
   );
   mist1.rotation.x = -Math.PI / 2;
-  mist1.position.set(center.x, rimHeight - 30, center.z);
+  mist1.position.set(center.x, rimHeight - 64, center.z);
 
   const mist2 = new Mesh(
-    new CircleGeometry(maxR * 0.88, 48),
+    new CircleGeometry(maxR * 0.68, 48),
     new MeshBasicMaterial({
       color: "#bdd3dd",
       transparent: true,
-      opacity: 0.04,
+      opacity: 0.024,
       depthWrite: false,
       side: DoubleSide,
     }),
   );
   mist2.rotation.x = -Math.PI / 2;
-  mist2.position.set(center.x, rimHeight - 56, center.z);
+  mist2.position.set(center.x, rimHeight - 116, center.z);
 
   const mist3 = new Mesh(
-    new CircleGeometry(maxR * 0.64, 40),
+    new CircleGeometry(maxR * 0.46, 40),
     new MeshBasicMaterial({
       color: "#aac1cb",
       transparent: true,
-      opacity: 0.028,
+      opacity: 0.016,
       depthWrite: false,
       side: DoubleSide,
     }),
   );
   mist3.rotation.x = -Math.PI / 2;
-  mist3.position.set(center.x, rimHeight - 88, center.z);
+  mist3.position.set(center.x, rimHeight - 168, center.z);
 
-  group.add(upperSkirt, mossBand, lowerSkirtTop, lowerSkirtBottom, lowerBelly, rimMesh, mist1, mist2, mist3);
+  group.add(smoothUnderside, mossBand, mist1, mist2, mist3);
+
+  for (let i = 0; i < 34; i += 1) {
+    const turn = i / 34 + 0.5 / 34;
+    const angle = turn * Math.PI * 2 + Math.sin(i * 1.37) * 0.012;
+    const point = sampleIslandBoundaryPoint(angle);
+    const rimY = sampleBaseTerrainHeight(point.x, point.z);
+    const frontWeight = Math.max(0, 1 - Math.abs(turn - 0.755) / 0.18);
+    const sideWeight = Math.max(
+      Math.max(0, 1 - Math.abs(turn - 0.5) / 0.16),
+      Math.max(0, 1 - Math.abs(turn - 0.98) / 0.18),
+    );
+    const wallHeight = 78 + frontWeight * 72 + sideWeight * 28 + (i % 4) * 9;
+    const wall = new Mesh(
+      aerialCliffWallGeometry,
+      (i + Math.floor(frontWeight * 2)) % 3 === 0 ? aerialCliffShadowMaterial : aerialCliffWallMaterial,
+    );
+    wall.name = `reference-aerial-sheer-cliff-wall-${i}`;
+    wall.rotation.y = Math.PI / 2 - angle + Math.sin(i * 0.74) * 0.045;
+    wall.rotation.z = Math.sin(i * 1.18) * 0.025;
+    wall.scale.set(34 + frontWeight * 34 + sideWeight * 12 + (i % 5) * 4.8, wallHeight, 4.4 + frontWeight * 1.8);
+    wall.position.set(
+      point.x * 0.989 + center.x * 0.011,
+      rimY - 38 - wallHeight * 0.5 - (i % 3) * 4,
+      point.z * 0.989 + center.z * 0.011,
+    );
+    markCameraCollider(wall);
+    group.add(wall);
+  }
+
+  for (let i = 0; i < 72; i += 1) {
+    const tLoop = (i / 72) * Math.PI * 2;
+    const radiusXLoop = 176 + Math.sin(tLoop * 3.0 + 0.8) * 8;
+    const radiusZLoop = 101 + Math.cos(tLoop * 2.0 - 0.4) * 6;
+    const x = 6 + Math.cos(tLoop) * radiusXLoop + Math.sin(tLoop * 2.0) * 5;
+    const z = -62 + Math.sin(tLoop) * radiusZLoop + Math.cos(tLoop * 1.6) * 4;
+    if (sampleTerrainNormal(x, z).y < 0.5) {
+      continue;
+    }
+    const y = sampleTerrainHeight(x, z);
+    const path = new Mesh(aerialPathGeometry, i % 3 === 0 ? aerialPathCoreMaterial : aerialPathMaterial);
+    path.name = `reference-aerial-meadow-path-loop-${i}`;
+    path.rotation.x = -Math.PI / 2;
+    path.rotation.z = tLoop + Math.PI / 2 + Math.sin(i * 0.57) * 0.12;
+    path.position.set(x, y + 0.42, z);
+    path.scale.set(13.2 + Math.sin(i * 0.48) * 1.8, 4.7 + (i % 2) * 0.5, 1);
+    path.renderOrder = 3;
+    group.add(path);
+  }
+
+  for (let i = 0; i < 28; i += 1) {
+    const turn = i / 28 + Math.sin(i * 1.13) * 0.004;
+    const angle = turn * Math.PI * 2;
+    const point = sampleIslandBoundaryPoint(angle);
+    const frontWeight = Math.max(0, 1 - Math.abs(turn - 0.755) / 0.2);
+    const sideBreak = 0.72 + (Math.sin(i * 2.31) * 0.5 + 0.5) * 0.28;
+    if (i % 7 === 2 && frontWeight < 0.25 && sideBreak < 0.84) {
+      continue;
+    }
+    const outwardScale = 1.018 + (i % 5) * 0.008 + frontWeight * 0.012;
+    const contactWater = new Mesh(contactWaterGeometry, i % 4 === 1 ? contactDeepWaterMaterial : contactDarkWaterMaterial);
+    contactWater.name = `reference-aerial-ocean-contact-dark-water-${i}`;
+    contactWater.rotation.x = -Math.PI / 2;
+    contactWater.rotation.z = angle + Math.PI / 2 + Math.sin(i * 0.61) * 0.18;
+    contactWater.position.set(
+      center.x + (point.x - center.x) * outwardScale,
+      -351.2 + Math.sin(i * 0.37) * 0.75,
+      center.z + (point.z - center.z) * outwardScale,
+    );
+    contactWater.scale.set(48 + (i % 6) * 11 + frontWeight * 30, 12 + (i % 4) * 3 + frontWeight * 5, 1);
+    contactWater.renderOrder = 1;
+    group.add(contactWater);
+  }
+
+  for (let i = 0; i < 48; i += 1) {
+    const turn = i / 48 + Math.sin(i * 1.13) * 0.004;
+    const angle = turn * Math.PI * 2;
+    const point = sampleIslandBoundaryPoint(angle);
+    const frontWeight = Math.max(0, 1 - Math.abs(turn - 0.755) / 0.2);
+    const brokenBand = Math.sin(i * 1.87) * 0.5 + 0.5;
+    if (i % 9 === 4 && frontWeight < 0.3 && brokenBand < 0.72) {
+      continue;
+    }
+    const outwardScale = 1.036 + (i % 5) * 0.007 + frontWeight * 0.014;
+    const foamMaterial = i % 5 === 0 ? surfBlueMaterial : i % 3 === 0 || frontWeight > 0.68 ? surfFoamBrightMaterial : surfFoamMaterial;
+    const foam = new Mesh(surfFoamGeometry, foamMaterial);
+    foam.name = `reference-aerial-ocean-contact-foam-${i}`;
+    foam.rotation.x = -Math.PI / 2;
+    foam.rotation.z = angle + Math.PI / 2 + Math.sin(i * 0.91) * 0.18;
+    foam.position.set(
+      center.x + (point.x - center.x) * outwardScale,
+      -349 + Math.sin(i * 0.67) * 1.8,
+      center.z + (point.z - center.z) * outwardScale,
+    );
+    foam.scale.set(
+      38 + (i % 6) * 10 + Math.sin(i * 0.31) * 5 + frontWeight * 28,
+      6.4 + (i % 4) * 1.6 + frontWeight * 3.2,
+      1,
+    );
+    foam.renderOrder = 3;
+    group.add(foam);
+  }
+
+  const addPerchedGrove = (
+    turn: number,
+    members: Array<[number, number, number, "pine" | "round"]>,
+    groveScale = 1,
+  ) => {
+    const angle = turn * Math.PI * 2;
+    const boundary = sampleIslandBoundaryPoint(angle);
+    const inward = new Vector3(center.x - boundary.x, 0, center.z - boundary.z).normalize();
+    const tangent = new Vector3(-inward.z, 0, inward.x);
+
+    members.forEach(([sideOffset, inwardOffset, scale, kind], index) => {
+      const x = boundary.x * 0.9 + center.x * 0.1 + tangent.x * sideOffset + inward.x * inwardOffset;
+      const z = boundary.z * 0.9 + center.z * 0.1 + tangent.z * sideOffset + inward.z * inwardOffset;
+      const normal = sampleTerrainNormal(x, z);
+      if (normal.y < 0.48) {
+        return;
+      }
+      const y = sampleTerrainHeight(x, z);
+      const finalScale = scale * groveScale;
+      const mossPatch = new Mesh(perchedMossGeometry, perchedMossMaterial);
+      mossPatch.rotation.x = -Math.PI / 2;
+      mossPatch.rotation.z = angle + index * 0.7;
+      mossPatch.position.set(x, y + 0.055, z);
+      mossPatch.scale.set(2.2 * finalScale, 1.18 * finalScale, 1);
+      mossPatch.renderOrder = 1;
+
+      const trunk = new Mesh(perchedTrunkGeometry, perchedTrunkMaterial);
+      trunk.position.set(x, y + 1.35 * finalScale, z);
+      trunk.rotation.z = Math.sin(angle + index) * 0.04;
+      trunk.scale.set(finalScale, finalScale, finalScale);
+
+      const leaf =
+        kind === "pine"
+          ? new Mesh(perchedPineGeometry, index % 2 === 0 ? perchedLeafMaterial : perchedLeafWarmMaterial)
+          : new Mesh(perchedRoundGeometry, index % 2 === 0 ? perchedLeafWarmMaterial : perchedLeafMaterial);
+      leaf.position.set(x, y + (kind === "pine" ? 3.05 : 2.98) * finalScale, z);
+      leaf.scale.set(1.12 * finalScale, kind === "pine" ? 1.18 * finalScale : 0.78 * finalScale, 1.02 * finalScale);
+      leaf.rotation.y = angle + index * 0.52;
+
+      group.add(mossPatch, trunk, leaf);
+    });
+  };
+
+  addPerchedGrove(0.06, [
+    [-7.2, 24, 0.86, "round"],
+    [0.5, 18, 0.72, "pine"],
+    [7.6, 25, 0.66, "round"],
+  ]);
+  addPerchedGrove(0.31, [
+    [-5.8, 22, 0.66, "pine"],
+    [2.2, 17, 0.8, "pine"],
+    [8.4, 26, 0.58, "round"],
+  ]);
+  addPerchedGrove(0.49, [
+    [-8, 26, 0.7, "round"],
+    [0.2, 19, 0.62, "pine"],
+    [7.6, 24, 0.74, "round"],
+  ]);
+  addPerchedGrove(0.73, [
+    [-6.4, 20, 0.64, "pine"],
+    [1.4, 15, 0.56, "round"],
+    [6.8, 23, 0.68, "pine"],
+  ]);
+  addPerchedGrove(0.92, [
+    [-5.6, 22, 0.7, "round"],
+    [2.2, 17, 0.64, "round"],
+    [8.2, 25, 0.58, "pine"],
+  ]);
+
+  for (let i = 0; i < 36; i += 1) {
+    const angle = (i / 36) * Math.PI * 2 + Math.sin(i * 1.7) * 0.018;
+    const point = sampleIslandBoundaryPoint(angle);
+    const rimY = sampleBaseTerrainHeight(point.x, point.z);
+    const band = new Mesh(cliffShelfGeometry, i % 4 === 1 ? cliffHighlightMaterial : cliffStrataMaterial);
+    band.name = `island-cliff-strata-${i}`;
+    band.rotation.y = Math.PI / 2 - angle + Math.sin(i * 0.73) * 0.08;
+    band.rotation.z = Math.sin(i * 0.91) * 0.025;
+    band.scale.set(15.8 + (i % 5) * 4.3, 1.35 + (i % 3) * 0.44, 1.08);
+    band.position.set(
+      point.x * 0.992 + center.x * 0.008,
+      rimY - 18 - (i % 7) * 8.4,
+      point.z * 0.992 + center.z * 0.008,
+    );
+    markCameraCollider(band);
+    group.add(band);
+  }
+
+  [0.675, 0.705, 0.735, 0.765, 0.795, 0.825].forEach((turn, index) => {
+    const angle = turn * Math.PI * 2;
+    const point = sampleIslandBoundaryPoint(angle);
+    const rimY = sampleBaseTerrainHeight(point.x, point.z);
+    const shelf = new Mesh(cliffShelfGeometry, index % 2 === 0 ? frontCliffWarmLipMaterial : cliffHighlightMaterial);
+    shelf.name = `island-front-concept-cliff-shelf-${index}`;
+    shelf.rotation.y = Math.PI / 2 - angle + Math.sin(index * 0.8) * 0.075;
+    shelf.rotation.z = Math.sin(index * 1.37) * 0.045;
+    shelf.scale.set(23 + Math.sin(index * 1.4) * 4 + (index === 2 || index === 3 ? 10 : 0), 1.15, 1.25);
+    shelf.position.set(
+      point.x * 0.98 + center.x * 0.02,
+      rimY - 34 - (index % 3) * 14,
+      point.z * 0.98 + center.z * 0.02,
+    );
+    markCameraCollider(shelf);
+    group.add(shelf);
+  });
+
+  [0.692, 0.72, 0.748, 0.776, 0.804, 0.832].forEach((turn, index) => {
+    const angle = turn * Math.PI * 2;
+    const point = sampleIslandBoundaryPoint(angle);
+    const rimY = sampleBaseTerrainHeight(point.x, point.z);
+    const heroFaceWeight = Math.max(0, 1 - Math.abs(turn - 0.765) / 0.07);
+    for (let level = 0; level < 3; level += 1) {
+      const face =
+        level === 0
+          ? new Mesh(cliffShelfGeometry, frontCliffWarmLipMaterial)
+          : new Mesh(cliffShelfGeometry, (index + level) % 2 === 0 ? frontCliffFaceMaterial : frontCliffShadowMaterial);
+      face.name = `island-front-layered-cliff-face-${index}-${level}`;
+      face.rotation.y = Math.PI / 2 - angle + Math.sin(index * 0.76 + level) * 0.045;
+      face.rotation.z = Math.sin(index * 1.23 + level * 0.6) * 0.065;
+      face.scale.set(
+        18 + level * 5.8 + heroFaceWeight * 17 + (index % 2) * 3.6,
+        2.1 + level * 1.15 + heroFaceWeight * 1.6,
+        1.45 + level * 0.24,
+      );
+      face.position.set(
+        point.x * (0.976 - level * 0.008) + center.x * (0.024 + level * 0.008),
+        rimY - 50 - level * 24 - (index % 3) * 6,
+        point.z * (0.976 - level * 0.008) + center.z * (0.024 + level * 0.008),
+      );
+      markCameraCollider(face);
+      group.add(face);
+    }
+  });
 
   for (let h = 0; h < 10; h += 1) {
     const ang = (h / 10) * Math.PI * 2 + 0.41;
-    const hang = new Mesh(new ConeGeometry(1.4 + (h % 3) * 0.9, 5.5 + (h % 4) * 2, 5), hangMaterial);
+    const hang = new Mesh(new ConeGeometry(1.2 + (h % 3) * 0.74, 7 + (h % 4) * 2.8, 5), hangMaterial);
     hang.position.set(
-      center.x + Math.cos(ang) * radiusX * 0.8,
-      rimHeight - 20 - (h % 3) * 2.5,
-      center.z + Math.sin(ang) * radiusZ * 0.8,
+      center.x + Math.cos(ang) * radiusX * 0.84,
+      rimHeight - 28 - (h % 3) * 4.2,
+      center.z + Math.sin(ang) * radiusZ * 0.84,
     );
     hang.rotation.set(Math.PI, 0, -ang);
     markCameraCollider(hang);
     group.add(hang);
   }
 
-  perimeter.forEach((point, index) => {
-    const useUpper = index % 3 === 0;
-    const cliffBulge = markCameraCollider(
-      new Mesh(new SphereGeometry(1.08, 10, 8), useUpper ? upperMaterial : lowerMaterial),
-    );
-    cliffBulge.scale.set(14 + (index % 4) * 4, 24 + (index % 3) * 8, 16 + (index % 5) * 3);
-    cliffBulge.position.set(
-      point.x * 0.99 + center.x * 0.01,
-      point.y - 28 - (index % 4) * 7.5,
-      point.z * 0.99 + center.z * 0.01,
-    );
-    group.add(cliffBulge);
-  });
-
   const waterfallMaterial = new MeshBasicMaterial({
     color: "#dff8ff",
     transparent: true,
-    opacity: 0.12,
+    opacity: 0.15,
     depthWrite: false,
     side: DoubleSide,
   });
   const waterfallCoreMaterial = new MeshBasicMaterial({
     color: "#fbfff4",
     transparent: true,
-    opacity: 0.065,
+    opacity: 0.09,
     depthWrite: false,
     side: DoubleSide,
   });
-  [0.06, 0.46, 0.88].forEach((turn, index) => {
+  const heroWaterfallMaterial = new MeshBasicMaterial({
+    color: "#e7fbff",
+    transparent: true,
+    opacity: 0.34,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const heroWaterfallCoreMaterial = new MeshBasicMaterial({
+    color: "#fffff1",
+    transparent: true,
+    opacity: 0.21,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const waterfallMistMaterial = new MeshBasicMaterial({
+    color: "#e9fbff",
+    transparent: true,
+    opacity: 0.07,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const waterfallAirMistMaterial = new MeshBasicMaterial({
+    color: "#ecffff",
+    transparent: true,
+    opacity: 0.046,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const waterfallImpactMistMaterial = new MeshBasicMaterial({
+    color: "#f4ffff",
+    transparent: true,
+    opacity: 0.12,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const underShoreMistMaterial = new MeshBasicMaterial({
+    color: "#dff7f4",
+    transparent: true,
+    opacity: 0.048,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const underShoreMistGeometry = new CircleGeometry(1, 24);
+
+  for (let i = 0; i < 18; i += 1) {
+    const turn = i / 18 + Math.sin(i * 1.83) * 0.004;
     const angle = turn * Math.PI * 2;
     const point = sampleIslandBoundaryPoint(angle);
-    const rimY = sampleBaseTerrainHeight(point.x, point.z) - 34;
-    const width = 5.5 + (index % 2) * 2.2;
-    const height = 42 + (index % 3) * 9;
-    const veil = new Mesh(new PlaneGeometry(width, height, 1, 8), waterfallMaterial);
+    const mist = new Mesh(underShoreMistGeometry, underShoreMistMaterial);
+    mist.name = `island-under-shoreline-mist-${i}`;
+    mist.rotation.x = -Math.PI / 2;
+    mist.rotation.z = angle + Math.PI / 2 + Math.sin(i * 1.19) * 0.16;
+    mist.position.set(
+      point.x * 0.92 + center.x * 0.08,
+      rimHeight - 238 - (i % 5) * 5.5,
+      point.z * 0.92 + center.z * 0.08,
+    );
+    mist.scale.set(27 + (i % 4) * 7, 7 + (i % 3) * 1.7, 1);
+    mist.renderOrder = 2;
+    group.add(mist);
+  }
+
+  ISLAND_EDGE_WATERFALL_TURNS.forEach((turn, index) => {
+    const angle = turn * Math.PI * 2;
+    const point = sampleIslandBoundaryPoint(angle);
+    const rimY = sampleBaseTerrainHeight(point.x, point.z) - 32 - (index % 3) * 4;
+    const isFrontHero = turn >= 0.72 && turn <= 0.805;
+    const heroCenterWeight = isFrontHero ? Math.max(0, 1 - Math.abs(turn - 0.765) / 0.045) : 0;
+    const isSideAccent = turn < 0.07 || (turn >= 0.45 && turn <= 0.54) || turn > 0.92;
+    const width =
+      3.8 +
+      (index % 4) * 1.35 +
+      (index % 5 === 0 ? 1.6 : 0) +
+      (isFrontHero ? 24.5 + heroCenterWeight * 22.2 + (index % 2) * 3.2 : 0) +
+      (isSideAccent ? 1.25 : 0);
+    const height =
+      58 +
+      (index % 5) * 14 +
+      (index % 3 === 1 ? 26 : 0) +
+      (isFrontHero ? 170 + heroCenterWeight * 92 + (index % 2) * 24 : 0) +
+      (isSideAccent ? 22 : 0);
+    const ledge = new Mesh(cliffShelfGeometry, index % 3 === 0 ? mossMaterial : waterfallLipMaterial);
+    ledge.name = `island-edge-waterfall-lip-${index}`;
+    ledge.rotation.y = Math.PI / 2 - angle + Math.sin(index * 1.1) * 0.06;
+    ledge.scale.set(width * 1.42, 1.15, 5.2 + (index % 3) * 0.55);
+    ledge.position.set(
+      point.x * 0.987 + center.x * 0.013,
+      rimY + 4.8,
+      point.z * 0.987 + center.z * 0.013,
+    );
+    const veil = new Mesh(new PlaneGeometry(width, height, 1, isFrontHero ? 12 : 8), isFrontHero ? heroWaterfallMaterial : waterfallMaterial);
     veil.name = `island-edge-waterfall-${index}`;
-    veil.rotation.y = Math.PI / 2 - angle;
-    veil.position.set(point.x, rimY - height * 0.48, point.z);
-    const core = new Mesh(new PlaneGeometry(width * 0.42, height * 0.92, 1, 8), waterfallCoreMaterial);
+    veil.rotation.y = Math.PI / 2 - angle + Math.sin(index * 1.3) * 0.07;
+    veil.position.set(
+      point.x * 0.992 + center.x * 0.008,
+      rimY - height * 0.48,
+      point.z * 0.992 + center.z * 0.008,
+    );
+    const core = new Mesh(
+      new PlaneGeometry(width * (isFrontHero ? 0.46 : 0.36), height * 0.9, 1, isFrontHero ? 12 : 8),
+      isFrontHero ? heroWaterfallCoreMaterial : waterfallCoreMaterial,
+    );
     core.rotation.copy(veil.rotation);
     core.position.copy(veil.position);
     core.position.y += height * 0.02;
-    group.add(veil, core);
+    const lowerMist = new Mesh(new CircleGeometry(width * 1.72, 18), waterfallMistMaterial);
+    lowerMist.name = `island-edge-waterfall-mist-${index}`;
+    lowerMist.rotation.x = -Math.PI / 2;
+    lowerMist.position.set(
+      point.x * 0.95 + center.x * 0.05,
+      rimY - height * 0.96,
+      point.z * 0.95 + center.z * 0.05,
+    );
+    const lowerFallY = rimY - height * 0.96;
+    const impactY = Math.max(-346, Math.min(lowerFallY - 18, rimHeight - 292 - (index % 4) * 7));
+    const driftHeight = Math.max(18, lowerFallY - impactY);
+    const airDrift = new Mesh(new PlaneGeometry(width * 1.45, driftHeight, 1, 2), waterfallAirMistMaterial);
+    airDrift.name = `island-edge-waterfall-air-mist-${index}`;
+    airDrift.rotation.copy(veil.rotation);
+    airDrift.position.set(
+      point.x * 0.9 + center.x * 0.1,
+      impactY + driftHeight * 0.5,
+      point.z * 0.9 + center.z * 0.1,
+    );
+    airDrift.renderOrder = 3;
+
+    const impactMist = new Mesh(new CircleGeometry(1, 22), waterfallImpactMistMaterial);
+    impactMist.name = `island-edge-waterfall-impact-mist-${index}`;
+    impactMist.rotation.x = -Math.PI / 2;
+    impactMist.rotation.z = angle + Math.PI / 2;
+    impactMist.position.set(
+      point.x * 0.84 + center.x * 0.16,
+      impactY - 2.5,
+      point.z * 0.84 + center.z * 0.16,
+    );
+    impactMist.scale.set(width * 3.9, width * 1.35, 1);
+    impactMist.renderOrder = 4;
+    if (isFrontHero) {
+      ledge.scale.x *= 1.36;
+      ledge.scale.z *= 1.24;
+      veil.renderOrder = 5;
+      core.renderOrder = 6;
+      lowerMist.renderOrder = 5;
+      airDrift.renderOrder = 6;
+      impactMist.scale.x *= 1.62;
+      impactMist.scale.y *= 1.28;
+    }
+
+    group.add(ledge, veil, core, lowerMist, airDrift, impactMist);
   });
 
   return group;

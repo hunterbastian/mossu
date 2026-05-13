@@ -31,10 +31,8 @@ import {
   sampleTerrainHeight,
   sampleTerrainNormal,
   sampleWaterState,
-  type HighlandCreekPath,
-  type RiverChannelId,
-  type StartingWaterPool,
 } from "../../simulation/world";
+import type { HighlandCreekPath, RiverChannelId, StartingWaterPool } from "../../simulation/worldTypes";
 import { waterDepth } from "./WaterDepth";
 import { WATER_PROFILES, type WaterProfile } from "./waterProfiles";
 export { WATER_SYSTEM_TUNING, type WaterProfile, type WaterProfileKey, type WaterSystemTuning } from "./waterProfiles";
@@ -953,6 +951,10 @@ function createWebGLWaterController(
     shader.uniforms.uDepthShadowStrength = { value: profile.depthShadowStrength };
     shader.uniforms.uCausticStrength = { value: profile.causticStrength };
     shader.uniforms.uSparkleStrength = { value: profile.sparkleStrength };
+    shader.uniforms.uShorelineDefinition = { value: profile.shorelineDefinition };
+    shader.uniforms.uDepthBandStrength = { value: profile.depthBandStrength };
+    shader.uniforms.uCurrentStrokeStrength = { value: profile.currentStrokeStrength };
+    shader.uniforms.uHeroSpecularStrength = { value: profile.heroSpecularStrength };
     shader.uniforms.uWaterFoamTexture = { value: painterlyTextures.waterFoam };
 
     shader.vertexShader = shader.vertexShader
@@ -1082,6 +1084,10 @@ function createWebGLWaterController(
         uniform float uDepthShadowStrength;
         uniform float uCausticStrength;
         uniform float uSparkleStrength;
+        uniform float uShorelineDefinition;
+        uniform float uDepthBandStrength;
+        uniform float uCurrentStrokeStrength;
+        uniform float uHeroSpecularStrength;
         uniform float uDepthDebug;
         uniform sampler2D uWaterFoamTexture;
         varying vec2 vWaterUv;
@@ -1246,21 +1252,25 @@ function createWebGLWaterController(
         ) * 0.5 + 0.5;
         float handShoreStroke = smoothstep(0.48, 0.88, shorePaintGrain * 0.54 + shoreStrokeWave * 0.36 + eddyNoise * 0.1)
           * (graphicShoreLine * 0.84 + shorelineLine * 0.32)
-          * (0.62 + shallowMask * 0.38);
+          * (0.62 + shallowMask * 0.38)
+          * (0.82 + uShorelineDefinition * 0.42);
         float bankLap = smoothstep(0.34, 0.92, bankMask) * (1.0 - smoothstep(0.9, 1.0, bankMask)) * smoothstep(
           0.52,
           1.0,
           sin(bankMask * 24.0 + vWaterFlowT * 9.0 - flowTravel * 1.72 + shorePaintGrain * 2.8 + flowCurl * 2.2) * 0.5 + 0.5
         ) * (0.12 + shallowMask * 0.22);
         float shoreMilkBloom = softMilkEdge * smoothstep(0.28, 0.86, shorePaintGrain + shallowMask * 0.32)
-          * (0.72 + currentBands * 0.28);
-        float shallowPaintBand = shallowShelfLine * smoothstep(0.2, 0.82, shorePaintGrain * 0.48 + slowGlassBand * 0.34 + broadFlow * 0.18);
+          * (0.72 + currentBands * 0.28)
+          * (0.86 + uShorelineDefinition * 0.18);
+        float shallowPaintBand = shallowShelfLine
+          * smoothstep(0.2, 0.82, shorePaintGrain * 0.48 + slowGlassBand * 0.34 + broadFlow * 0.18)
+          * (0.72 + uDepthBandStrength * 0.34);
         float midDepthBand = smoothstep(0.38, 0.5, channelDepth) * (1.0 - smoothstep(0.56, 0.7, channelDepth));
         float paintedDepthContour = (
           shallowPaintBand * 0.82
           + midDepthBand * smoothstep(0.56, 0.96, currentBands + shorePaintGrain * 0.18) * 0.32
           + deepCoreLine * smoothstep(0.48, 0.92, flowWarp + eddyNoise * 0.2) * 0.58
-        ) * (1.0 - bankMask * 0.28);
+        ) * (1.0 - bankMask * 0.28) * uDepthBandStrength;
         float directionalRipple = smoothstep(
           0.5,
           1.0,
@@ -1283,7 +1293,7 @@ function createWebGLWaterController(
           shoreMilkBloom * (0.18 + uShorelineMilkStrength * 0.32) +
           handShoreStroke * (0.1 + shorePaintGrain * 0.08)
         ) * uShorelineMilkStrength;
-        shorelineMilkMask = min(shorelineMilkMask, 0.27);
+        shorelineMilkMask = min(shorelineMilkMask, 0.27 + uShorelineDefinition * 0.04);
         waterTint = mix(waterTint, uShorelineMilkColor, shorelineMilkMask);
         vec3 bedTint = mix(uWaterShallow, uWaterDeep, painterDepth * 0.42 + bedNoise * 0.07 + pebbleNoise * 0.03);
         bedTint = mix(bedTint, uBedColor, (1.0 - channelDepth) * 0.55);
@@ -1306,8 +1316,8 @@ function createWebGLWaterController(
         float milkFoamStroke = handShoreStroke * smoothstep(0.38, 0.88, shorePaintGrain + shoreStrokeWave * 0.22)
           * (0.26 + uShorelineFoamStrength * 0.24);
         float foamMask = clamp(
-          shorelineFoam * uShorelineFoamStrength
-          + graphicShoreLine * (0.18 + uShorelineMilkStrength * 0.24)
+          shorelineFoam * uShorelineFoamStrength * (0.76 + uShorelineDefinition * 0.34)
+          + graphicShoreLine * (0.14 + uShorelineDefinition * 0.13 + uShorelineMilkStrength * 0.24)
           + milkFoamStroke
           + slopeFoam * uSlopeFoamStrength
           + currentFoam
@@ -1329,22 +1339,30 @@ function createWebGLWaterController(
         float fresnelBase = pow(1.0 - ndotV, 2.52);
         float fresnel = min(1.0, fresnelBase * (1.0 + shallowMask * 0.12 + (1.0 - channelDepth) * 0.06));
         vec3 reflectionTint = mix(uReflectionColor, uHighlightColor, smoothstep(0.48, 1.0, broadFlow * 0.34 + sideShimmer * 0.3 + surfaceDrift * 0.24 + sparkleNoise * 0.18));
+        reflectionTint = mix(reflectionTint, uSceneHorizon * vec3(0.94, 1.04, 0.96), uSceneSunHaze * 0.16 + fresnel * 0.06);
         float highlightRibbon = smoothstep(0.5, 1.0, currentBands * 0.22 + directionalRipple * 0.2 + detailFlow * 0.2 + sideShimmer * 0.14 + surfaceDrift * 0.18 + braidedCurrent * 0.18 + sparkleNoise * 0.14 + actorRipple * 0.24);
         float sceneSparkle = 1.0 + uSceneWaterSparkle * 0.42;
         float highlightMask = fresnel * highlightRibbon * (0.18 + slopeBoost * 0.32) * uHighlightStrength * sceneSparkle;
         float glintMask = pow(smoothstep(0.82, 1.0, sparkleNoise * 0.45 + detailFlow * 0.35), 2.0) * (0.08 + slopeBoost * 0.18 + uSceneSunHaze * 0.04) * fresnel;
+        float sunPath = smoothstep(
+          0.64,
+          1.0,
+          currentBands * 0.34 + slowGlassBand * 0.28 + sideShimmer * 0.2 + sparkleNoise * 0.18 + uSceneSunHaze * 0.1
+        ) * fresnel * (0.08 + uSceneSunHaze * 0.14 + uSceneWaterSparkle * 0.06) * (1.0 - bankMask * 0.34);
         float sparkleScatter = waterNoise(vWaterWorldPosition.xz * 0.22 + vec2(uTime * 0.18, -uTime * 0.12));
         float sparkleTwinkle = sin(uTime * 4.8 + sparkleScatter * 12.0 + vWaterFlowT * 34.0) * 0.5 + 0.5;
         float sparkleScore = sparkleScatter * 0.62 + sparkleTwinkle * 0.28 + sideShimmer * 0.1;
         float sparkleMask = pow(
           smoothstep(0.84, 1.0, sparkleScore),
           6.0
-        ) * step(0.9, sparkleScore) * shallowMask * (0.06 + fresnel * 0.32) * uSparkleStrength * sceneSparkle;
+        ) * step(0.9, sparkleScore) * shallowMask * (0.06 + fresnel * 0.32) * uSparkleStrength * sceneSparkle
+          * (0.75 + uHeroSpecularStrength * 0.35);
         float sparkleStroke = smoothstep(
           0.78,
           1.0,
           sin(movingFlowUv.x * 22.0 + movingFlowUv.y * 7.4 - flowTravel * 3.4 + sparkleNoise * 3.2) * 0.5 + 0.5
-        ) * shallowMask * (0.04 + fresnel * 0.12) * uSparkleStrength * sceneSparkle * (1.0 - bankMask * 0.45);
+        ) * shallowMask * (0.04 + fresnel * 0.12) * uSparkleStrength * sceneSparkle * (1.0 - bankMask * 0.45)
+          * (0.72 + uHeroSpecularStrength * 0.42);
         vec3 bodyFill = mix(uWaterShallow, uWaterDeep, clamp(painterDepth * 0.72 + 0.12, 0.0, 1.0));
         bodyFill = mix(bodyFill, uReflectionColor, fresnel * 0.12 + shallowMask * 0.04);
         vec3 finalWater = mix(bodyFill, waterTint, 0.58);
@@ -1354,10 +1372,22 @@ function createWebGLWaterController(
         finalWater *= 1.0 - depthShadow * 0.055;
         float paintedCurrentLine = smoothstep(0.7, 0.9, currentBands) * (1.0 - smoothstep(0.88, 1.0, currentBands)) * (0.16 + slopeBoost * 0.24) * (1.0 - bankMask * 0.48);
         float glassCurrentLine = smoothstep(0.7, 0.96, slowGlassBand * 0.52 + detailFlow * 0.24 + sparkleNoise * 0.18) * (0.18 + shallowMask * 0.34) * (1.0 - bankMask * 0.42);
-        finalWater = mix(finalWater, uHighlightColor, paintedCurrentLine * 0.08 + glassCurrentLine * uHighlightStrength * 0.05 + braidedCurrent * uHighlightStrength * 0.038);
+        finalWater = mix(
+          finalWater,
+          uHighlightColor,
+          paintedCurrentLine * (0.05 + uCurrentStrokeStrength * 0.06)
+            + glassCurrentLine * uHighlightStrength * (0.035 + uCurrentStrokeStrength * 0.035)
+            + braidedCurrent * uHighlightStrength * (0.026 + uCurrentStrokeStrength * 0.032)
+        );
         finalWater = mix(finalWater, uReflectionColor, (surfaceDrift + lensCurrent * 0.72) * (0.025 + shallowMask * 0.025));
         finalWater = mix(finalWater, uWaterFoam, longFlowThread * (0.05 + slopeBoost * 0.1) + handFoamStroke * 0.18 + counterEddy * 0.07);
-        finalWater = mix(finalWater, uWaterFoam, milkFoamStroke * 0.26 + handShoreStroke * 0.13 + bankLap * 0.2);
+        finalWater = mix(
+          finalWater,
+          uWaterFoam,
+          milkFoamStroke * (0.22 + uShorelineDefinition * 0.08)
+            + handShoreStroke * (0.1 + uShorelineDefinition * 0.05)
+            + bankLap * (0.16 + uShorelineDefinition * 0.08)
+        );
         finalWater = mix(finalWater, uWaterFoam, foamMask * (0.18 + shorelineLine * 0.28 + slopeBoost * 0.2));
         finalWater = mix(finalWater, uShorelineMilkColor, shorelineMilkMask * 0.2 + graphicShoreLine * 0.1 + softMilkEdge * 0.04 + shoreMilkBloom * 0.07);
         finalWater = mix(finalWater, uHighlightColor, shallowShelfLine * 0.08 + shallowPaintBand * 0.045);
@@ -1365,20 +1395,32 @@ function createWebGLWaterController(
         finalWater = mix(
           finalWater,
           contourInk,
-          (graphicShoreLine * 0.045 + shallowShelfLine * 0.025 + deepCoreLine * 0.04 + paintedDepthContour * 0.036)
+          (graphicShoreLine * (0.034 + uShorelineDefinition * 0.018)
+            + shallowShelfLine * (0.018 + uDepthBandStrength * 0.014)
+            + deepCoreLine * (0.028 + uDepthBandStrength * 0.018)
+            + paintedDepthContour * 0.036)
             * (1.0 - uMapLookdown * 0.5)
         );
+        vec3 bankInkColor = mix(uWaterDeep * vec3(0.5, 0.78, 0.92), uSedimentColor * vec3(0.54, 0.72, 0.58), bankMask);
+        float bankInkMask =
+          (graphicShoreLine * (0.2 + uShorelineDefinition * 0.05)
+            + shorelineLine * (0.14 + uShorelineDefinition * 0.05)
+            + deepCoreLine * (0.045 + uDepthBandStrength * 0.025)
+            + paintedDepthContour * 0.045)
+          * (1.0 - uMapLookdown * 0.58);
+        finalWater = mix(finalWater, bankInkColor, bankInkMask);
         finalWater = mix(finalWater, reflectionTint, highlightMask * (0.08 + shallowMask * 0.04 + channelDepth * 0.04));
         finalWater = mix(finalWater, uHighlightColor, glassRibbon * uHighlightStrength * 0.06);
         finalWater = mix(finalWater, uWaterFoam, actorRipple * 0.22);
-        finalWater += uHighlightColor * glintMask * uHighlightStrength * 0.28;
+        finalWater += uHighlightColor * glintMask * uHighlightStrength * (0.18 + uHeroSpecularStrength * 0.18);
+        finalWater += mix(uHighlightColor, uSparkleColor, 0.38) * sunPath * uHighlightStrength * (0.26 + uHeroSpecularStrength * 0.24);
         finalWater += uSparkleColor * sparkleMask;
         finalWater += uSparkleColor * sparkleStroke * 0.42;
         finalWater += uSparkleColor * glassRibbon * uSparkleStrength * 0.035;
         finalWater += reflectionTint * fresnel * (0.006 + channelDepth * 0.012) * (0.12 + uClarity * 0.18);
         float shallowGlow = (shorelineLine * 0.22 + shallowShelfLine * 0.14 + highlightMask * 0.08) * shallowMask * (1.0 - uMapLookdown);
         finalWater += mix(uHighlightColor, uSparkleColor, 0.35) * shallowGlow * (0.22 + uSparkleStrength);
-        vec3 waterCeiling = mix(vec3(0.66, 0.9, 0.94), vec3(0.92, 0.97, 0.9), clamp(foamMask * 0.56 + sparkleMask * 0.7, 0.0, 1.0));
+        vec3 waterCeiling = mix(vec3(0.13, 0.56, 0.82), vec3(0.96, 0.98, 0.88), clamp(foamMask * 0.56 + sparkleMask * 0.7 + sunPath * 0.42, 0.0, 1.0));
         finalWater = min(finalWater, waterCeiling);
         float finalLuma = dot(finalWater, vec3(0.2126, 0.7152, 0.0722));
         float lumaLimit = mix(0.78, 0.92, clamp(foamMask * 0.32 + sparkleMask * 0.46 + shallowMask * 0.18, 0.0, 1.0));
@@ -1396,26 +1438,26 @@ function createWebGLWaterController(
           channelDepth > 0.68 ? 0.86 :
           channelDepth > 0.34 ? 0.48 :
           0.14;
-        vec3 mapShallow = vec3(0.50, 0.76, 0.74);
-        vec3 mapDeep = vec3(0.17, 0.47, 0.62);
-        vec3 mapBank = vec3(0.64, 0.75, 0.61);
-        vec3 mapLine = vec3(0.86, 0.91, 0.78);
+        vec3 mapShallow = vec3(0.32, 0.82, 0.9);
+        vec3 mapDeep = vec3(0.04, 0.42, 0.66);
+        vec3 mapBank = vec3(0.46, 0.72, 0.68);
+        vec3 mapLine = vec3(0.9, 0.96, 0.88);
         vec3 mapWater = mix(mapShallow, mapDeep, mapDepthBand);
         mapWater = mix(mapWater, mapBank, bankMask * 0.16);
         mapWater = mix(mapWater, mapLine, graphicShoreLine * 0.2 + shallowShelfLine * 0.08);
         mapWater = mix(mapWater, vec3(0.08, 0.34, 0.5), deepCoreLine * 0.18);
         finalWater = mix(finalWater, mapWater, uMapLookdown);
-        float mapAlpha = clamp(0.28 + channelDepth * 0.28 - bankMask * 0.12 - fillLiftMask * 0.16, 0.18, 0.62);
+        float mapAlpha = clamp(0.38 + channelDepth * 0.34 - bankMask * 0.08 - fillLiftMask * 0.1, 0.3, 0.82);
         alphaMask = mix(alphaMask, mapAlpha, uMapLookdown);
         float wLow = 1.0 - uSceneElevationMood;
         finalWater = mix(finalWater, finalWater * uSceneSunColor, 0.06 + 0.05 * wLow);
         finalWater = mix(finalWater, finalWater * uSceneHorizon, 0.05 * (0.4 + 0.6 * wLow));
         finalWater = mix(finalWater, finalWater * uSceneAmbient, 0.05);
         finalWater = mix(finalWater, uSceneHorizon * vec3(0.8, 1.02, 0.92), uSceneSunHaze * shallowMask * 0.018);
-        vec3 waterFloor = mix(vec3(0.18, 0.5, 0.58), vec3(0.52, 0.8, 0.76), clamp(shallowMask * 0.42 + foamMask * 0.2 + uMapLookdown * 0.18, 0.0, 1.0));
+        vec3 waterFloor = mix(vec3(0.04, 0.28, 0.48), vec3(0.26, 0.62, 0.68), clamp(shallowMask * 0.42 + foamMask * 0.2 + uMapLookdown * 0.18, 0.0, 1.0));
         finalWater = max(finalWater, waterFloor);
-        vec3 posterWater = floor(finalWater * 8.0 + 0.5) / 8.0;
-        finalWater = mix(finalWater, posterWater, 0.38);
+        vec3 posterWater = floor(finalWater * 7.0 + 0.5) / 7.0;
+        finalWater = mix(finalWater, posterWater, 0.34);
         if (uDepthDebug > 0.5) {
           vec3 debugShallow = vec3(0.48, 0.95, 0.64);
           vec3 debugMid = vec3(0.16, 0.7, 0.95);
@@ -1737,7 +1779,7 @@ export function buildRiverSystem(): WaterSurfaceGroup {
     sampleRiverRenderWidthScale(channelId) / WATER_PROFILES.mainRiver.widthScale;
 
   group.name = "braided-river-system";
-  addRiver("main", -80, 236, 168, renderPathWidthScale("main"), 0.54);
+  addRiver("main", -218, 244, 226, renderPathWidthScale("main") * 1.2, 0.56);
   RIVER_BRANCH_SEGMENTS.forEach((segment) => {
     const sampleCount = Math.max(42, Math.round((segment.endZ - segment.startZ) * 0.68));
     addRiver(
@@ -1756,6 +1798,7 @@ export function buildRiverSystem(): WaterSurfaceGroup {
 function makeStartingWaterSurface(pool: StartingWaterPool) {
   const center = new Vector3(pool.x, sampleTerrainHeight(pool.x, pool.z) + pool.surfaceOffset, pool.z);
   const isOpeningLake = pool.id === "opening-lake";
+  const isGreatLake = pool.id === "great-lake";
 
   return createLakeSurface(
     center,
@@ -1768,8 +1811,8 @@ function makeStartingWaterSurface(pool: StartingWaterPool) {
     {
       radiusX: pool.renderRadiusX * STARTING_WATER_VISUAL_FILL_SCALE,
       radiusZ: pool.renderRadiusZ * STARTING_WATER_VISUAL_FILL_SCALE,
-      radialSegments: isOpeningLake ? 76 : 48,
-      rings: isOpeningLake ? 10 : 7,
+      radialSegments: isGreatLake ? 104 : isOpeningLake ? 76 : 48,
+      rings: isGreatLake ? 13 : isOpeningLake ? 10 : 7,
       edgeSoftness: pool.edgeSoftness,
     },
   );
@@ -1808,6 +1851,8 @@ export function buildHighlandWaterways(): WaterSurfaceGroup {
   addSmallWaterfall(group, controllers, 31, 139, 2.8, 6.2, -0.14, 0.18);
   addSmallWaterfall(group, controllers, -16, 158, 2.8, 5.6, 0.48, 0.18);
   addSmallWaterfall(group, controllers, 10, 154, 3.8, 7.4, 0.3, 0.2);
+  addSmallWaterfall(group, controllers, 14, 186, 4.8, 16.5, -0.12, 0.26);
+  addSmallWaterfall(group, controllers, 8, 212, 5.4, 22, -0.04, 0.3);
 
   return { group, controllers };
 }

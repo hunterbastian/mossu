@@ -8,7 +8,7 @@ import { MOVEMENT_CONTROL_LABELS, MOVEMENT_CONTROL_SUMMARY } from "../../simulat
 import type { FrameState } from "../../simulation/gameState";
 import { ROLL_MODE_INDICATOR_DELAY } from "../../simulation/playerSimulationConstants";
 import { worldLandmarks } from "../../simulation/world";
-import type { ForageableKind, WorldLandmark } from "../../simulation/world";
+import type { ForageableKind, WorldLandmark } from "../../simulation/worldTypes";
 import { ViewMode } from "../../simulation/viewMode";
 import {
   buildMapNorthRidgePath,
@@ -128,6 +128,9 @@ export class HudShell {
   private readonly karuProfileMood = document.createElement("p");
   private readonly karuProfileMeta = document.createElement("p");
   private readonly karuProfileSummary = document.createElement("p");
+  private readonly karuRoster = document.createElement("section");
+  private readonly karuRosterCount = document.createElement("span");
+  private readonly karuRosterList = document.createElement("div");
   private readonly pauseMenu = document.createElement("aside");
   private readonly pauseSummary = document.createElement("p");
   private readonly pauseStatusValues = {
@@ -171,6 +174,7 @@ export class HudShell {
   private karuProfileCardHideAt = 0;
   private karuProfileCardSignature = "";
   private karuCompanionSignature = "";
+  private karuRosterSignature = "";
   private hasSeenGameplayMovement = false;
   private movementDisclosureOriginX: number | null = null;
   private movementDisclosureOriginZ: number | null = null;
@@ -398,6 +402,7 @@ export class HudShell {
     );
     this.updatePickupCard(latestGatheredGood ?? null, overlayOpen);
     this.updateKaruProfileCard(characterData, fauna, overlayOpen, now);
+    this.updateKaruRoster(characterData.karuCompanions, fauna, overlayOpen);
 
     if (pauseMenuOpen) {
       this.statusValues.objectiveTitle.textContent = "Care paused";
@@ -671,6 +676,68 @@ export class HudShell {
             ? `${profile.detail} Currently ${Math.round(liveFollower.distanceToPlayer)}m from Mossu.`
             : profile.detail;
         text.append(eyebrow, title, meta, body);
+        card.append(icon, text);
+        return card;
+      }),
+    );
+  }
+
+  private updateKaruRoster(
+    profiles: readonly KaruCompanionProfileView[],
+    fauna: HudShellUpdate["fauna"],
+    overlayOpen: boolean,
+  ) {
+    this.karuRosterCount.textContent = `${profiles.length}`;
+    this.karuRoster.classList.toggle("karu-roster--empty", profiles.length === 0);
+    this.karuRoster.classList.toggle("karu-roster--overlay-open", overlayOpen);
+
+    const signature = [
+      overlayOpen ? 1 : 0,
+      profiles.length,
+      ...profiles.map((profile) => {
+        const liveFollower = fauna.followers.find((follower) => follower.id === profile.id);
+        return `${profile.id}:${liveFollower?.mood ?? profile.mood}:${liveFollower?.reaction ?? "trail"}`;
+      }),
+    ].join("|");
+    if (signature === this.karuRosterSignature) {
+      return;
+    }
+    this.karuRosterSignature = signature;
+
+    if (profiles.length === 0) {
+      const empty = document.createElement("article");
+      empty.className = "karu-roster-card karu-roster-card--empty";
+      const title = document.createElement("p");
+      title.className = "karu-roster-card__title";
+      title.textContent = "No Karu yet";
+      const body = document.createElement("p");
+      body.className = "karu-roster-card__body";
+      body.textContent = "Hold E near one to add a friend.";
+      empty.append(title, body);
+      this.karuRosterList.replaceChildren(empty);
+      return;
+    }
+
+    this.karuRosterList.replaceChildren(
+      ...profiles.map((profile) => {
+        const liveFollower = fauna.followers.find((follower) => follower.id === profile.id);
+        const mood = liveFollower?.mood ?? profile.mood;
+        const card = document.createElement("article");
+        card.className = `karu-roster-card karu-roster-card--${mood}`;
+
+        const icon = document.createElement("span");
+        icon.className = `karu-roster-card__icon karu-mood-icon karu-mood-icon--${mood}`;
+        icon.setAttribute("aria-hidden", "true");
+
+        const text = document.createElement("div");
+        text.className = "karu-roster-card__text";
+        const title = document.createElement("p");
+        title.className = "karu-roster-card__title";
+        title.textContent = profile.label;
+        const meta = document.createElement("p");
+        meta.className = "karu-roster-card__meta";
+        meta.textContent = `${this.formatKaruMood(mood)} · ${liveFollower?.reaction ?? "trail"}`;
+        text.append(title, meta);
         card.append(icon, text);
         return card;
       }),
@@ -1038,6 +1105,7 @@ export class HudShell {
       buildMeta,
       this.buildPickupCard(),
       this.buildKaruProfileCard(),
+      this.buildKaruRoster(),
       this.buildMapOverlay(),
       this.buildPauseMenu(),
       this.buildCharacterScreen(previewElement),
@@ -1107,6 +1175,25 @@ export class HudShell {
 
     this.karuProfileCard.append(glint, this.karuProfileIcon, text);
     return this.karuProfileCard;
+  }
+
+  private buildKaruRoster() {
+    this.karuRoster.className = "karu-roster karu-roster--empty";
+    this.karuRoster.setAttribute("aria-live", "polite");
+    this.karuRoster.setAttribute("aria-label", "Karu friends");
+
+    const header = document.createElement("div");
+    header.className = "karu-roster__header";
+    const title = document.createElement("p");
+    title.className = "karu-roster__title";
+    title.textContent = "Karu friends";
+    this.karuRosterCount.className = "karu-roster__count";
+    this.karuRosterCount.textContent = "0";
+    header.append(title, this.karuRosterCount);
+
+    this.karuRosterList.className = "karu-roster__list";
+    this.karuRoster.append(header, this.karuRosterList);
+    return this.karuRoster;
   }
 
   private buildControlsPanel() {

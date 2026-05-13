@@ -135,6 +135,7 @@ Use this after major game changes. Start with `npm run qa`, then run the game in
 
 ## Fauna
 
+- The right-side Karu friends rail is visible during normal gameplay, shows the empty state before recruitment, updates as Karu are recruited, and remains present when the field guide opens.
 - Karu are visible near intended pockets.
 - Idle/wander motion is soft, not jittery.
 - Tap `E` does not recruit Karu; holding `E` near one Karu recruits only that individual.

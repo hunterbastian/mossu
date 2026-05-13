@@ -1,5 +1,6 @@
 import type { PlayerState, SaveState } from "../../simulation/gameState";
-import { sampleTerrainHeight, type AbilityId } from "../../simulation/world";
+import { sampleTerrainHeight } from "../../simulation/world";
+import type { AbilityId } from "../../simulation/worldTypes";
 import type { DebugSaveStatePayload } from "./appRuntimeConfig";
 
 export function teleportDebugPlayerTo(player: PlayerState, x: number, z: number) {

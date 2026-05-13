@@ -236,6 +236,20 @@ function dominantMood(blobs: AmbientBlob[]): KaruMood {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "curious";
 }
 
+function karuMoodNestAccentColor(mood: KaruMood) {
+  switch (mood) {
+    case "brave":
+      return "#dff7ff";
+    case "shy":
+      return "#e9f8d4";
+    case "sleepy":
+      return "#ecf2ff";
+    case "curious":
+    default:
+      return "#fff0a8";
+  }
+}
+
 function setAmbientBlobVisualLod(blob: AmbientBlob, distanceToPlayer: number) {
   const fullDetail = blob.recruited || distanceToPlayer < FAUNA_FULL_DETAIL_DISTANCE;
   const midDetail = blob.recruited || distanceToPlayer < FAUNA_MID_DETAIL_DISTANCE;
@@ -556,6 +570,9 @@ export function buildAmbientBlobNests(blobs: readonly AmbientBlob[]) {
   const mossMaterial = new MeshLambertMaterial({ color: "#83ad58" });
   const deepMossMaterial = new MeshLambertMaterial({ color: "#58723e" });
   const leafMaterial = new MeshLambertMaterial({ color: "#9fc96b" });
+  const podMaterial = new MeshLambertMaterial({ color: "#9fbd73" });
+  const podDeepMaterial = new MeshLambertMaterial({ color: "#6d8552" });
+  const cushionMaterial = new MeshLambertMaterial({ color: "#d9e7a4" });
   const twigMaterial = new MeshLambertMaterial({ color: "#80633f" });
   const beddingMaterial = new MeshLambertMaterial({ color: "#eee0b9" });
   const warmBeddingMaterial = new MeshLambertMaterial({ color: "#f5e7bd" });
@@ -563,6 +580,20 @@ export function buildAmbientBlobNests(blobs: readonly AmbientBlob[]) {
   const flowerMaterial = new MeshBasicMaterial({ color: "#fff3ce", transparent: true, opacity: 0.9 });
   const berryMaterial = new MeshLambertMaterial({ color: "#c66e46" });
   const glowSeedMaterial = new MeshBasicMaterial({ color: "#ffd978", transparent: true, opacity: 0.82 });
+  const nestGlowMaterial = new MeshBasicMaterial({
+    color: "#ffe6a6",
+    transparent: true,
+    opacity: 0.13,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: true,
+  });
+  const comfortSeedMaterial = new MeshBasicMaterial({
+    color: "#ffd88a",
+    transparent: true,
+    opacity: 0.72,
+    depthWrite: false,
+  });
 
   blobs.forEach((blob, blobIndex) => {
     const center = blob.nestCenter;
@@ -575,7 +606,7 @@ export function buildAmbientBlobNests(blobs: readonly AmbientBlob[]) {
     floor.rotation.x = -Math.PI / 2;
     floor.rotation.z = yaw;
     floor.position.set(center.x, center.y + 0.035, center.z);
-    floor.scale.set(radius * 1.1, radius * 0.82, 1);
+    floor.scale.set(radius * 1.18, radius * 0.88, 1);
     nest.add(floor);
 
     const cupShadow = new Mesh(new CircleGeometry(1, 24), deepMossMaterial);
@@ -585,12 +616,66 @@ export function buildAmbientBlobNests(blobs: readonly AmbientBlob[]) {
     cupShadow.scale.set(radius * 0.54, radius * 0.42, 1);
     nest.add(cupShadow);
 
+    const warmGlow = new Mesh(new CircleGeometry(1, 22), nestGlowMaterial);
+    warmGlow.rotation.x = -Math.PI / 2;
+    warmGlow.rotation.z = yaw + 0.08;
+    warmGlow.position.set(center.x, center.y + 0.064, center.z);
+    warmGlow.scale.set(radius * 0.74, radius * 0.48, 1);
+    warmGlow.renderOrder = 2;
+    nest.add(warmGlow);
+
     const wovenRim = new Mesh(new TorusGeometry(1, 0.09, 8, 32), twigMaterial);
     wovenRim.rotation.x = Math.PI / 2;
     wovenRim.rotation.z = yaw;
     wovenRim.position.set(center.x, center.y + 0.16, center.z);
     wovenRim.scale.set(radius * 0.9, radius * 0.64, 0.74);
     nest.add(wovenRim);
+
+    const backX = center.x + Math.cos(yaw + Math.PI) * radius * 0.42;
+    const backZ = center.z + Math.sin(yaw + Math.PI) * radius * 0.42;
+    const podBack = new Mesh(new SphereGeometry(1, 12, 8), blob.mood === "sleepy" ? podDeepMaterial : podMaterial);
+    podBack.position.set(backX, sampleTerrainHeight(backX, backZ) + 0.34, backZ);
+    podBack.rotation.set(0.06, yaw + 0.16, 0.08 * Math.sin(blob.poseSeed));
+    podBack.scale.set(radius * 0.52, 0.18 + radius * 0.014, radius * 0.34);
+    nest.add(podBack);
+
+    const sideLeafA = new Mesh(new SphereGeometry(1, 10, 6), leafMaterial);
+    sideLeafA.position.set(
+      center.x + Math.cos(yaw + Math.PI * 0.78) * radius * 0.56,
+      sampleTerrainHeight(center.x, center.z) + 0.38,
+      center.z + Math.sin(yaw + Math.PI * 0.78) * radius * 0.56,
+    );
+    sideLeafA.rotation.set(0.04, yaw - 0.24, -0.18);
+    sideLeafA.scale.set(radius * 0.34, 0.055, radius * 0.2);
+    nest.add(sideLeafA);
+
+    const sideLeafB = new Mesh(new SphereGeometry(1, 10, 6), blob.mood === "shy" ? deepMossMaterial : leafMaterial);
+    sideLeafB.position.set(
+      center.x + Math.cos(yaw - Math.PI * 0.78) * radius * 0.58,
+      sampleTerrainHeight(center.x, center.z) + 0.32,
+      center.z + Math.sin(yaw - Math.PI * 0.78) * radius * 0.58,
+    );
+    sideLeafB.rotation.set(0.02, yaw + 0.34, 0.16);
+    sideLeafB.scale.set(radius * 0.31, 0.052, radius * 0.18);
+    nest.add(sideLeafB);
+
+    for (let i = 0; i < 5; i += 1) {
+      const offset = (i - 2) * 0.18;
+      const x =
+        center.x +
+        Math.cos(yaw) * radius * (0.12 + Math.abs(offset) * 0.16) +
+        Math.cos(yaw + Math.PI / 2) * radius * offset;
+      const z =
+        center.z +
+        Math.sin(yaw) * radius * (0.12 + Math.abs(offset) * 0.16) +
+        Math.sin(yaw + Math.PI / 2) * radius * offset;
+      const y = sampleTerrainHeight(x, z);
+      const cushion = new Mesh(new SphereGeometry(1, 10, 6), i % 2 === 0 ? cushionMaterial : beddingMaterial);
+      cushion.position.set(x, y + 0.12 + i * 0.004, z);
+      cushion.rotation.y = yaw + offset * 0.7;
+      cushion.scale.set(radius * 0.16, 0.04, radius * 0.24);
+      nest.add(cushion);
+    }
 
     for (let i = 0; i < 14; i += 1) {
       const angle = yaw + (i / 14) * Math.PI * 2 + Math.sin(blob.poseSeed + i * 1.9) * 0.1;
@@ -634,6 +719,22 @@ export function buildAmbientBlobNests(blobs: readonly AmbientBlob[]) {
       nest.add(petal);
     }
 
+    for (let i = 0; i < 3; i += 1) {
+      const angle = yaw + Math.PI + (i - 1) * 0.28;
+      const x = center.x + Math.cos(angle) * radius * (0.62 + i * 0.04);
+      const z = center.z + Math.sin(angle) * radius * (0.62 + i * 0.04);
+      const y = sampleTerrainHeight(x, z);
+      const stem = new Mesh(new ConeGeometry(0.018, 0.24 + i * 0.02, 6), deepMossMaterial);
+      stem.position.set(x, y + 0.12, z);
+      stem.rotation.z = (i - 1) * 0.1;
+      nest.add(stem);
+
+      const seed = new Mesh(new SphereGeometry(1, 8, 6), comfortSeedMaterial);
+      seed.position.set(x, y + 0.25 + i * 0.016, z);
+      seed.scale.setScalar(0.038 + i * 0.006);
+      nest.add(seed);
+    }
+
     for (let i = 0; i < 5; i += 1) {
       const angle = yaw + Math.PI * 0.86 + i * 0.35;
       const x = center.x + Math.cos(angle) * radius * (0.98 + (i % 2) * 0.16);
@@ -659,6 +760,22 @@ export function buildAmbientBlobNests(blobs: readonly AmbientBlob[]) {
       bloom.position.set(x, y + 0.38 + (i % 2) * 0.05, z);
       bloom.scale.set(1, 0.48, 1);
       nest.add(bloom);
+    }
+
+    const moodAccentMaterial = new MeshBasicMaterial({
+      color: karuMoodNestAccentColor(blob.mood),
+      transparent: true,
+      opacity: 0.74,
+      depthWrite: false,
+    });
+    for (let i = 0; i < 4; i += 1) {
+      const angle = yaw - 0.58 + i * 0.34;
+      const x = center.x + Math.cos(angle) * radius * (0.64 + (i % 2) * 0.08);
+      const z = center.z + Math.sin(angle) * radius * (0.64 + (i % 2) * 0.08);
+      const glowSeed = new Mesh(new SphereGeometry(1, 8, 6), moodAccentMaterial);
+      glowSeed.position.set(x, sampleTerrainHeight(x, z) + 0.16 + i * 0.01, z);
+      glowSeed.scale.setScalar(0.065 + (i % 2) * 0.016);
+      nest.add(glowSeed);
     }
 
     const shadeLeaf = new Mesh(new SphereGeometry(1, 10, 6), leafMaterial);

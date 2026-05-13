@@ -8,7 +8,8 @@ import {
   PlaneGeometry,
   SphereGeometry,
 } from "three";
-import { worldForageables, type ForageableKind } from "../../simulation/world";
+import { worldForageables } from "../../simulation/world";
+import type { ForageableKind } from "../../simulation/worldTypes";
 
 export interface ForageableVisual {
   id: string;

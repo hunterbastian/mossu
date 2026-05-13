@@ -1,9 +1,6 @@
 import { Vector3 } from "three";
 import { InputSnapshot } from "./input";
 import {
-  AbilityId,
-  BiomeZone,
-  ForageableKind,
   sampleBiomeZone,
   sampleObjectiveText,
   sampleTerrainHeight,
@@ -11,6 +8,7 @@ import {
   startingPosition,
   worldLandmarks,
 } from "./world";
+import type { AbilityId, BiomeZone, ForageableKind } from "./worldTypes";
 import { updateForageableProgress } from "./forageableProgress";
 import { updateLandmarkProgress } from "./landmarkProgress";
 import { createMovementScratch, applyMovementPhysics, tickMovementTimers } from "./movementPhysics";

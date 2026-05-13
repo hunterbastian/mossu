@@ -1,5 +1,5 @@
 import type { SaveState } from "../../simulation/gameState";
-import type { AbilityId } from "../../simulation/world";
+import type { AbilityId } from "../../simulation/worldTypes";
 
 export const LOCAL_SAVE_VERSION = 1;
 export const LOCAL_SAVE_STORAGE_KEY = "mossu.save.v1";

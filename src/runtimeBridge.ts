@@ -6,7 +6,7 @@ import type { DebugSavePresetSummary } from "./render/app/debugSavePresets";
 export type MossuE2eBridge = {
   version: 1;
   ready: boolean;
-  mode: "game" | "model_viewer";
+  mode: "game" | "model_viewer" | "island_viewer";
 };
 
 export interface MossuDebugSaveStatePayload {

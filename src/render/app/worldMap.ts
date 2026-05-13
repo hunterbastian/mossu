@@ -4,10 +4,10 @@ import {
   sampleRiverChannelCenter,
   sampleRiverCenter,
   STARTING_WATER_POOLS,
-  WorldLandmark,
   worldLandmarks,
   worldMapMarkers,
 } from "../../simulation/world";
+import type { WorldLandmark } from "../../simulation/worldTypes";
 
 const MAP_SVG_NS = "http://www.w3.org/2000/svg";
 
