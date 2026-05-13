@@ -10,7 +10,6 @@ import {
 import type {
   BiomeThresholdLandmark,
   BiomeZone,
-  CreekPath,
   HabitatLayerSample,
   HabitatZone,
   HighlandCreekPath,
@@ -22,6 +21,8 @@ import type {
   StartingWaterPool,
   WaterAmbienceSample,
   WaterBankShape,
+  WaterProbeSample,
+  WaterProfileHint,
   WaterState,
   WindField,
   WorldForageable,
@@ -51,6 +52,8 @@ export type {
   StartingWaterPool,
   WaterAmbienceSample,
   WaterBankShape,
+  WaterProbeSample,
+  WaterProfileHint,
   WaterState,
   WindField,
   WorldForageable,
@@ -1454,7 +1457,7 @@ export const HIGHLAND_CREEK_PATHS: readonly HighlandCreekPath[] = [
   },
 ] as const;
 
-const creekPaths: readonly CreekPath[] = HIGHLAND_CREEK_PATHS;
+const creekPaths: readonly HighlandCreekPath[] = HIGHLAND_CREEK_PATHS;
 
 function sampleCreekWater(x: number, z: number): WaterState | null {
   let best: WaterState | null = null;
@@ -1591,6 +1594,193 @@ export function sampleWaterState(x: number, z: number): WaterState | null {
   }
 
   return best;
+}
+
+function createWaterProbeSample(
+  x: number,
+  z: number,
+  kind: WaterState["kind"],
+  profile: WaterProfileHint,
+  surfaceY: number,
+  depth: number,
+  bankMask: number,
+  flowDirection: Vector2,
+  flowStrength: number,
+  swimAllowed: boolean,
+): WaterProbeSample {
+  const terrainY = sampleTerrainHeight(x, z);
+  return {
+    kind,
+    profile,
+    insideWater: depth > 0.2,
+    depth,
+    bankMask: MathUtils.clamp(bankMask, 0, 1),
+    swimAllowed,
+    terrainY,
+    gameplaySurfaceY: surfaceY,
+    renderedSurfaceY: surfaceY,
+    flowStrength,
+    flowDirection: {
+      x: flowDirection.x,
+      z: flowDirection.y,
+    },
+  };
+}
+
+export function sampleWaterProbe(x: number, z: number): WaterProbeSample {
+  let best: WaterProbeSample | null = null;
+  let bestDepth = 0;
+
+  const consider = (sample: WaterProbeSample) => {
+    if (sample.depth > bestDepth) {
+      best = sample;
+      bestDepth = sample.depth;
+    }
+  };
+
+  for (const channel of sampleRiverChannels(z)) {
+    const riverDistance = Math.abs(x - channel.centerX);
+    const activeWidth = sampleRiverSurfaceHalfWidth(channel);
+    if (riverDistance > activeWidth) {
+      continue;
+    }
+
+    const flatSurfaceY = sampleTerrainHeight(channel.centerX, z) + MAIN_RIVER_SURFACE_OFFSET;
+    const edgeT = riverDistance / Math.max(0.001, activeWidth);
+    const bank = MathUtils.clamp(edgeT, 0, 1);
+    const edgeBlend = MathUtils.smoothstep(0.82, 1, edgeT);
+    const surfaceY = sampleFilledWaterSurfaceY(flatSurfaceY, x, z, bank, edgeBlend);
+    let depth = surfaceY - sampleTerrainHeight(x, z);
+    if (depth <= 0.2) {
+      const surfaceMask = sampleRiverSurfaceMask(x, z);
+      if (surfaceMask > 0.12 && depth > -0.2) {
+        depth = Math.max(0.21, depth);
+      }
+    }
+    if (depth <= 0.2) {
+      continue;
+    }
+
+    const tangent = new Vector2(
+      sampleRiverChannelCenter(channel.id, z + 1.5) - sampleRiverChannelCenter(channel.id, z - 1.5),
+      3,
+    ).normalize();
+    consider(
+      createWaterProbeSample(
+        x,
+        z,
+        "river",
+        "mainRiver",
+        surfaceY,
+        depth,
+        bank,
+        tangent,
+        channel.flowStrength,
+        depth >= WATER_SWIM_MIN_DEPTH && edgeT < 0.94,
+      ),
+    );
+  }
+
+  for (const creek of creekPaths) {
+    for (let i = 0; i < creek.points.length - 1; i += 1) {
+      const [ax, az] = creek.points[i];
+      const [bx, bz] = creek.points[i + 1];
+      const sample = distanceToSegment2D(x, z, ax, az, bx, bz);
+      if (sample.distance > creek.width) {
+        continue;
+      }
+
+      const surfaceY = sampleTerrainHeight(sample.x, sample.z) + creek.surfaceOffset;
+      const depth = surfaceY - sampleTerrainHeight(x, z);
+      if (depth <= 0.2) {
+        continue;
+      }
+
+      const flowDirection = new Vector2(bx - ax, bz - az).normalize();
+      consider(
+        createWaterProbeSample(
+          x,
+          z,
+          creek.kind,
+          creek.profile,
+          surfaceY,
+          depth,
+          sample.distance / Math.max(0.001, creek.width),
+          flowDirection,
+          creek.flowStrength,
+          creek.swimAllowed,
+        ),
+      );
+    }
+  }
+
+  let bestPool: WaterProbeSample | null = null;
+  let bestPoolMask = 0;
+  for (const pool of STARTING_WATER_POOLS) {
+    const swimDistance = ellipseDistance(x, z, pool.x, pool.z, pool.radiusX, pool.radiusZ);
+    const visualDistance = ellipseDistance(
+      x,
+      z,
+      pool.x,
+      pool.z,
+      pool.renderRadiusX * STARTING_WATER_VISUAL_FILL_SCALE,
+      pool.renderRadiusZ * STARTING_WATER_VISUAL_FILL_SCALE,
+    );
+    if (visualDistance > 1) {
+      continue;
+    }
+
+    const flatSurfaceY = sampleTerrainHeight(pool.x, pool.z) + pool.surfaceOffset;
+    const edgeBlend = MathUtils.smoothstep(1 - pool.edgeSoftness, 1, visualDistance);
+    const surfaceY = sampleFilledWaterSurfaceY(flatSurfaceY, x, z, MathUtils.clamp(visualDistance, 0, 1), edgeBlend);
+    const depth = surfaceY - sampleTerrainHeight(x, z);
+    if (depth <= 0.2) {
+      continue;
+    }
+
+    const swirlAngle = Math.atan2(z - pool.z, x - pool.x) + Math.PI * 0.5;
+    const candidate = createWaterProbeSample(
+      x,
+      z,
+      "pool",
+      "stillPool",
+      surfaceY,
+      depth,
+      visualDistance,
+      new Vector2(Math.cos(swirlAngle), Math.sin(swirlAngle)).normalize(),
+      pool.flowStrength,
+      pool.swimAllowed && swimDistance <= 1 && depth >= WATER_SWIM_MIN_DEPTH,
+    );
+    const poolMask = sampleStartingWaterSurfaceMask(x, z);
+    if (!bestPool || candidate.depth > bestPool.depth || poolMask > bestPoolMask) {
+      bestPool = candidate;
+      bestPoolMask = poolMask;
+    }
+  }
+
+  if (bestPool && (bestPoolMask > 0.82 || best !== null)) {
+    if (bestPoolMask > 0.82 || bestPool.depth > bestDepth) {
+      best = bestPool;
+    }
+  }
+
+  if (best) {
+    return best;
+  }
+
+  return {
+    kind: null,
+    profile: null,
+    insideWater: false,
+    depth: 0,
+    bankMask: 1,
+    swimAllowed: false,
+    terrainY: sampleTerrainHeight(x, z),
+    gameplaySurfaceY: null,
+    renderedSurfaceY: null,
+    flowStrength: 0,
+    flowDirection: { x: 0, z: 0 },
+  };
 }
 
 export function sampleWaterAmbience(x: number, z: number): WaterAmbienceSample {

@@ -5,10 +5,10 @@
  * player is always near the visible center; waves are anchored to world space
  * via the shader so they don't slide as the mesh shifts.
  *
- * Vertex: 6 layered Gerstner waves give a broad tropical swell plus smaller chop.
+ * Vertex: 7 layered Gerstner waves give a broad tropical swell plus smaller chop.
  * Fragment: rich-blue→turquoise→pale-cyan distance grade, cream/peach
- * horizon haze, fresnel rim with sky tint, sun specular, foam on crests,
- * and painterly shimmer.
+ * horizon haze, fresnel rim with sky tint, sun specular, slope-aware breaker
+ * foam on crests, and painterly shimmer.
  *
  * Sits below the floating sky island. Renders before everything else
  * (`renderOrder = -2`) so the depth buffer carves the island silhouette
@@ -46,20 +46,39 @@ const VERT = /* glsl */ `
   varying vec3 vWorldPos;
   varying float vWaveHeight;
   varying float vSwellSignal;
+  varying float vCrestSignal;
+  varying float vWaveSlope;
+  varying float vTroughSignal;
 
   // Single Gerstner wave: returns (x, y, z) offset to add to the rest position.
   // Direction is the surface flow direction in XZ; wavelength sets crest spacing;
   // steepness ∈ [0..1] sharpens crests; speed scales the gravity-derived phase.
-  vec3 gerstnerWave(vec2 dir, float wavelength, float steepness, float speed, vec2 worldXZ, float t) {
+  vec3 gerstnerWave(
+    vec2 dir,
+    float wavelength,
+    float steepness,
+    float speed,
+    float amplitudeScale,
+    vec2 worldXZ,
+    float t,
+    out float crest,
+    out float slope,
+    out float trough
+  ) {
     vec2 d = normalize(dir);
     float k = 6.2831853 / wavelength;            // wavenumber
     float c = sqrt(9.81 / k);                    // gravity wave phase speed
     float phase = k * (dot(d, worldXZ) - c * speed * t);
-    float a = steepness / k;                     // amplitude implied by steepness
+    float waveSin = sin(phase);
+    float waveCos = cos(phase);
+    float a = (steepness / k) * amplitudeScale;  // amplitude implied by steepness
+    crest = smoothstep(0.34, 0.98, waveSin) * steepness;
+    trough = smoothstep(0.1, 0.86, -waveSin) * steepness;
+    slope = abs(waveCos) * steepness;
     return vec3(
-      d.x * a * cos(phase),
-      a * sin(phase),
-      d.y * a * cos(phase)
+      d.x * a * waveCos,
+      a * waveSin,
+      d.y * a * waveCos
     );
   }
 
@@ -72,13 +91,28 @@ const VERT = /* glsl */ `
     vec2 worldXZ = worldPos4.xz;
 
     vec3 offset = vec3(0.0);
-    // 6 waves: one readable hero swell, two ocean swells, two chop layers, one fine glint layer.
-    offset += gerstnerWave(vec2( 1.00,  0.18), 76.0, 0.68, 0.42, worldXZ, uTime);
-    offset += gerstnerWave(vec2( 0.45, -0.85), 44.0, 0.52, 0.62, worldXZ, uTime);
-    offset += gerstnerWave(vec2(-0.62,  0.78), 24.0, 0.42, 0.88, worldXZ, uTime);
-    offset += gerstnerWave(vec2( 0.92,  0.40), 12.0, 0.28, 1.24, worldXZ, uTime);
-    offset += gerstnerWave(vec2(-0.74, -0.32),  7.0, 0.18, 1.72, worldXZ, uTime);
-    offset += gerstnerWave(vec2( 0.18,  0.98),  4.2, 0.08, 2.05, worldXZ, uTime);
+    float crest = 0.0;
+    float slope = 0.0;
+    float trough = 0.0;
+    float crestAccum = 0.0;
+    float slopeAccum = 0.0;
+    float troughAccum = 0.0;
+
+    // Sea-of-thieves-like read: two large rolling swells, two crossing seas, two chop layers, and one glint layer.
+    offset += gerstnerWave(vec2( 1.00,  0.20), 112.0, 0.74, 0.34, 1.0,  worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.34; slopeAccum += slope * 0.22; troughAccum += trough * 0.32;
+    offset += gerstnerWave(vec2( 0.58, -0.74),  68.0, 0.62, 0.48, 0.88, worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.26; slopeAccum += slope * 0.2; troughAccum += trough * 0.22;
+    offset += gerstnerWave(vec2(-0.46,  0.90),  38.0, 0.5,  0.68, 0.76, worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.18; slopeAccum += slope * 0.18; troughAccum += trough * 0.16;
+    offset += gerstnerWave(vec2( 0.90,  0.44),  20.0, 0.36, 0.96, 0.56, worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.12; slopeAccum += slope * 0.16; troughAccum += trough * 0.1;
+    offset += gerstnerWave(vec2(-0.74, -0.32),  10.5, 0.22, 1.34, 0.42, worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.07; slopeAccum += slope * 0.14; troughAccum += trough * 0.07;
+    offset += gerstnerWave(vec2( 0.24,  0.97),   6.2, 0.14, 1.82, 0.32, worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.04; slopeAccum += slope * 0.08; troughAccum += trough * 0.04;
+    offset += gerstnerWave(vec2(-0.08,  1.00),   3.7, 0.07, 2.32, 0.2,  worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.02; slopeAccum += slope * 0.04;
 
     // Apply offset in object space so the mesh's rotation transports it correctly.
     // Since we rotated -PI/2 around X, world Y is local Z, world Z is -local Y.
@@ -90,6 +124,9 @@ const VERT = /* glsl */ `
     vec4 finalWorld = modelMatrix * vec4(displaced, 1.0);
     vWorldPos = finalWorld.xyz;
     vWaveHeight = offset.y;
+    vCrestSignal = clamp(crestAccum, 0.0, 1.0);
+    vWaveSlope = clamp(slopeAccum, 0.0, 1.0);
+    vTroughSignal = clamp(troughAccum, 0.0, 1.0);
     vSwellSignal =
       sin(dot(normalize(vec2(1.0, 0.18)), worldXZ) * 0.083 - uTime * 0.46) * 0.54 +
       sin(dot(normalize(vec2(0.45, -0.85)), worldXZ) * 0.143 - uTime * 0.62) * 0.28 +
@@ -115,6 +152,9 @@ const FRAG = /* glsl */ `
   varying vec3 vWorldPos;
   varying float vWaveHeight;
   varying float vSwellSignal;
+  varying float vCrestSignal;
+  varying float vWaveSlope;
+  varying float vTroughSignal;
 
   float hash21(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -159,7 +199,7 @@ const FRAG = /* glsl */ `
     float horizonDistance = smoothstep(3100.0, 5000.0, dist);
 
     // Body color: distance sets the ocean grade; wave height adds local movement.
-    float heightT = clamp(vWaveHeight * 0.09 + 0.5, 0.0, 1.0);
+    float heightT = clamp(vWaveHeight * 0.065 + 0.5, 0.0, 1.0);
     float swellT = clamp(vSwellSignal * 0.5 + 0.5, 0.0, 1.0);
     vec3 distanceColor = mix(uDeepColor, uShallowColor, midDistance);
     distanceColor = mix(distanceColor, uFarColor, farDistance);
@@ -167,7 +207,7 @@ const FRAG = /* glsl */ `
     distanceColor = mix(distanceColor, uLagoonColor, lagoonBand * (0.4 + heightT * 0.18));
     vec3 waveTint = mix(vec3(-0.038, -0.012, 0.05), vec3(0.055, 0.086, 0.06), heightT);
     vec3 color = distanceColor + waveTint * (1.0 - farDistance * 0.58);
-    color = mix(color, uDeepColor, (1.0 - swellT) * (1.0 - farDistance) * 0.12);
+    color = mix(color, uDeepColor * vec3(0.78, 0.9, 1.02), (vTroughSignal * 0.24 + (1.0 - swellT) * 0.1) * (1.0 - farDistance));
 
     // Fresnel rim — fakes sky/horizon reflection at glancing angles
     float fresnel = pow(1.0 - ndotv, 4.0);
@@ -176,8 +216,8 @@ const FRAG = /* glsl */ `
 
     // Sun specular — Sildur-inspired warm glint, kept stylized and broad.
     vec3 reflectDir = reflect(-uSunDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 72.0);
-    color += uSunColor * spec * 0.88;
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 64.0);
+    color += uSunColor * spec * (0.78 + vWaveSlope * 0.52);
 
     vec2 sunFlat = normalize(uSunDir.xz + vec2(0.0001, -0.0001));
     vec2 cameraRay = normalize(vWorldPos.xz - uCameraWorld.xz + vec2(0.0001, 0.0001));
@@ -188,19 +228,22 @@ const FRAG = /* glsl */ `
     color += mix(uSunColor, uHorizonColor, 0.24) * sunGlaze;
 
     // Foam: bright caps and long broken tropical lace lines like sunlit surf.
-    float crest = smoothstep(1.6, 7.8, vWaveHeight) * (0.68 + swellT * 0.42);
+    float crest = max(smoothstep(2.0, 10.8, vWaveHeight), vCrestSignal * 0.86) * (0.62 + swellT * 0.38);
     float foamNoise = fbm2d(vWorldPos.xz * 0.028 + vec2(uTime * 0.026, -uTime * 0.018));
+    float breakerEnergy = smoothstep(0.34, 0.9, vCrestSignal * 0.72 + vWaveSlope * 0.36 + foamNoise * 0.08);
     vec2 foamDirA = normalize(vec2(0.92, 0.28));
     vec2 foamDirB = normalize(vec2(-0.34, 0.94));
-    float heroBreaker = smoothstep(0.76, 0.98, swellT + foamNoise * 0.12) * (1.0 - horizonDistance * 0.74);
-    float longLineA = sin(dot(vWorldPos.xz, foamDirA) * 0.055 - uTime * 0.42 + foamNoise * 2.8) * 0.5 + 0.5;
-    float longLineB = sin(dot(vWorldPos.xz, foamDirB) * 0.072 + uTime * 0.26 + foamNoise * 2.2) * 0.5 + 0.5;
+    float heroBreaker = smoothstep(0.72, 0.98, swellT + breakerEnergy * 0.16 + foamNoise * 0.1) * (1.0 - horizonDistance * 0.74);
+    float longLineA = sin(dot(vWorldPos.xz, foamDirA) * 0.057 - uTime * 0.52 + foamNoise * 3.2) * 0.5 + 0.5;
+    float longLineB = sin(dot(vWorldPos.xz, foamDirB) * 0.078 + uTime * 0.34 + foamNoise * 2.5) * 0.5 + 0.5;
+    float windTear = smoothstep(0.7, 1.0, sin(dot(vWorldPos.xz, normalize(vec2(0.98, 0.12))) * 0.13 - uTime * 0.86 + foamNoise * 3.6) * 0.5 + 0.5);
     float foamLace =
-      smoothstep(0.78, 0.98, longLineA + foamNoise * 0.18) * 0.52 +
-      smoothstep(0.84, 1.0, longLineB + shimmer * 0.16) * 0.3;
-    foamLace *= (0.18 + lagoonBand * 0.58 + crest * 0.42 + heroBreaker * 0.34) * (1.0 - horizonDistance * 0.66);
-    float foamMask = smoothstep(0.62, 1.08, crest + shimmer * 0.22 + foamLace * 0.42);
-    color = mix(color, uFoamColor, clamp(foamMask * 0.72 + foamLace * 0.54 + heroBreaker * crest * 0.26, 0.0, 0.9));
+      smoothstep(0.76, 0.98, longLineA + foamNoise * 0.2 + breakerEnergy * 0.05) * 0.56 +
+      smoothstep(0.82, 1.0, longLineB + shimmer * 0.16) * 0.34 +
+      windTear * breakerEnergy * 0.16;
+    foamLace *= (0.18 + lagoonBand * 0.58 + crest * 0.46 + heroBreaker * 0.36) * (1.0 - horizonDistance * 0.66);
+    float foamMask = smoothstep(0.58, 1.04, crest + breakerEnergy * 0.26 + shimmer * 0.2 + foamLace * 0.42);
+    color = mix(color, uFoamColor, clamp(foamMask * 0.7 + foamLace * 0.58 + heroBreaker * crest * 0.3, 0.0, 0.94));
 
     float caustic = smoothstep(0.62, 0.98, fbm2d(vWorldPos.xz * 0.08 + vec2(uTime * 0.03, uTime * 0.018)));
     color += mix(vec3(0.0), vec3(0.18, 0.28, 0.18), caustic * lagoonBand * (1.0 - farDistance) * 0.24);

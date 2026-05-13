@@ -48,6 +48,7 @@ import {
 import { makeTerrainMesh } from "../world/terrainMesh";
 import { buildFloatingIslandShell, ISLAND_EDGE_WATERFALL_TURNS } from "../world/worldSetPieces";
 import { buildHighlandWaterways, WaterSystem } from "../world/waterSystem";
+import { buildAtlasOceanDiscGeometry, buildAtlasOceanMaterial } from "./islandViewerOcean";
 
 type IslandViewPreset = "overview" | "aerial" | "topdown" | "profile" | "under" | "custom";
 type AtlasLayerId = "terrain" | "biomes" | "shell" | "ocean" | "water" | "guides" | "markers" | "falls";
@@ -263,101 +264,6 @@ const buildAtlasSkyDome = () => {
   sky.frustumCulled = false;
   return sky;
 };
-
-const buildAtlasOceanMaterial = () => new ShaderMaterial({
-  depthWrite: true,
-  fog: false,
-  uniforms: {
-    uTime: { value: 0 },
-    uCameraWorld: { value: new Vector3() },
-    uNearColor: { value: new Color("#0064b2") },
-    uMidColor: { value: new Color("#13bfe4") },
-    uLagoonColor: { value: new Color("#3be6d0") },
-    uFarColor: { value: new Color("#a7f8f1") },
-    uHorizonColor: { value: new Color("#eafff3") },
-    uMistHazeColor: { value: new Color("#dffcef") },
-    uFoamColor: { value: new Color("#efffff") },
-  },
-  vertexShader: `
-    varying vec3 vWorldPosition;
-
-    void main() {
-      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-      vWorldPosition = worldPosition.xyz;
-      gl_Position = projectionMatrix * viewMatrix * worldPosition;
-    }
-  `,
-  fragmentShader: `
-    uniform float uTime;
-    uniform vec3 uCameraWorld;
-    uniform vec3 uNearColor;
-    uniform vec3 uMidColor;
-    uniform vec3 uLagoonColor;
-    uniform vec3 uFarColor;
-    uniform vec3 uHorizonColor;
-    uniform vec3 uMistHazeColor;
-    uniform vec3 uFoamColor;
-    varying vec3 vWorldPosition;
-
-    float hash(vec2 p) {
-      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-    }
-
-    float noise(vec2 p) {
-      vec2 i = floor(p);
-      vec2 f = fract(p);
-      vec2 u = f * f * (3.0 - 2.0 * f);
-      return mix(
-        mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
-        mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
-        u.y
-      );
-    }
-
-    float fbm(vec2 p) {
-      float value = 0.0;
-      float amp = 0.5;
-      for (int i = 0; i < 4; i += 1) {
-        value += noise(p) * amp;
-        p = p * 2.03 + vec2(11.4, 6.8);
-        amp *= 0.52;
-      }
-      return value;
-    }
-
-    void main() {
-      float dist = length(uCameraWorld - vWorldPosition);
-      float midFade = smoothstep(280.0, 1080.0, dist);
-      float farFade = smoothstep(920.0, 2180.0, dist);
-      float horizonFade = smoothstep(1750.0, 3100.0, dist);
-      vec3 viewRay = normalize(vWorldPosition - uCameraWorld);
-      float grazingMist = smoothstep(-0.22, -0.015, viewRay.y);
-      float lowerDepth = smoothstep(-330.0, -120.0, -vWorldPosition.y);
-      float wave = noise(vWorldPosition.xz * 0.018 + vec2(uTime * 0.018, -uTime * 0.012));
-      float detail = fbm(vWorldPosition.xz * 0.036 + vec2(uTime * 0.024, -uTime * 0.018));
-      float lagoonBand = (1.0 - farFade) * smoothstep(0.18, 0.74, midFade) * (1.0 - smoothstep(0.92, 1.0, midFade));
-      vec3 color = mix(uNearColor, uMidColor, midFade);
-      color = mix(color, uFarColor, farFade * 0.92);
-      color = mix(color, uLagoonColor, lagoonBand * (0.42 + detail * 0.18));
-      color = mix(color, uNearColor, lowerDepth * 0.12 * (1.0 - farFade * 0.66));
-      color += (wave - 0.5) * 0.024;
-      color = mix(color, uFarColor, grazingMist * 0.34 * (1.0 - horizonFade * 0.45));
-      color = mix(color, uHorizonColor, horizonFade * (0.24 + grazingMist * 0.18));
-      float creamMist = smoothstep(0.5, 1.0, horizonFade) * grazingMist;
-      color = mix(color, uMistHazeColor, creamMist * 0.26);
-      vec2 foamDirA = normalize(vec2(0.92, 0.28));
-      vec2 foamDirB = normalize(vec2(-0.36, 0.94));
-      float foamLineA = sin(dot(vWorldPosition.xz, foamDirA) * 0.056 - uTime * 0.34 + detail * 2.4) * 0.5 + 0.5;
-      float foamLineB = sin(dot(vWorldPosition.xz, foamDirB) * 0.075 + uTime * 0.2 + wave * 2.2) * 0.5 + 0.5;
-      float softFoam =
-        smoothstep(0.74, 0.98, wave) * 0.12 +
-        smoothstep(0.82, 1.0, foamLineA + detail * 0.18) * lagoonBand * 0.3 +
-        smoothstep(0.86, 1.0, foamLineB + wave * 0.12) * lagoonBand * 0.18;
-      color = mix(color, uFoamColor, softFoam * (1.0 - horizonFade * 0.62));
-      gl_FragColor = vec4(color, 1.0);
-    }
-  `,
-});
 
 const buildAtlasCloudBands = () => {
   const group = new Group();
@@ -831,7 +737,7 @@ export class IslandViewerApp {
   }
 
   private buildOceanPlane() {
-    const geometry = new CircleGeometry(MOSSU_PLAYFIELD_EXTENT * 15, 192);
+    const geometry = buildAtlasOceanDiscGeometry(MOSSU_PLAYFIELD_EXTENT * 26, 224, 28);
     const ocean = new Mesh(geometry, this.atlasOceanMaterial);
     ocean.name = "Atlas visible ocean below";
     ocean.rotation.x = -Math.PI / 2;

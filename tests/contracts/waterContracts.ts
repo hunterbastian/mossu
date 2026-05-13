@@ -11,6 +11,7 @@ import {
   sampleStartingWaterSurfaceMask,
   sampleWaterAmbience,
   sampleWaterBankShape,
+  sampleWaterProbe,
   sampleWaterState,
   STARTING_WATER_VISUAL_FILL_SCALE,
   STARTING_WATER_POOLS,
@@ -67,12 +68,22 @@ export function runWaterContracts() {
   MAIN_RIVER_CHECKPOINT_Z.forEach((z) => {
     const channel = sampleRiverChannelAt("main", z);
     const water = sampleWaterState(channel.centerX, z);
+    const probe = sampleWaterProbe(channel.centerX, z);
     const edge = sampleRiverEdgeState(channel.centerX, z);
     const surfaceMask = sampleRiverSurfaceMask(channel.centerX, z);
     const ambience = sampleWaterAmbience(channel.centerX, z);
 
     assert(surfaceMask > 0.95, `main river center has rendered surface at z=${z}`);
     assert(water !== null, `main river center has gameplay water at z=${z}`);
+    assert(probe.kind === "river", `main river center probe identifies river at z=${z}`);
+    assert(probe.profile === "mainRiver", `main river center probe identifies main river profile at z=${z}`);
+    assertApprox(probe.depth, water.depth, 0.001, `main river center probe depth matches gameplay water at z=${z}`);
+    assertApprox(
+      probe.renderedSurfaceY ?? -999,
+      probe.gameplaySurfaceY ?? -998,
+      0.001,
+      `main river center probe keeps rendered/gameplay surface aligned at z=${z}`,
+    );
     assert(water.depth > 0.2, `main river center has positive depth at z=${z}`);
     assert(
       edge.zone === "shallow_water" || edge.zone === "swim_water",
@@ -185,10 +196,15 @@ export function runWaterContracts() {
   STARTING_WATER_POOLS.forEach((pool) => {
     const surfaceMask = sampleStartingWaterSurfaceMask(pool.x, pool.z);
     const water = sampleWaterState(pool.x, pool.z);
+    const probe = sampleWaterProbe(pool.x, pool.z);
     const bankShape = sampleWaterBankShape(pool.x + pool.renderRadiusX * 0.96, pool.z);
 
     assert(surfaceMask > 0.95, `${pool.id} center has rendered surface`);
     assert(water !== null, `${pool.id} center has gameplay water`);
+    assert(probe.kind === "pool", `${pool.id} probe identifies pool water`);
+    assert(probe.profile === "stillPool", `${pool.id} probe identifies still-pool profile`);
+    assertApprox(probe.depth, water.depth, 0.001, `${pool.id} probe depth matches gameplay water`);
+    assertApprox(probe.bankMask, 0, 0.001, `${pool.id} probe center is channel/core water`);
     assert(water.kind === "pool", `${pool.id} resolves as pool water`);
     assert(water.depth > 0.2, `${pool.id} has positive depth`);
     assert(sampleWaterAmbience(pool.x, pool.z).proximity > 0.95, `${pool.id} center has strong water ambience`);
@@ -225,8 +241,10 @@ export function runWaterContracts() {
   assert(cloudbackCreek.proximity > 0.95, "highland creek has strong ambience");
 
   const highlandRunoffPocket = sampleWaterState(10, 154);
+  const highlandRunoffProbe = sampleWaterProbe(10, 154);
   assert(highlandRunoffPocket !== null, "highland waterfall route has gameplay water at the runoff pocket");
   assert(highlandRunoffPocket.kind === "creek", "highland waterfall route resolves as creek water");
+  assert(highlandRunoffProbe.profile === "waterfallOutflow", "highland runoff probe identifies waterfall profile");
   assert(highlandRunoffPocket.swimAllowed, "highland waterfall runoff pocket is deep enough to swim");
   assert(highlandRunoffPocket.depth >= 1.65, "highland waterfall runoff pocket has readable swim depth");
   assertFlowVector(highlandRunoffPocket.flowDirection, "highland waterfall runoff pocket");

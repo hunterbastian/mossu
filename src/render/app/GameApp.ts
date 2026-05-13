@@ -5,7 +5,13 @@ import type { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBl
 import { GameState } from "../../simulation/gameState";
 import { InputController, InputSnapshot } from "../../simulation/input";
 import { getFlavorPingText } from "../../simulation/landmarkFlavorPing";
-import { sampleRiverEdgeState, sampleWaterAmbience, sampleWindStrength, worldLandmarks } from "../../simulation/world";
+import {
+  sampleRiverEdgeState,
+  sampleWaterAmbience,
+  sampleWaterProbe,
+  sampleWindStrength,
+  worldLandmarks,
+} from "../../simulation/world";
 import { CoopStressSimulator, getCoopStressRemoteCount, type CoopStressSnapshot } from "../../simulation/coopStress";
 import { ViewMode } from "../../simulation/viewMode";
 import { AmbientWaterAudio } from "./AmbientWaterAudio";
@@ -230,6 +236,7 @@ export class GameApp {
   private latestCoopStressSnapshot: CoopStressSnapshot | null = null;
   private cameraDebugPanel: HTMLDivElement | null = null;
   private perfDebugPanel: HTMLDivElement | null = null;
+  private waterDebugPanel: HTMLDivElement | null = null;
   private perfDebugVisible = true;
   private perfDebugWorldPrewarmed = false;
   private lastPerfFrameProfile: Record<string, number> | null = null;
@@ -345,6 +352,12 @@ export class GameApp {
       this.container.appendChild(this.perfDebugPanel);
     }
 
+    if (this.qaDebugEnabled) {
+      this.waterDebugPanel = document.createElement("div");
+      this.waterDebugPanel.className = "water-debug";
+      this.container.appendChild(this.waterDebugPanel);
+    }
+
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("keydown", this.handleTitleKeyDown);
     window.addEventListener("keydown", this.handlePerfHotkeys);
@@ -422,6 +435,7 @@ export class GameApp {
     this.composer?.dispose();
     this.cameraDebugPanel?.remove();
     this.perfDebugPanel?.remove();
+    this.waterDebugPanel?.remove();
     this.titleScreen.remove();
     this.openingSequenceOverlay.remove();
     this.renderer.dispose();
@@ -744,6 +758,7 @@ export class GameApp {
       active: this.openingSequenceActive,
       progress: Number(this.getOpeningSequenceProgress().toFixed(3)),
     };
+    const waterProbe = sampleWaterProbe(this.state.frame.player.position.x, this.state.frame.player.position.z);
 
     if (this.e2eMinimal) {
       return serializeE2eGameTextState({
@@ -757,6 +772,7 @@ export class GameApp {
         coopStressSnapshot: this.latestCoopStressSnapshot,
         camera: this.followCamera.getDebugState(),
         qualitySettings: this.qualitySettings,
+        waterProbe,
       });
     }
 
@@ -780,6 +796,7 @@ export class GameApp {
       underwaterIntensity: this.underwaterEffect.getIntensity(),
       qa: this.world.getQaStats(),
       qualitySettings: this.qualitySettings,
+      waterProbe,
     });
   }
 
@@ -1211,6 +1228,7 @@ export class GameApp {
   private updateDebugPanels() {
     this.updateCameraDebug();
     this.updatePerfDebug();
+    this.updateWaterDebug();
   }
 
   private updateCameraDebug() {
@@ -1311,6 +1329,23 @@ export class GameApp {
     }
 
     this.perfDebugPanel.textContent = buildFullPerfDebugText(perf);
+  }
+
+  private updateWaterDebug() {
+    if (!this.waterDebugPanel) {
+      return;
+    }
+
+    const player = this.state.frame.player;
+    const probe = sampleWaterProbe(player.position.x, player.position.z);
+    const mode = player.swimming ? "swim" : player.waterMode === "wading" ? "wade" : player.waterMode;
+    this.waterDebugPanel.textContent = [
+      `water ${probe.kind ?? "dry"} / ${probe.profile ?? "none"} / ${mode}`,
+      `depth ${probe.depth.toFixed(2)}  bank ${probe.bankMask.toFixed(2)}  swim ${probe.swimAllowed ? "yes" : "no"}`,
+      `y terrain ${probe.terrainY.toFixed(2)}  player ${player.position.y.toFixed(2)}`,
+      `surface gameplay ${probe.gameplaySurfaceY?.toFixed(2) ?? "n/a"}  rendered ${probe.renderedSurfaceY?.toFixed(2) ?? "n/a"}`,
+      `flow ${probe.flowStrength.toFixed(2)}  dir ${probe.flowDirection.x.toFixed(2)},${probe.flowDirection.z.toFixed(2)}`,
+    ].join("\n");
   }
 
   private updateIdleCameraOrbit(input: InputSnapshot, dt: number) {

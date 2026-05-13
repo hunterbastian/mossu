@@ -79,7 +79,8 @@ canvas.is-pointer-locked {
 }
 
 .camera-debug,
-.perf-debug {
+.perf-debug,
+.water-debug {
   position: fixed;
   top: 7.8rem;
   z-index: 20;
@@ -106,6 +107,15 @@ canvas.is-pointer-locked {
 .perf-debug {
   right: 1rem;
   min-width: 19rem;
+}
+
+.water-debug {
+  left: 1rem;
+  top: auto;
+  bottom: 1rem;
+  min-width: 18rem;
+  border-color: rgba(118, 216, 235, 0.82);
+  background: linear-gradient(180deg, rgba(240, 254, 255, 0.84), rgba(191, 239, 235, 0.68)), rgba(224, 250, 255, 0.72);
 }
 
 .perf-debug--compact {

@@ -115,6 +115,22 @@ export interface WaterState {
   swimAllowed: boolean;
 }
 
+export type WaterProfileHint = "mainRiver" | "stillPool" | "foothillCreek" | "alpineRunoff" | "waterfallOutflow";
+
+export interface WaterProbeSample {
+  kind: WaterState["kind"] | null;
+  profile: WaterProfileHint | null;
+  insideWater: boolean;
+  depth: number;
+  bankMask: number;
+  swimAllowed: boolean;
+  terrainY: number;
+  gameplaySurfaceY: number | null;
+  renderedSurfaceY: number | null;
+  flowStrength: number;
+  flowDirection: { x: number; z: number };
+}
+
 export interface WaterAmbienceSample {
   kind: WaterState["kind"] | null;
   proximity: number;

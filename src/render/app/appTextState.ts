@@ -1,6 +1,7 @@
 import type { CharacterScreenView } from "../../simulation/characterScreenData";
 import type { CoopStressSnapshot } from "../../simulation/coopStress";
 import type { FrameState } from "../../simulation/gameState";
+import type { WaterProbeSample } from "../../simulation/world";
 import type { ViewMode } from "../../simulation/viewMode";
 import type { AmbientBlobUpdateStats } from "../world/ambientBlobs";
 import type { WorldQaStats } from "../world/WorldRenderer";
@@ -29,6 +30,7 @@ type SharedTextStateInput = {
   coopStressSnapshot: CoopStressSnapshot | null;
   camera: CameraDebugState;
   qualitySettings: QualitySettings;
+  waterProbe: WaterProbeSample;
 };
 
 type FullTextStateInput = SharedTextStateInput & {
@@ -78,6 +80,28 @@ function buildFullCoopStress(snapshot: CoopStressSnapshot | null) {
     : { enabled: false, remoteCount: 0 };
 }
 
+function buildWaterProbeState(waterProbe: WaterProbeSample, frame: FrameState) {
+  return {
+    kind: waterProbe.kind,
+    profile: waterProbe.profile,
+    insideWater: waterProbe.insideWater,
+    swimAllowed: waterProbe.swimAllowed,
+    movementState: frame.player.waterMode,
+    swimming: frame.player.swimming,
+    depth: fixed(waterProbe.depth, 2),
+    bankMask: fixed(waterProbe.bankMask, 2),
+    terrainY: fixed(waterProbe.terrainY, 2),
+    gameplaySurfaceY: waterProbe.gameplaySurfaceY === null ? null : fixed(waterProbe.gameplaySurfaceY, 2),
+    renderedSurfaceY: waterProbe.renderedSurfaceY === null ? null : fixed(waterProbe.renderedSurfaceY, 2),
+    playerY: fixed(frame.player.position.y, 2),
+    flowStrength: fixed(waterProbe.flowStrength, 2),
+    flowDirection: {
+      x: fixed(waterProbe.flowDirection.x, 2),
+      z: fixed(waterProbe.flowDirection.z, 2),
+    },
+  };
+}
+
 export function serializeE2eGameTextState({
   frame,
   viewMode,
@@ -89,6 +113,7 @@ export function serializeE2eGameTextState({
   coopStressSnapshot,
   camera,
   qualitySettings,
+  waterProbe,
 }: SharedTextStateInput) {
   return JSON.stringify({
     e2e: true,
@@ -131,6 +156,7 @@ export function serializeE2eGameTextState({
       idleRoutineCount: faunaStats.idleRoutineCount,
       followers: faunaStats.followers,
     },
+    waterProbe: buildWaterProbeState(waterProbe, frame),
     camera,
     qualitySettings,
     zone: frame.currentZone,
@@ -158,6 +184,7 @@ export function serializeGameTextState({
   underwaterIntensity,
   qa,
   qualitySettings,
+  waterProbe,
 }: FullTextStateInput) {
   const focusedCollection = characterData.collections.find(
     (entry) => entry.landmarkId === (characterData.latestCollectionId ?? focusedCollectionId),
@@ -267,6 +294,7 @@ export function serializeGameTextState({
       ...movementAudio,
       waterAmbience: waterAudio,
     },
+    waterProbe: buildWaterProbeState(waterProbe, frame),
     camera,
     qualitySettings,
     performance,

@@ -1794,7 +1794,11 @@ export class WorldRenderer {
       playerSpeed,
       elapsed,
       playerWaterStrength,
-      frame.player.justLanded,
+      {
+        force: frame.player.justLanded,
+        movementState: frame.player.waterMode,
+        rolling: frame.player.rolling,
+      },
     );
 
     this.remoteMossus.forEach((remote) => {
@@ -1806,13 +1810,17 @@ export class WorldRenderer {
         remoteSpeed,
         elapsed,
         remotePlayer.swimming ? 0.76 : remotePlayer.rolling ? 0.68 : 0.52,
-        remotePlayer.justLanded,
+        {
+          force: remotePlayer.justLanded,
+          movementState: remotePlayer.waterMode,
+          rolling: remotePlayer.rolling,
+        },
       );
     });
 
     this.ambientBlobs.forEach((blob) => {
-      if (!blob.recruited || (blob.waterReaction !== "splash" && blob.waterReaction !== "float")) {
-        this.waterSystem.markActorDry(`karu-${blob.id}`);
+      if (!blob.recruited || blob.waterReaction === "dry") {
+        this.waterSystem.markActorDry(`karu-${blob.id}`, blob.group.position, elapsed, 0.32);
         return;
       }
 
@@ -1821,7 +1829,10 @@ export class WorldRenderer {
         blob.group.position,
         blob.velocity.length(),
         elapsed,
-        blob.waterReaction === "float" ? 0.48 : 0.58,
+        blob.waterReaction === "float" ? 0.5 : blob.waterReaction === "bank_wait" ? 0.38 : 0.62,
+        {
+          movementState: blob.waterReaction,
+        },
       );
     });
   }

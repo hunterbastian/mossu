@@ -1,6 +1,6 @@
 # Known Issues And Watchlist
 
-Last updated: 2026-05-12
+Last updated: 2026-05-13
 
 This file tracks current caveats that are useful for future agents. These are not all release blockers.
 
@@ -44,6 +44,12 @@ May 12 terrain follow-up update: after softening the front cliff strata, cheap g
 May 12 water/material update: the water-profile and terrain-material pass passes cheap gates plus installed-Chrome perf/atlas evidence (`130.7fps` average / `11.9ms` p95 / `12/12` checkpoints), but package `npm run test:e2e:smoke` remains blocked before test bodies by the missing Playwright `chromium_headless_shell-1217` cache. The direct installed-Chrome art-review route also timed out waiting for runtime readiness in this Codex desktop session, so use the captured atlas images and perf-route screenshots as the current evidence until the maintained art-review wrapper is refreshed.
 
 May 12 reference-aerial update: the no-UI atlas capture and installed-Chrome route perf are green for the latest island-reference pass (`140.3fps` average / `9.6ms` p95 / `10.8ms` p99 with `12/12` checkpoints), but the package smoke suite is still blocked by the missing Playwright `chromium_headless_shell-1217` cache. The headed `npm run art:review` wrapper still times out at runtime readiness and leaves an incomplete zero-capture `output/art-review-route/summary.json`, so `npm run art:compare` remains red until fresh route artifacts are generated.
+
+May 13 ocean/water update: the Sea-of-Thieves-style ocean pass has green lint, QA/build, diff-check, installed-Chrome atlas capture, and installed-Chrome route perf (`155.1fps` average / `8.7ms` p95 / `9.3ms` p99 with `12/12` checkpoints). `npm run test:e2e:smoke` is still blocked before test bodies by the missing Playwright `chromium_headless_shell-1217` cache, and the approved `npx playwright install chromium` repair failed with `ENOSPC` while downloading the 165 MB browser archive. Clear disk space before retrying package Playwright smoke/visual suites.
+
+May 13 water bank update: the custom installed-Chrome close-up probe succeeded after waiting for the first-paint loading shell to be removed before screenshots. Evidence in `output/water-bank-closeup-pass/` covers opening pools, great lake shore, Silver Bend, highland creek, and shrine approach with matching rendered/gameplay surface Y in the new water probe. Lint, QA/build, diff-check, and installed-Chrome route perf pass; package smoke was retried and still fails before test bodies because the local Playwright `chromium_headless_shell-1217` executable is missing. If reusing one-off screenshot scripts, wait for `.instant-title` to be absent before judging captures.
+
+May 13 water refactor update: local lint, `tsc --noEmit`, contract TypeScript build, esbuild contract bundling, contract runner, and diff-check pass after the water module split. Production Vite build is blocked in this checkout by Rollup's native optional dependency loader: `@rollup/rollup-darwin-arm64/rollup.darwin-arm64.node` fails with `ERR_DLOPEN_FAILED` and a macOS code-signature Team ID mismatch. `/usr/local/bin/npm install` and `/usr/local/bin/npm rebuild @rollup/rollup-darwin-arm64` did not repair it. Treat this as local `node_modules` state until a clean reinstall or cache repair succeeds.
 
 ### Local Preview Binding May Need Approval
 
