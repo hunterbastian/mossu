@@ -11,6 +11,7 @@ import { runSaveContracts } from "./saveContracts";
 import { runContracts } from "./testHarness";
 import { runVisualContracts } from "./visualContracts";
 import { runWaterContracts } from "./waterContracts";
+import { runWaterShaderChunkContracts } from "./waterShaderChunkContracts";
 
 runContracts({
   camera: runCameraContracts,
@@ -23,6 +24,7 @@ runContracts({
   "render-quality": runRenderQualityContracts,
   visuals: runVisualContracts,
   "water-state-agreement": runWaterContracts,
+  "water-shader-chunks": runWaterShaderChunkContracts,
   "route-checkpoints": runRouteContracts,
   save: runSaveContracts,
 });

@@ -74,7 +74,7 @@ export const WATER_SYSTEM_TUNING: WaterSystemTuning = {
 };
 
 export const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
-  // Painterly adventure water: clear turquoise depth, readable shallow beds, soft foam, and warm glints.
+  // Main river: readable downstream motion, turquoise depth bands, bank foam, and warm SoT-like glints.
   mainRiver: {
     key: "mainRiver",
     widthScale: 1.02,
@@ -112,6 +112,7 @@ export const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     currentStrokeStrength: 0.88,
     heroSpecularStrength: 0.78,
   },
+  // Great lake and still pools: calmer hero water with stronger shoreline definition, clarity, and specular.
   stillPool: {
     key: "stillPool",
     widthScale: 1,
@@ -149,6 +150,7 @@ export const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     currentStrokeStrength: 0.72,
     heroSpecularStrength: 1.28,
   },
+  // Foothill creek: narrower fast water for route edges where readable bank entry matters more than depth drama.
   foothillCreek: {
     key: "foothillCreek",
     widthScale: 0.92,
@@ -186,6 +188,7 @@ export const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     currentStrokeStrength: 0.8,
     heroSpecularStrength: 0.55,
   },
+  // Highland creek: brighter cold runoff with tighter ripples, more slope foam, and restrained shallow depth bands.
   alpineRunoff: {
     key: "alpineRunoff",
     widthScale: 0.88,
@@ -223,6 +226,7 @@ export const WATER_PROFILES: Record<WaterProfileKey, WaterProfile> = {
     currentStrokeStrength: 0.9,
     heroSpecularStrength: 0.55,
   },
+  // Waterfall outflow: the foamiest fast-water profile for cascade feet and shrine/highland swim pockets.
   waterfallOutflow: {
     key: "waterfallOutflow",
     widthScale: 0.9,

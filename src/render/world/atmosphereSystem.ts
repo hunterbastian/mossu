@@ -228,23 +228,26 @@ export function buildClouds() {
   const puffMaterial = createCloudPuffMaterial();
   clouds.userData.cloudMaterial = puffMaterial;
   const sets = [
-    new Vector3(-310, 174, -238),
-    new Vector3(306, 188, -116),
-    new Vector3(-276, 214, 126),
-    new Vector3(282, 228, 246),
-    new Vector3(-118, 242, -18),
-    new Vector3(156, 256, 132),
+    new Vector3(-1380, 236, -760),
+    new Vector3(1460, 250, -690),
+    new Vector3(-1560, 292, 520),
+    new Vector3(1640, 314, 650),
+    new Vector3(-640, 342, -1280),
+    new Vector3(720, 356, 1360),
+    new Vector3(80, 318, 1660),
+    new Vector3(-1840, 210, 120),
+    new Vector3(1880, 228, 40),
   ];
 
   sets.forEach((position, index) => {
-    const layerScale = index >= 4 ? 2.2 + (index - 4) * 0.18 : 2.85 + index * 0.24;
+    const layerScale = index >= 7 ? 7.1 + (index - 7) * 0.32 : index >= 4 ? 4.5 + (index - 4) * 0.28 : 5.25 + index * 0.36;
     const cluster = makeCloudCluster(position, layerScale, puffMaterial);
     cluster.name = `clean-sky-cloud-${index}`;
     cluster.rotation.y = index * 0.42 + 0.18;
-    cluster.userData.driftRangeX = 10 + index * 1.8 + (index >= 4 ? 6 : 0);
-    cluster.userData.driftRangeZ = 4 + index * 0.7 + (index >= 4 ? 3 : 0);
-    cluster.userData.bobRange = 1.2 + index * 0.14;
-    cluster.userData.driftSpeed = (index >= 4 ? 0.012 : 0.018) + index * 0.002;
+    cluster.userData.driftRangeX = 2.2 + index * 0.34;
+    cluster.userData.driftRangeZ = 0.9 + index * 0.16;
+    cluster.userData.bobRange = 0.22 + index * 0.04;
+    cluster.userData.driftSpeed = 0.0028 + index * 0.00032;
     clouds.add(cluster);
   });
 
@@ -335,10 +338,10 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
         vec3 dir = normalize(vWorldDirection);
         float mood = clamp(uElevationMood, 0.0, 1.0);
         // Cozy lowland → cooler alpine: zenith and mid band shift with elevation mood.
-        vec3 horizonColor = vec3(1.0, 0.965, 0.78);
-        vec3 midColor = mix(vec3(0.62, 0.88, 0.99), vec3(0.64, 0.84, 0.965), mood);
-        vec3 zenithColor = mix(vec3(0.39, 0.68, 0.98), vec3(0.45, 0.66, 0.94), mood);
-        vec3 color = mix(horizonColor, midColor, smoothstep(-0.08, 0.18, dir.y));
+        vec3 horizonColor = vec3(0.75, 0.965, 0.98);
+        vec3 midColor = mix(vec3(0.23, 0.76, 0.95), vec3(0.36, 0.7, 0.94), mood);
+        vec3 zenithColor = mix(vec3(0.04, 0.46, 0.84), vec3(0.18, 0.46, 0.84), mood);
+        vec3 color = mix(horizonColor, midColor, smoothstep(-0.1, 0.2, dir.y));
         color = mix(color, zenithColor, smoothstep(0.22, 0.96, dir.y));
 
         vec3 sunDir = normalize(uSunDir);
@@ -361,13 +364,13 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
         color += sunIvory * broadSunHaze * (0.1 + (1.0 - mood) * 0.03 + uSunHaze * 0.06);
         color += sunCream * lightShaft * (0.018 + (1.0 - mood) * 0.01 + uSunHaze * 0.018);
 
-        vec2 skyUv = dir.xz * (2.05 / max(0.26, dir.y + 0.38));
+        vec2 skyUv = dir.xz * (1.36 / max(0.32, dir.y + 0.5));
         float highWisp = fbm(skyUv * vec2(0.62, 0.26) + vec2(8.0, 3.0));
         float softWash = fbm(skyUv * vec2(0.32, 0.14) + vec2(-4.0, 6.2));
         float veil = smoothstep(0.6, 0.88, highWisp) * smoothstep(0.12, 0.74, dir.y);
         float upperWash = smoothstep(0.42, 0.82, softWash) * smoothstep(0.04, 0.62, dir.y);
         vec3 veilColor = mix(vec3(0.9, 0.975, 0.995), vec3(1.0, 0.97, 0.84), 0.54 + sunBloom * 0.22);
-        color = mix(color, veilColor, veil * 0.085 + upperWash * 0.024);
+        color = mix(color, veilColor, veil * 0.026 + upperWash * 0.01);
 
         float horizonHaze = smoothstep(-0.14, 0.12, dir.y) * (1.0 - smoothstep(0.16, 0.44, dir.y));
         float paperBloom = fbm(vec2(atan(dir.z, dir.x) * 0.9, dir.y * 2.6) + vec2(2.4, 11.2));
@@ -395,14 +398,26 @@ export function buildSkyDome(options: { webGpuCompatible?: boolean } = {}) {
         color = mix(color, sunMilk, warmHorizon * (0.22 + horizonGrain * 0.08));
         color = mix(color, coolDistantAir, coolHorizon);
 
-        float cloudBandA = fbm(vec2(atan(dir.z, dir.x) * 1.9 + uTime * 0.004, dir.y * 7.2 + 5.0));
-        float cloudBandB = fbm(vec2(atan(dir.z, dir.x) * 2.7 - uTime * 0.003, dir.y * 9.4 - 2.0));
-        float lowCloudShelf = smoothstep(-0.1, 0.32, dir.y) * (1.0 - smoothstep(0.38, 0.72, dir.y));
-        float cloudBand = smoothstep(0.58, 0.86, cloudBandA * 0.66 + cloudBandB * 0.34) * lowCloudShelf;
+        float cloudBandA = fbm(vec2(atan(dir.z, dir.x) * 1.44 + uTime * 0.0022, dir.y * 8.8 + 5.0));
+        float cloudBandB = fbm(vec2(atan(dir.z, dir.x) * 2.08 - uTime * 0.0018, dir.y * 11.2 - 2.0));
+        float lowCloudShelf = smoothstep(-0.12, 0.08, dir.y) * (1.0 - smoothstep(0.18, 0.42, dir.y));
+        float cloudBand = smoothstep(0.5, 0.8, cloudBandA * 0.68 + cloudBandB * 0.32) * lowCloudShelf;
         vec3 bandCream = mix(vec3(0.9, 0.985, 1.0), sunMilk, 0.38 + sunAzimuth * 0.24);
-        color = mix(color, bandCream, cloudBand * (0.055 + uWatercolorFog * 0.035 + uWarmHaze * 0.025));
+        color = mix(color, bandCream, cloudBand * (0.12 + uWatercolorFog * 0.055 + uWarmHaze * 0.03));
 
-        float viewAz = atan(dir.z, dir.x);
+        float sparkleAz = atan(dir.z, dir.x);
+        float horizonSparkleWindow = smoothstep(-0.045, 0.005, dir.y) * (1.0 - smoothstep(0.018, 0.09, dir.y));
+        vec2 sparkleCell = floor(vec2(sparkleAz * 260.0, dir.y * 980.0));
+        float sparkleSeed = hash(sparkleCell);
+        float sparklePulse = 0.5 + 0.5 * sin(uTime * 0.45 + sparkleSeed * 6.2831);
+        float horizonSparkle =
+          horizonSparkleWindow *
+          pow(sunAzimuth, 1.6) *
+          smoothstep(0.987, 0.999, sparkleSeed) *
+          smoothstep(0.72, 1.0, sparklePulse);
+        color += sunMilk * horizonSparkle * (0.028 + uSunHaze * 0.018);
+
+        float viewAz = sparkleAz;
         float sunAz = atan(sunDir.z, sunDir.x);
         float azDelta = atan(sin(viewAz - sunAz), cos(viewAz - sunAz));
         float fan = 1.0 - smoothstep(0.02, 1.42, abs(azDelta));

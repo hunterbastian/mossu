@@ -1277,6 +1277,20 @@ export function buildDistantFloatingIslands() {
     depthWrite: false,
   });
   const treeMaterial = new MeshBasicMaterial({ color: "#477042", fog: true });
+  const silhouetteMaterial = new MeshBasicMaterial({
+    color: "#6f8ea0",
+    fog: true,
+    transparent: true,
+    opacity: 0.46,
+    depthWrite: false,
+  });
+  const hazeSilhouetteMaterial = new MeshBasicMaterial({
+    color: "#8bb9c5",
+    fog: true,
+    transparent: true,
+    opacity: 0.24,
+    depthWrite: false,
+  });
   const mistMaterial = new MeshBasicMaterial({
     color: "#d5ecf5",
     fog: true,
@@ -1286,27 +1300,37 @@ export function buildDistantFloatingIslands() {
     side: DoubleSide,
   });
   const placements = [
-    [-760, 140, 48, 18, 0.18],
-    [690, 70, 42, 15, -0.26],
-    [-540, -360, 34, 12, 0.42],
-    [560, -430, 30, 11, -0.44],
-    [220, 620, 52, 20, 0.08],
+    [-1840, 520, 88, 42, 0.18, 0],
+    [-1360, 980, 58, 24, -0.32, 1],
+    [-760, 1540, 44, 12, 0.42, 2],
+    [160, 1780, 38, 8, -0.18, 2],
+    [720, 1480, 76, 34, 0.08, 0],
+    [1460, 940, 62, 28, -0.44, 1],
+    [1940, 460, 92, 48, -0.12, 0],
+    [1180, -1320, 42, 12, 0.32, 2],
+    [-1220, -1420, 48, 16, -0.28, 2],
+    [2140, -260, 34, 2, 0.26, 2],
+    [-2160, -160, 32, 0, -0.36, 2],
   ] as const;
 
-  placements.forEach(([x, z, radius, lift, yaw], index) => {
+  placements.forEach(([x, z, radius, lift, yaw, distantTier], index) => {
     const island = new Group();
     island.name = `distant-floating-island-${index}`;
-    const y = 132 + lift + index * 8;
-    const top = new Mesh(new CylinderGeometry(1, 0.92, 8, 18, 1), grassMaterial);
-    top.scale.set(radius, 1, radius * (0.62 + (index % 2) * 0.16));
+    const y = 148 + lift + index * 4;
+    const isFaint = distantTier > 0;
+    const isHazeTiny = distantTier > 1;
+    const islandMaterial = isHazeTiny ? hazeSilhouetteMaterial : isFaint ? silhouetteMaterial : grassMaterial;
+    const rockMaterial = isHazeTiny ? hazeSilhouetteMaterial : isFaint ? silhouetteMaterial : cliffMaterial;
+    const top = new Mesh(new CylinderGeometry(1, 0.92, 8, 18, 1), islandMaterial);
+    top.scale.set(radius, isHazeTiny ? 0.72 : 1, radius * (0.62 + (index % 2) * 0.16));
     top.rotation.y = yaw;
     top.position.y = y;
-    const cliff = new Mesh(new ConeGeometry(1, 44 + radius * 0.25, 18), cliffMaterial);
+    const cliff = new Mesh(new ConeGeometry(1, 44 + radius * 0.25, 18), rockMaterial);
     cliff.scale.set(radius * 0.82, 1, radius * 0.52);
     cliff.rotation.y = yaw;
     cliff.position.y = y - 24;
     const shadow = new Mesh(new ConeGeometry(1, 54 + radius * 0.18, 18), shadowMaterial);
-    shadow.scale.set(radius * 0.56, 1, radius * 0.36);
+    shadow.scale.set(radius * (isHazeTiny ? 0.38 : 0.56), 1, radius * (isHazeTiny ? 0.26 : 0.36));
     shadow.rotation.y = yaw;
     shadow.position.y = y - 52;
     const mist = new Mesh(new CircleGeometry(radius * 1.18, 24), mistMaterial);
@@ -1314,11 +1338,12 @@ export function buildDistantFloatingIslands() {
     mist.position.y = y - 8;
     island.add(top, cliff, shadow, mist);
 
-    for (let tree = 0; tree < 3; tree += 1) {
+    const treeCount = isHazeTiny ? 0 : isFaint ? 1 : 3;
+    for (let tree = 0; tree < treeCount; tree += 1) {
       const angle = yaw + tree * 2.1 + index * 0.4;
-      const trunk = new Mesh(new CylinderGeometry(0.55, 0.78, 7, 6), cliffMaterial);
+      const trunk = new Mesh(new CylinderGeometry(0.55, 0.78, 7, 6), rockMaterial);
       trunk.position.set(Math.cos(angle) * radius * 0.24, y + 5.4, Math.sin(angle) * radius * 0.18);
-      const crown = new Mesh(new ConeGeometry(4.4, 11, 8), treeMaterial);
+      const crown = new Mesh(new ConeGeometry(4.4, 11, 8), isFaint ? silhouetteMaterial : treeMaterial);
       crown.position.copy(trunk.position);
       crown.position.y += 8.2;
       island.add(trunk, crown);

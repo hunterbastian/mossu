@@ -5,7 +5,7 @@
  * player is always near the visible center; waves are anchored to world space
  * via the shader so they don't slide as the mesh shifts.
  *
- * Vertex: 7 layered Gerstner waves give a broad tropical swell plus smaller chop.
+ * Vertex: 7 layered Gerstner waves give tall curling tropical swells plus smaller chop.
  * Fragment: rich-blue→turquoise→pale-cyan distance grade, cream/peach
  * horizon haze, fresnel rim with sky tint, sun specular, slope-aware breaker
  * foam on crests, and painterly shimmer.
@@ -98,18 +98,18 @@ const VERT = /* glsl */ `
     float slopeAccum = 0.0;
     float troughAccum = 0.0;
 
-    // Sea-of-thieves-like read: two large rolling swells, two crossing seas, two chop layers, and one glint layer.
-    offset += gerstnerWave(vec2( 1.00,  0.20), 112.0, 0.74, 0.34, 1.0,  worldXZ, uTime, crest, slope, trough);
-    crestAccum += crest * 0.34; slopeAccum += slope * 0.22; troughAccum += trough * 0.32;
-    offset += gerstnerWave(vec2( 0.58, -0.74),  68.0, 0.62, 0.48, 0.88, worldXZ, uTime, crest, slope, trough);
-    crestAccum += crest * 0.26; slopeAccum += slope * 0.2; troughAccum += trough * 0.22;
-    offset += gerstnerWave(vec2(-0.46,  0.90),  38.0, 0.5,  0.68, 0.76, worldXZ, uTime, crest, slope, trough);
-    crestAccum += crest * 0.18; slopeAccum += slope * 0.18; troughAccum += trough * 0.16;
-    offset += gerstnerWave(vec2( 0.90,  0.44),  20.0, 0.36, 0.96, 0.56, worldXZ, uTime, crest, slope, trough);
-    crestAccum += crest * 0.12; slopeAccum += slope * 0.16; troughAccum += trough * 0.1;
-    offset += gerstnerWave(vec2(-0.74, -0.32),  10.5, 0.22, 1.34, 0.42, worldXZ, uTime, crest, slope, trough);
-    crestAccum += crest * 0.07; slopeAccum += slope * 0.14; troughAccum += trough * 0.07;
-    offset += gerstnerWave(vec2( 0.24,  0.97),   6.2, 0.14, 1.82, 0.32, worldXZ, uTime, crest, slope, trough);
+    // Reference-wave read: two tall rolling breakers, a crossing shoulder, chop, and glint ripples.
+    offset += gerstnerWave(vec2( 1.00,  0.20),  92.0, 0.92, 0.36, 1.28, worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.42; slopeAccum += slope * 0.26; troughAccum += trough * 0.38;
+    offset += gerstnerWave(vec2( 0.58, -0.74),  58.0, 0.78, 0.52, 1.08, worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.28; slopeAccum += slope * 0.22; troughAccum += trough * 0.24;
+    offset += gerstnerWave(vec2(-0.46,  0.90),  30.0, 0.62, 0.76, 0.88, worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.18; slopeAccum += slope * 0.18; troughAccum += trough * 0.14;
+    offset += gerstnerWave(vec2( 0.90,  0.44),  16.0, 0.42, 1.02, 0.64, worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.11; slopeAccum += slope * 0.16; troughAccum += trough * 0.08;
+    offset += gerstnerWave(vec2(-0.74, -0.32),   8.8, 0.26, 1.42, 0.48, worldXZ, uTime, crest, slope, trough);
+    crestAccum += crest * 0.07; slopeAccum += slope * 0.14; troughAccum += trough * 0.06;
+    offset += gerstnerWave(vec2( 0.24,  0.97),   5.8, 0.15, 1.9, 0.34, worldXZ, uTime, crest, slope, trough);
     crestAccum += crest * 0.04; slopeAccum += slope * 0.08; troughAccum += trough * 0.04;
     offset += gerstnerWave(vec2(-0.08,  1.00),   3.7, 0.07, 2.32, 0.2,  worldXZ, uTime, crest, slope, trough);
     crestAccum += crest * 0.02; slopeAccum += slope * 0.04;
@@ -128,9 +128,9 @@ const VERT = /* glsl */ `
     vWaveSlope = clamp(slopeAccum, 0.0, 1.0);
     vTroughSignal = clamp(troughAccum, 0.0, 1.0);
     vSwellSignal =
-      sin(dot(normalize(vec2(1.0, 0.18)), worldXZ) * 0.083 - uTime * 0.46) * 0.54 +
-      sin(dot(normalize(vec2(0.45, -0.85)), worldXZ) * 0.143 - uTime * 0.62) * 0.28 +
-      sin(dot(normalize(vec2(-0.62, 0.78)), worldXZ) * 0.262 - uTime * 0.88) * 0.18;
+      sin(dot(normalize(vec2(1.0, 0.18)), worldXZ) * 0.096 - uTime * 0.54) * 0.58 +
+      sin(dot(normalize(vec2(0.45, -0.85)), worldXZ) * 0.164 - uTime * 0.72) * 0.3 +
+      sin(dot(normalize(vec2(-0.62, 0.78)), worldXZ) * 0.296 - uTime * 0.98) * 0.2;
 
     gl_Position = projectionMatrix * viewMatrix * finalWorld;
   }
@@ -192,6 +192,8 @@ const FRAG = /* glsl */ `
 
     vec3 viewDir = normalize(uCameraWorld - vWorldPos);
     float ndotv = clamp(dot(normal, viewDir), 0.0, 1.0);
+    float viewLift = pow(1.0 - ndotv, 2.25);
+    float fresnel = pow(1.0 - ndotv, 4.0);
 
     float dist = length(uCameraWorld - vWorldPos);
     float midDistance = smoothstep(360.0, 1550.0, dist);
@@ -201,39 +203,49 @@ const FRAG = /* glsl */ `
     // Body color: distance sets the ocean grade; wave height adds local movement.
     float heightT = clamp(vWaveHeight * 0.065 + 0.5, 0.0, 1.0);
     float swellT = clamp(vSwellSignal * 0.5 + 0.5, 0.0, 1.0);
-    vec3 distanceColor = mix(uDeepColor, uShallowColor, midDistance);
-    distanceColor = mix(distanceColor, uFarColor, farDistance);
+    vec3 distanceColor = mix(uDeepColor * vec3(0.7, 0.82, 1.12), uShallowColor, midDistance * 0.82);
+    distanceColor = mix(distanceColor, uFarColor, farDistance * 0.96);
     float lagoonBand = (1.0 - farDistance) * smoothstep(0.16, 0.74, midDistance) * (1.0 - smoothstep(0.94, 1.0, midDistance));
-    distanceColor = mix(distanceColor, uLagoonColor, lagoonBand * (0.4 + heightT * 0.18));
-    vec3 waveTint = mix(vec3(-0.038, -0.012, 0.05), vec3(0.055, 0.086, 0.06), heightT);
+    distanceColor = mix(distanceColor, uLagoonColor, lagoonBand * (0.34 + heightT * 0.2));
+    float sunFace = smoothstep(0.05, 0.82, dot(normal, normalize(uSunDir)));
+    float waveFace = smoothstep(0.42, 8.8, vWaveHeight) * (0.34 + vWaveSlope * 0.66) * (1.0 - farDistance * 0.78);
+    vec3 subsurfaceTurquoise = mix(uLagoonColor, vec3(0.3, 1.0, 0.86), 0.52);
+    float subsurfaceMask = waveFace * (0.36 + sunFace * 0.38 + fresnel * 0.18);
+    distanceColor = mix(distanceColor, subsurfaceTurquoise, subsurfaceMask);
+    vec3 waveTint = mix(vec3(-0.08, -0.03, 0.045), vec3(0.045, 0.115, 0.07), heightT);
     vec3 color = distanceColor + waveTint * (1.0 - farDistance * 0.58);
-    color = mix(color, uDeepColor * vec3(0.78, 0.9, 1.02), (vTroughSignal * 0.24 + (1.0 - swellT) * 0.1) * (1.0 - farDistance));
+    float troughMask = clamp(vTroughSignal * 0.72 + smoothstep(1.4, 8.4, -vWaveHeight) * 0.24 + (1.0 - swellT) * 0.1, 0.0, 1.0);
+    vec3 troughBlue = uDeepColor * vec3(0.38, 0.62, 1.02);
+    color = mix(color, troughBlue, troughMask * (0.42 + (1.0 - sunFace) * 0.16) * (1.0 - farDistance * 0.72));
 
     // Fresnel rim — fakes sky/horizon reflection at glancing angles
-    float fresnel = pow(1.0 - ndotv, 4.0);
-    vec3 skyTint = mix(uFarColor, uSkyColor, ndotv);
-    color = mix(color, skyTint, fresnel * 0.72);
+    vec3 skyTint = mix(uFarColor, uSkyColor, ndotv * 0.82);
+    color = mix(color, skyTint, viewLift * (0.18 + farDistance * 0.24) + fresnel * 0.5);
 
     // Sun specular — Sildur-inspired warm glint, kept stylized and broad.
     vec3 reflectDir = reflect(-uSunDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 64.0);
-    color += uSunColor * spec * (0.78 + vWaveSlope * 0.52);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 72.0);
+    float broadSpec = pow(max(dot(viewDir, reflectDir), 0.0), 12.0);
+    color += uSunColor * spec * (0.92 + vWaveSlope * 0.74) * (1.0 - farDistance * 0.28);
+    color += mix(uSunColor, uFarColor, 0.18) * broadSpec * sunFace * (0.05 + viewLift * 0.08);
 
     vec2 sunFlat = normalize(uSunDir.xz + vec2(0.0001, -0.0001));
     vec2 cameraRay = normalize(vWorldPos.xz - uCameraWorld.xz + vec2(0.0001, 0.0001));
     float sunTrack = pow(max(dot(cameraRay, sunFlat), 0.0), 4.2);
     float shimmer = noise2d(vWorldPos.xz * 0.34 + uTime * 0.06);
     float sunThread = sin(dot(vWorldPos.xz, sunFlat) * 0.052 - uTime * 0.62 + shimmer * 2.2) * 0.5 + 0.5;
-    float sunGlaze = smoothstep(0.52, 1.0, sunThread) * sunTrack * (0.05 + fresnel * 0.2) * (1.0 - farDistance * 0.46);
+    float sunGlaze = smoothstep(0.52, 1.0, sunThread) * sunTrack * (0.065 + viewLift * 0.16 + vWaveSlope * 0.035) * (1.0 - farDistance * 0.36);
     color += mix(uSunColor, uHorizonColor, 0.24) * sunGlaze;
+    float pinGlints = pow(smoothstep(0.74, 1.0, shimmer + sunThread * 0.24), 5.0) * sunTrack * viewLift * (1.0 - farDistance * 0.5);
+    color += vec3(1.0, 0.98, 0.84) * pinGlints * 0.12;
 
     // Foam: bright caps and long broken tropical lace lines like sunlit surf.
-    float crest = max(smoothstep(2.0, 10.8, vWaveHeight), vCrestSignal * 0.86) * (0.62 + swellT * 0.38);
+    float crest = max(smoothstep(1.4, 8.8, vWaveHeight), vCrestSignal * 0.95) * (0.6 + swellT * 0.4);
     float foamNoise = fbm2d(vWorldPos.xz * 0.028 + vec2(uTime * 0.026, -uTime * 0.018));
-    float breakerEnergy = smoothstep(0.34, 0.9, vCrestSignal * 0.72 + vWaveSlope * 0.36 + foamNoise * 0.08);
+    float breakerEnergy = smoothstep(0.28, 0.86, vCrestSignal * 0.82 + vWaveSlope * 0.42 + foamNoise * 0.08);
     vec2 foamDirA = normalize(vec2(0.92, 0.28));
     vec2 foamDirB = normalize(vec2(-0.34, 0.94));
-    float heroBreaker = smoothstep(0.72, 0.98, swellT + breakerEnergy * 0.16 + foamNoise * 0.1) * (1.0 - horizonDistance * 0.74);
+    float heroBreaker = smoothstep(0.64, 0.98, swellT + breakerEnergy * 0.22 + foamNoise * 0.1) * (1.0 - horizonDistance * 0.74);
     float longLineA = sin(dot(vWorldPos.xz, foamDirA) * 0.057 - uTime * 0.52 + foamNoise * 3.2) * 0.5 + 0.5;
     float longLineB = sin(dot(vWorldPos.xz, foamDirB) * 0.078 + uTime * 0.34 + foamNoise * 2.5) * 0.5 + 0.5;
     float windTear = smoothstep(0.7, 1.0, sin(dot(vWorldPos.xz, normalize(vec2(0.98, 0.12))) * 0.13 - uTime * 0.86 + foamNoise * 3.6) * 0.5 + 0.5);
@@ -241,9 +253,11 @@ const FRAG = /* glsl */ `
       smoothstep(0.76, 0.98, longLineA + foamNoise * 0.2 + breakerEnergy * 0.05) * 0.56 +
       smoothstep(0.82, 1.0, longLineB + shimmer * 0.16) * 0.34 +
       windTear * breakerEnergy * 0.16;
-    foamLace *= (0.18 + lagoonBand * 0.58 + crest * 0.46 + heroBreaker * 0.36) * (1.0 - horizonDistance * 0.66);
-    float foamMask = smoothstep(0.58, 1.04, crest + breakerEnergy * 0.26 + shimmer * 0.2 + foamLace * 0.42);
-    color = mix(color, uFoamColor, clamp(foamMask * 0.7 + foamLace * 0.58 + heroBreaker * crest * 0.3, 0.0, 0.94));
+    foamLace *= (0.24 + lagoonBand * 0.64 + crest * 0.56 + heroBreaker * 0.44) * (1.0 - horizonDistance * 0.66);
+    float spraySeed = noise2d(vWorldPos.xz * 1.28 + vec2(uTime * 0.9, -uTime * 0.52));
+    float sprayMist = pow(smoothstep(0.72, 1.0, spraySeed + breakerEnergy * 0.22), 4.0) * heroBreaker * crest * (1.0 - farDistance * 0.62);
+    float foamMask = smoothstep(0.5, 1.02, crest + breakerEnergy * 0.32 + shimmer * 0.2 + foamLace * 0.46);
+    color = mix(color, uFoamColor, clamp(foamMask * 0.76 + foamLace * 0.64 + heroBreaker * crest * 0.38 + sprayMist * 0.72, 0.0, 0.97));
 
     float caustic = smoothstep(0.62, 0.98, fbm2d(vWorldPos.xz * 0.08 + vec2(uTime * 0.03, uTime * 0.018)));
     color += mix(vec3(0.0), vec3(0.18, 0.28, 0.18), caustic * lagoonBand * (1.0 - farDistance) * 0.24);
